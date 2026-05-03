@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build distribution
+        run: ./gradlew :cli:distTar -Pversion=${{ steps.version.outputs.version }}
+
+      - name: Compute SHA-256
+        id: sha
+        run: |
+          ARCHIVE="cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz"
+          SHA=$(sha256sum "$ARCHIVE" | awk '{print $1}')
+          echo "$SHA  $(basename "$ARCHIVE")" > "$ARCHIVE.sha256"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz
+            cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz.sha256
+          generate_release_notes: true
+
+      # Bumps Formula/zeta.rb in the gematik/homebrew-zeta tap repo.
+      # Requires a repo-scoped PAT stored as the HOMEBREW_TAP_TOKEN secret.
+      - name: Bump Homebrew formula
+        if: ${{ !contains(steps.version.outputs.version, '-') }}
+        uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          formula-name: zeta
+          formula-path: Formula/zeta.rb
+          homebrew-tap: gematik/homebrew-zeta
+          download-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/zeta-${{ steps.version.outputs.version }}.tar.gz
+          commit-message: |
+            zeta ${{ steps.version.outputs.version }}
+
+            Created by https://github.com/mislav/bump-homebrew-formula-action
+        env:
+          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

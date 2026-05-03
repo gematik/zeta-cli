@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# zeta-dev — run the Zeta CLI through Gradle for local development.
+# Forwards all positional arguments to `:cli:run --args=...`,
+# preserving spaces and quotes.
+
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+quoted=""
+for arg in "$@"; do
+    # Wrap each arg in single quotes; escape embedded single quotes via '\''.
+    quoted+=" '${arg//\'/\'\\\'\'}'"
+done
+
+# Gradle's :cli:run captures the JVM's stdout, so Mordant inside the subprocess otherwise
+# detects a non-TTY and emits plain output. When this wrapper itself is on a TTY, propagate
+# that signal via FORCE_COLOR so renderers light up. Piped use (`./zeta-dev … | jq`) skips
+# this and still produces clean bytes.
+if [ -t 1 ]; then
+    export FORCE_COLOR=1
+fi
+
+exec ./gradlew -q --console=plain :cli:run --args="${quoted# }"
