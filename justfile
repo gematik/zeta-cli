@@ -50,3 +50,19 @@ generate-connector:
         --file connector/Konnektor-opb6.json \
         --output connector/src/main/kotlin \
         --naming connector/naming-strategy.json
+
+# render the animated CLI demo (demo.tape -> demo.gif)
+demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    command -v vhs >/dev/null 2>&1 || {
+        echo "vhs is required: brew install vhs" >&2
+        exit 1
+    }
+
+    ./gradlew :cli:installDist
+    vhs demo.tape
+
+    echo
+    echo "Generated: $(pwd)/demo.gif"
