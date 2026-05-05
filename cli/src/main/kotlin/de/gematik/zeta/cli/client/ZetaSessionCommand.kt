@@ -1,24 +1,23 @@
-package de.gematik.zeta.cli.register
+package de.gematik.zeta.cli.client
 
-import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.path
-import de.gematik.connector.ConnectorException
 import de.gematik.connector.KonnektorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
 import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.ZetaCliktCommand
 import de.gematik.zeta.cli.connector.ConnectorTokenProvider
 import de.gematik.zeta.cli.connector.resolveKonFile
+import de.gematik.zeta.cli.http.WireLogger
 import de.gematik.zeta.cli.http.installCurlieLogging
+import de.gematik.zeta.cli.http.wireLogLevel
 import de.gematik.zeta.cli.storage.JsonFileStorage
 import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.sdk.BuildConfig
-import de.gematik.zeta.sdk.StorageConfig
 import de.gematik.zeta.sdk.TpmConfig
 import de.gematik.zeta.sdk.ZetaSdk
 import de.gematik.zeta.sdk.ZetaSdkClient
@@ -28,15 +27,10 @@ import de.gematik.zeta.sdk.authentication.AuthConfig
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
 import de.gematik.zeta.sdk.authentication.smcb.SmcbTokenProvider
+import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
+import de.gematik.zeta.sdk.storage.StorageConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger
-import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.websocket.Frame
-import io.ktor.websocket.close
-import io.ktor.websocket.readBytes
-import io.ktor.websocket.readText
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -85,7 +79,7 @@ class ConnectorAuthOptions :
 /**
  * PKCS#12 fallback authentication group: sign locally with a `.p12` keystore on disk.
  * For headless / no-Konnektor environments. All three fields are nullable individually;
- * the `register` command's [validateAuthSelection] enforces all-or-none semantics.
+ * [ZetaSessionCommand.validateAuthSelection] enforces all-or-none semantics.
  */
 class P12AuthOptions :
     OptionGroup(
@@ -114,7 +108,15 @@ class P12AuthOptions :
     )
 }
 
-class RegisterCommand : ZetaCliktCommand(name = "register") {
+/**
+ * Base for any subcommand that needs an authenticated [ZetaSdkClient]. Owns the shared
+ * `--profile` option, the two auth-option groups, and the SDK construction. Subclasses
+ * override `runCommand()` and call [openSession] to receive a configured SDK.
+ *
+ * The popp resource and role-OID are hard-coded for now — generalising to other Zeta-Guard
+ * services means lifting them into options on this base, not on each subcommand.
+ */
+abstract class ZetaSessionCommand(name: String) : ZetaCliktCommand(name = name) {
     private val profile: String by option(
         "--profile",
         metavar = "NAME",
@@ -134,24 +136,73 @@ class RegisterCommand : ZetaCliktCommand(name = "register") {
     private val connectorAuth by ConnectorAuthOptions()
     private val p12Auth by P12AuthOptions()
 
-    override fun help(context: Context) = "Register a client with Zeta Guard."
-
-    override fun runCommand() {
+    /**
+     * Validate auth selection, build a token provider, build a Zeta SDK client, run [action]
+     * with it, then clean up. Resources owned by the token provider (Konnektor HttpClient)
+     * outlive the SDK calls because [SubjectTokenProvider.createSubjectToken] is invoked
+     * lazily during the SDK's auth flow — they are closed in `finally`.
+     */
+    protected fun openSession(action: (ZetaSdkClient) -> Unit) {
         validateAuthSelection()
 
         val storagePath = zetaProfilePath(profile)
         log.info { "Persisting SDK state to $storagePath (profile: $profile)" }
 
-        // Build the subject-token provider first; resources it owns (Konnektor HttpClient)
-        // must outlive sdk.register() because createSubjectToken is called lazily during
-        // the SDK's auth flow. We close them in `finally`.
         val (tokenProvider, cleanup) = buildTokenProvider()
         try {
-            runRegistration(storagePath, tokenProvider)
+            val sdk = buildSdk(storagePath, tokenProvider)
+            action(sdk)
         } finally {
             cleanup()
         }
     }
+
+    /**
+     * Apply the CLI's shared HTTP options to a Zeta SDK [ZetaHttpClientBuilder]. Used at three
+     * different builder sites — all of them run through here so wire logs land in Logback via
+     * the curlie-style [WireLogger] (gated on `-vv`), never on stdout via Ktor's `Logger.DEFAULT`:
+     *
+     *   - [BuildConfig.httpClientBuilder] — the template the SDK uses for its internal HTTP
+     *     calls (config discovery, registration, auth, ASL).
+     *   - `sdk.httpClient { … }` — the REST client subcommands open.
+     *   - `sdk.ws(builder = { … })` — the WebSocket client subcommands open.
+     *
+     * Currently only `-k/--insecure` flows through; `--ca-cert` does not, as the SDK's builder
+     * has no extension point for custom trust managers.
+     */
+    protected fun ZetaHttpClientBuilder.applyCliHttpDefaults(): ZetaHttpClientBuilder =
+        disableServerValidation(cliConfig.insecure)
+            .logging(wireLogLevel, WireLogger)
+
+    private fun buildSdk(storagePath: Path, tokenProvider: SubjectTokenProvider): ZetaSdkClient =
+        ZetaSdk.build(
+            POPP_RESOURCE,
+            BuildConfig(
+                productId = "zeta-cli",
+                productVersion = "0.2.0",
+                clientName = "zeta-cli",
+                storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
+                tpmConfig = object : TpmConfig {},
+                authConfig =
+                    AuthConfig(
+                        scopes = listOf("popp"),
+                        exp = 30,
+                        aslProdEnvironment = false,
+                        subjectTokenProvider = tokenProvider,
+                        attestation = AttestationConfig.software(),
+                        // SMC-B "Betriebsstätte Arzt" — must be present in the cert chain
+                        // or the ASL handshake will refuse to complete.
+                        requiredRoleOid = POPP_ROLE_OID,
+                    ),
+                platformProductId =
+                    PlatformProductId.AppleProductId(
+                        PlatformProductId.PLATFORM_APPLE,
+                        "macos",
+                        listOf(),
+                    ),
+                httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(),
+            ),
+        ).also { log.debug { "Created Zeta SDK client" } }
 
     /**
      * Enforce mutual exclusion + completeness. The two groups are mutually exclusive;
@@ -367,109 +418,11 @@ class RegisterCommand : ZetaCliktCommand(name = "register") {
         )
     }
 
-    private fun runRegistration(
-        storagePath: Path,
-        tokenProvider: SubjectTokenProvider,
-    ) {
-        val resource = "https://popp.dev.poppservice.de/"
-        val sdk =
-            ZetaSdk.build(
-                resource,
-                BuildConfig(
-                    "zeta-cli",
-                    "0.2.0",
-                    "zeta-cli",
-                    // aesB64Key is unused on the Custom-provider path in zeta-sdk 0.5.1
-                    // (`cfg.storageConfig.provider ?: provideSdkStorage(aesB64Key)`); the
-                    // constructor still demands a valid Base64-AES-256 placeholder.
-                    StorageConfig(
-                        JsonFileStorage(storagePath),
-                        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                    ),
-                    object : TpmConfig {},
-                    AuthConfig(
-                        listOf("popp"),
-                        30,
-                        false,
-                        tokenProvider,
-                        AttestationConfig.software(),
-                    ),
-                    platformProductId =
-                        PlatformProductId.AppleProductId(
-                            PlatformProductId.PLATFORM_APPLE,
-                            "macos",
-                            listOf(),
-                        ),
-                ),
-            )
-        log.debug { "Created Zeta SDK client" }
-
-        callPoppWebSocket(sdk)
-        log.info { "Finished" }
-    }
-
-    private fun callPoppWebSocket(sdk: ZetaSdkClient) {
-        val wsUrl = "wss://popp.dev.poppservice.de:443/popp/practitioner/api/v1/token-generation-ehc"
-        try {
-            runBlocking {
-                sdk.ws(
-                    targetUrl = wsUrl,
-                    builder = {
-                        disableServerValidation(true)
-                        logging(
-                            LogLevel.ALL,
-                            object : Logger {
-                                override fun log(message: String) {
-                                    println("log:$message")
-                                }
-                            },
-                        )
-                    },
-                    customHeaders = emptyMap(),
-                ) {
-                    log.info { "WebSocket connected to $wsUrl" }
-                    probeWithBadMessage()
-                }
-            }
-        } catch (e: Exception) {
-            var cause: Throwable? = e
-            while (cause != null) {
-                log.error(cause) { "WebSocket session failed" }
-                cause = cause.cause
-            }
-            echo("Failed to open WebSocket: ${e.message}")
-        }
-    }
-
-    /**
-     * Send a deliberately invalid message and log the server's reply, then close. Verifies the
-     * registration/auth handshake produced a working session: the server has to decode our frame
-     * (proves the secure channel is up) and respond with an error of its own choosing.
-     */
-    private suspend fun DefaultClientWebSocketSession.probeWithBadMessage() {
-        val payload = """{"type":"NoSuchMessage"}"""
-        try {
-            log.info { "WS send: $payload" }
-            send(Frame.Text(payload))
-            for (frame in incoming) {
-                when (frame) {
-                    is Frame.Text -> {
-                        log.info { "WS reply: ${frame.readText()}" }
-                        break
-                    }
-                    is Frame.Binary -> {
-                        log.info { "WS reply (binary): ${frame.readBytes().size} bytes" }
-                        break
-                    }
-                    is Frame.Close -> {
-                        log.info { "WS closed by server before replying" }
-                        break
-                    }
-                    else -> { /* ignore ping/pong */ }
-                }
-            }
-        } finally {
-            close()
-        }
+    protected companion object {
+        // popp dev service hard-coded for now; will become CLI options once these commands
+        // need to target other Zeta-Guard resources.
+        const val POPP_RESOURCE = "https://popp.dev.poppservice.de/"
+        // SMC-B profession OID for "Betriebsstätte Arzt".
+        const val POPP_ROLE_OID = "1.2.276.0.76.4.50"
     }
 }

@@ -75,11 +75,19 @@ fun HttpClientConfig<*>.installCurlieLogging() {
  * (e.g. the Zeta SDK's [io.ktor.client.plugins.logging.Logging] plugin) so they pick up the
  * same curlie-style colorisation gated on `-vv`.
  */
-internal object WireLogger : Logger {
+object WireLogger : Logger {
     override fun log(message: String) {
         wireLog.debug { reformatHttpLog(message) }
     }
 }
+
+/**
+ * The [LogLevel] [WireLogger] should be installed at — `ALL` when the user passed `-vv` (or
+ * higher) so wire dumps actually fire, `NONE` otherwise so Ktor doesn't waste time building
+ * the request/response message strings just for them to be dropped.
+ */
+val wireLogLevel: LogLevel
+    get() = if (wireLog.isDebugEnabled()) LogLevel.ALL else LogLevel.NONE
 
 // Ktor's Logging plugin emits "METHOD: HttpMethod(value=GET)" — strip the wrapper.
 private val ktorMethodPattern = Regex("""value=(\w+)""")

@@ -20,6 +20,8 @@ dependencies {
     // Already on the runtime classpath via mordant-jvm-jna; declared here so we can call
     // isatty(2) directly to detect whether stderr is a TTY (see term/StderrColors.kt).
     implementation(libs.jna)
+    // TOML parser backing the config-file value source (./zeta.toml and the XDG fallback).
+    implementation(libs.tomlj)
 }
 
 application {

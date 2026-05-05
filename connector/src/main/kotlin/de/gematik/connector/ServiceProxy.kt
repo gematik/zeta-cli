@@ -2,7 +2,6 @@ package de.gematik.connector
 
 import de.gematik.connector.api.soap.SoapEnvelope
 import de.gematik.connector.api.soap.SoapOperation
-import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -14,8 +13,6 @@ import io.ktor.http.withCharset
 import kotlin.text.Charsets
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.serializer
-
-private val log = KotlinLogging.logger {}
 
 /**
  * Wraps a single SOAP endpoint of one Konnektor service version. Stateless apart from
@@ -45,7 +42,6 @@ class ServiceProxy internal constructor(
         }
 
         val body = defaultXml.encodeToString(requestSerializer, request)
-        log.debug { "SOAP $operation -> $endpoint\n$body" }
 
         val response = httpClient.post(endpoint) {
             contentType(ContentType.Text.Xml.withCharset(Charsets.UTF_8))
@@ -53,7 +49,6 @@ class ServiceProxy internal constructor(
             setBody(body)
         }
         val responseText = response.bodyAsText()
-        log.debug { "SOAP ${operation.name} <- ${response.status}\n$responseText" }
 
         return try {
             defaultXml.decodeFromString(responseSerializer, responseText)
