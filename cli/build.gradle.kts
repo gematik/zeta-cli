@@ -17,6 +17,9 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.logging)
     implementation(libs.kotlinx.serialization.json)
+    // Already on the runtime classpath via mordant-jvm-jna; declared here so we can call
+    // isatty(2) directly to detect whether stderr is a TTY (see term/StderrColors.kt).
+    implementation(libs.jna)
 }
 
 application {

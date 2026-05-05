@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <!-- The `zeta.stderr.pattern` system property is set in Main.kt to a plain pattern
+         when stderr is not a TTY (or NO_COLOR is set), so `zeta 2> file` produces
+         plain-text logs. When unset, fall back to the coloured pattern. -->
     <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.err</target>
         <encoder>
-            <pattern>%highlight(%-5level) %gray(%logger{24}) - %msg%n</pattern>
+            <pattern>${zeta.stderr.pattern:-%highlight(%-5level) %gray(%logger{24}) - %msg%n}</pattern>
         </encoder>
     </appender>
 

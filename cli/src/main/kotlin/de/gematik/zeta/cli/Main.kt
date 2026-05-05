@@ -9,9 +9,16 @@ import de.gematik.zeta.cli.connector.ConnectorCommand
 import de.gematik.zeta.cli.connector.ConnectorConfigsCommand
 import de.gematik.zeta.cli.connector.ConnectorInspectCommand
 import de.gematik.zeta.cli.register.RegisterCommand
+import de.gematik.zeta.cli.term.StderrColors
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    // Resolved before the first SLF4J call so Logback picks up the right encoder pattern.
+    // logback.xml falls back to a coloured pattern when this property is unset.
+    if (!StderrColors.enabled) {
+        System.setProperty("zeta.stderr.pattern", "%-5level %logger{24} - %msg%n")
+    }
+
     ZetaCommand()
         .subcommands(
             VersionCommand(),

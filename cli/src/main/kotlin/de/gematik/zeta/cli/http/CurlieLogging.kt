@@ -5,6 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyle
 import com.github.ajalt.mordant.rendering.TextStyles
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderXml
+import de.gematik.zeta.cli.term.StderrColors
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.plugins.logging.LogLevel
@@ -37,6 +38,9 @@ private val statusOkStyle: TextStyle = TextStyles.bold + TextColors.green
 private val statusRedirStyle: TextStyle = TextStyles.bold + TextColors.cyan
 private val status4xxStyle: TextStyle = TextStyles.bold + TextColors.yellow
 private val status5xxStyle: TextStyle = TextStyles.bold + TextColors.red
+
+// Pass strings through unchanged when stderr is redirected — keeps `zeta -vv 2> file` plain.
+private fun TextStyle.maybe(s: String): String = if (StderrColors.enabled) this(s) else s
 
 /**
  * Installs curlie-style request/response logging on a Ktor [HttpClient][io.ktor.client.HttpClient].
@@ -92,7 +96,7 @@ internal fun reformatHttpLog(raw: String): String {
         if (pendingMethod != null || pendingUrl != null) {
             val m = pendingMethod ?: "?"
             val u = pendingUrl ?: ""
-            out.appendLine("${methodStyle(m)} ${urlStyle(u)} ${protoStyle("HTTP/1.1")}")
+            out.appendLine("${methodStyle.maybe(m)} ${urlStyle.maybe(u)} ${protoStyle.maybe("HTTP/1.1")}")
             pendingMethod = null
             pendingUrl = null
         }
@@ -102,7 +106,7 @@ internal fun reformatHttpLog(raw: String): String {
         when {
             line.startsWith("REQUEST: ") -> {
                 inResponse = false
-                out.appendLine(sectionRule(centeredRule("Request")))
+                out.appendLine(sectionRule.maybe(centeredRule("Request")))
                 pendingUrl = line.removePrefix("REQUEST: ")
             }
 
@@ -116,7 +120,7 @@ internal fun reformatHttpLog(raw: String): String {
             line.startsWith("RESPONSE: ") -> {
                 inResponse = true
                 flushRequestLine()
-                out.appendLine(sectionRule(centeredRule("Response")))
+                out.appendLine(sectionRule.maybe(centeredRule("Response")))
                 out.appendLine(styleStatus(line.removePrefix("RESPONSE: ")))
             }
 
@@ -164,7 +168,7 @@ internal fun reformatHttpLog(raw: String): String {
     flushRequestLine()
     val body = out.toString().trimEnd()
     // Closing rule only after the response — request → response shouldn't have a rule between them.
-    return if (inResponse) "$body\n${sectionRule(GROUP_END_RULE)}" else body
+    return if (inResponse) "$body\n${sectionRule.maybe(GROUP_END_RULE)}" else body
 }
 
 private const val RULE_WIDTH = 60
@@ -182,10 +186,11 @@ private fun formatHeader(line: String): String {
     if (idx < 0) return line
     val name = line.substring(0, idx)
     val value = line.substring(idx + 1).trim()
-    return "${headerNameStyle(name)}: $value"
+    return "${headerNameStyle.maybe(name)}: $value"
 }
 
-private fun styleStatus(status: String): String = pickStatusStyle(status.split(" ").firstOrNull()?.toIntOrNull())(status)
+private fun styleStatus(status: String): String =
+    pickStatusStyle(status.split(" ").firstOrNull()?.toIntOrNull()).maybe(status)
 
 private fun pickStatusStyle(code: Int?): TextStyle =
     when {
@@ -203,21 +208,22 @@ private fun formatBody(
 ): String {
     val ct = contentType?.lowercase().orEmpty()
     val trimmed = body.trimStart()
+    val color = StderrColors.enabled
     return when {
-        "json" in ct -> tryRenderJson(body)
+        "json" in ct -> tryRenderJson(body, color)
 
-        "xml" in ct -> renderXml(body, colorize = true)
+        "xml" in ct -> renderXml(body, colorize = color)
 
         // No useful content-type? Sniff: a body that starts with `{`/`[` is almost certainly JSON.
-        ct.isEmpty() && (trimmed.startsWith("{") || trimmed.startsWith("[")) -> tryRenderJson(body)
+        ct.isEmpty() && (trimmed.startsWith("{") || trimmed.startsWith("[")) -> tryRenderJson(body, color)
 
-        ct.isEmpty() && trimmed.startsWith("<") -> renderXml(body, colorize = true)
+        ct.isEmpty() && trimmed.startsWith("<") -> renderXml(body, colorize = color)
 
         else -> body
     }
 }
 
-private fun tryRenderJson(body: String): String =
+private fun tryRenderJson(body: String, colorize: Boolean): String =
     runCatching {
-        renderJson(Json.parseToJsonElement(body), colorize = true)
+        renderJson(Json.parseToJsonElement(body), colorize = colorize)
     }.getOrDefault(body)
