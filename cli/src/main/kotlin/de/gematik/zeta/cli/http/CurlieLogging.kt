@@ -12,6 +12,12 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import java.net.URLDecoder
+import java.util.Base64
 
 private val wireLog = KotlinLogging.logger("de.gematik.zeta.http.wire")
 
@@ -99,6 +105,7 @@ internal fun reformatHttpLog(raw: String): String {
     var pendingMethod: String? = null
     var pendingUrl: String? = null
     var inResponse = false
+    val jwts = mutableListOf<JwtFinding>()
 
     fun flushRequestLine() {
         if (pendingMethod != null || pendingUrl != null) {
@@ -146,7 +153,9 @@ internal fun reformatHttpLog(raw: String): String {
 
             line.startsWith("-> ") -> {
                 flushRequestLine()
-                out.appendLine(formatHeader(line.removePrefix("-> ")))
+                val rest = line.removePrefix("-> ")
+                out.appendLine(formatHeader(rest))
+                collectJwtsFromHeader(rest, jwts)
             }
 
             line.startsWith("BODY Content-Type: ") -> {
@@ -163,6 +172,7 @@ internal fun reformatHttpLog(raw: String): String {
                 if (!body.isNullOrEmpty()) {
                     out.appendLine()
                     out.appendLine(formatBody(body, contentType))
+                    jwts += findJwtsInBody(body, contentType)
                 }
                 contentType = null
             }
@@ -174,6 +184,10 @@ internal fun reformatHttpLog(raw: String): String {
     }
 
     flushRequestLine()
+    if (jwts.isNotEmpty()) {
+        out.appendLine()
+        out.appendLine(formatJwtSection(jwts))
+    }
     val body = out.toString().trimEnd()
     // Closing rule only after the response — request → response shouldn't have a rule between them.
     return if (inResponse) "$body\n${sectionRule.maybe(GROUP_END_RULE)}" else body
@@ -235,3 +249,105 @@ private fun tryRenderJson(body: String, colorize: Boolean): String =
     runCatching {
         renderJson(Json.parseToJsonElement(body), colorize = colorize)
     }.getOrDefault(body)
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Decoded-JWT section
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Three base64url chunks separated by dots. The 16-char minimum keeps the regex from
+ * matching things like file paths that happen to contain the right alphabet — the JOSE
+ * header alone is rarely shorter once `alg` and `typ` are present.
+ */
+private val jwtRegex = Regex("""[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}""")
+
+private data class JwtFinding(
+    val source: String,
+    val joseHeader: JsonElement,
+    val payload: JsonElement,
+)
+
+private fun collectJwtsFromHeader(headerLine: String, into: MutableList<JwtFinding>) {
+    val sep = headerLine.indexOf(':')
+    if (sep < 0) return
+    val name = headerLine.substring(0, sep).trim()
+    val value = headerLine.substring(sep + 1).trim()
+    into += findJwts(value, "header[$name]")
+}
+
+private fun findJwts(text: String, source: String): List<JwtFinding> =
+    jwtRegex.findAll(text).mapNotNull { decodeJwt(it.value, source) }.toList()
+
+/** Decode a candidate match. `null` if either of the first two parts isn't base64url-JSON, or if
+ *  the JOSE header doesn't look JWT-shaped (no `alg` or `typ`) — keeps random three-dot strings out. */
+private fun decodeJwt(raw: String, source: String): JwtFinding? {
+    val parts = raw.split('.')
+    if (parts.size != 3) return null
+    val joseHeader = decodeBase64UrlJson(parts[0]) as? JsonObject ?: return null
+    if ("alg" !in joseHeader && "typ" !in joseHeader) return null
+    val payload = decodeBase64UrlJson(parts[1]) ?: return null
+    return JwtFinding(source, joseHeader, payload)
+}
+
+private fun decodeBase64UrlJson(s: String): JsonElement? = runCatching {
+    val pad = "=".repeat((4 - s.length % 4) % 4)
+    val bytes = Base64.getUrlDecoder().decode(s + pad)
+    Json.parseToJsonElement(bytes.decodeToString())
+}.getOrNull()
+
+/** Walk a body for JWTs in a content-type-aware way. */
+private fun findJwtsInBody(body: String, contentType: String?): List<JwtFinding> {
+    val ct = contentType?.lowercase().orEmpty()
+    val trimmed = body.trimStart()
+    return when {
+        "x-www-form-urlencoded" in ct -> findJwtsInForm(body)
+
+        "json" in ct || trimmed.startsWith("{") || trimmed.startsWith("[") -> {
+            val element = runCatching { Json.parseToJsonElement(body) }.getOrNull()
+            element?.let { walkJsonStrings(it, "").flatMap { (path, str) -> findJwts(str, "body.$path") }.toList() }
+                ?: findJwts(body, "body")
+        }
+
+        else -> findJwts(body, "body")
+    }
+}
+
+private fun findJwtsInForm(body: String): List<JwtFinding> =
+    body.split('&').flatMap { pair ->
+        val idx = pair.indexOf('=')
+        if (idx < 0) return@flatMap emptyList()
+        val key = URLDecoder.decode(pair.substring(0, idx), Charsets.UTF_8)
+        val value = URLDecoder.decode(pair.substring(idx + 1), Charsets.UTF_8)
+        findJwts(value, "body.$key")
+    }
+
+/** Yield every string-leaf with its dotted JSON path, e.g. `claims.access_token`, `tokens[0]`. */
+private fun walkJsonStrings(element: JsonElement, path: String): Sequence<Pair<String, String>> = sequence {
+    when (element) {
+        is JsonObject -> element.entries.forEach { (k, v) ->
+            yieldAll(walkJsonStrings(v, if (path.isEmpty()) k else "$path.$k"))
+        }
+        is JsonArray -> element.forEachIndexed { i, v ->
+            yieldAll(walkJsonStrings(v, "$path[$i]"))
+        }
+        is JsonPrimitive -> if (element.isString) yield(path.ifEmpty { "$" } to element.content)
+    }
+}
+
+private fun formatJwtSection(findings: List<JwtFinding>): String {
+    val color = StderrColors.enabled
+    return buildString {
+        append(sectionRule.maybe(centeredRule("Decoded JWTs")))
+        findings.forEach { jwt ->
+            appendLine()
+            appendLine(headerNameStyle.maybe(jwt.source))
+            appendLine("  ${boldStyle.maybe("header")}")
+            appendLine(indent(renderJson(jwt.joseHeader, colorize = color), "    "))
+            appendLine("  ${boldStyle.maybe("payload")}")
+            append(indent(renderJson(jwt.payload, colorize = color), "    "))
+        }
+    }
+}
+
+private fun indent(s: String, prefix: String): String =
+    s.lineSequence().joinToString("\n") { "$prefix$it" }
