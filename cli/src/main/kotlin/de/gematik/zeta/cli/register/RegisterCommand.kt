@@ -21,17 +21,22 @@ import de.gematik.zeta.sdk.BuildConfig
 import de.gematik.zeta.sdk.StorageConfig
 import de.gematik.zeta.sdk.TpmConfig
 import de.gematik.zeta.sdk.ZetaSdk
+import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.attestation.model.AttestationConfig
 import de.gematik.zeta.sdk.attestation.model.PlatformProductId
 import de.gematik.zeta.sdk.authentication.AuthConfig
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
 import de.gematik.zeta.sdk.authentication.smcb.SmcbTokenProvider
-import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
+import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
+import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.readBytes
+import io.ktor.websocket.readText
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -399,39 +404,72 @@ class RegisterCommand : ZetaCliktCommand(name = "register") {
             )
         log.debug { "Created Zeta SDK client" }
 
-        val client =
-            sdk.httpClient {
-                disableServerValidation(true)
-                logging(
-                    LogLevel.ALL,
-                    object : Logger {
-                        override fun log(message: String) {
-                            println("log:$message")
-                        }
-                    },
-                )
-            }
-        callHelloZeta(client)
+        callPoppWebSocket(sdk)
         log.info { "Finished" }
     }
 
-    private fun callHelloZeta(client: ZetaHttpClient) {
+    private fun callPoppWebSocket(sdk: ZetaSdkClient) {
+        val wsUrl = "wss://popp.dev.poppservice.de:443/popp/practitioner/api/v1/token-generation-ehc"
         try {
-            val response =
-                runBlocking {
-                    client.get("https://popp.dev.poppservice.de/hellozeta")
+            runBlocking {
+                sdk.ws(
+                    targetUrl = wsUrl,
+                    builder = {
+                        disableServerValidation(true)
+                        logging(
+                            LogLevel.ALL,
+                            object : Logger {
+                                override fun log(message: String) {
+                                    println("log:$message")
+                                }
+                            },
+                        )
+                    },
+                    customHeaders = emptyMap(),
+                ) {
+                    log.info { "WebSocket connected to $wsUrl" }
+                    probeWithBadMessage()
                 }
-            log.info { "Request successful: ${response.status}" }
-            for ((name, value) in response.headers) {
-                log.info { "$name: $value" }
             }
         } catch (e: Exception) {
             var cause: Throwable? = e
             while (cause != null) {
-                log.error(cause) { "Failed to call /hellozeta" }
+                log.error(cause) { "WebSocket session failed" }
                 cause = cause.cause
             }
-            echo("Failed to call /hellozeta: ${e.message}")
+            echo("Failed to open WebSocket: ${e.message}")
+        }
+    }
+
+    /**
+     * Send a deliberately invalid message and log the server's reply, then close. Verifies the
+     * registration/auth handshake produced a working session: the server has to decode our frame
+     * (proves the secure channel is up) and respond with an error of its own choosing.
+     */
+    private suspend fun DefaultClientWebSocketSession.probeWithBadMessage() {
+        val payload = """{"type":"NoSuchMessage"}"""
+        try {
+            log.info { "WS send: $payload" }
+            send(Frame.Text(payload))
+            for (frame in incoming) {
+                when (frame) {
+                    is Frame.Text -> {
+                        log.info { "WS reply: ${frame.readText()}" }
+                        break
+                    }
+                    is Frame.Binary -> {
+                        log.info { "WS reply (binary): ${frame.readBytes().size} bytes" }
+                        break
+                    }
+                    is Frame.Close -> {
+                        log.info { "WS closed by server before replying" }
+                        break
+                    }
+                    else -> { /* ignore ping/pong */ }
+                }
+            }
+        } finally {
+            close()
         }
     }
 }
