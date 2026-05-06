@@ -54,47 +54,35 @@ class JsonFileStorage(private val path: Path) : SdkStorage {
 
     override suspend fun put(key: String, value: String) = mutex.withLock {
         val current = ensureLoaded()
-        val isUpdate = key in current
         val next = LinkedHashMap(current).apply { put(key, value) }
         writeAtomic(next)
         cache = next
-        // Value length is useful for diagnosing surprises (truncation, double-encoding) but
-        // the value itself can be a token/secret — never log it directly.
-        log.debug { "${if (isUpdate) "Updated" else "Added"} key '$key' (${value.length} chars) in $path" }
     }
 
     override suspend fun get(key: String): String? = mutex.withLock {
-        val value = ensureLoaded()[key]
-        log.debug { "Read key '$key' from $path: ${if (value == null) "MISS" else "HIT (${value.length} chars)"}" }
-        value
+        ensureLoaded()[key]
     }
 
     override suspend fun remove(key: String) = mutex.withLock {
         val current = ensureLoaded()
-        if (key !in current) {
-            log.debug { "Remove of '$key' in $path: no-op (not present)" }
-            return@withLock
-        }
+        if (key !in current) return@withLock
         val next = LinkedHashMap(current).apply { remove(key) }
         writeAtomic(next)
         cache = next
-        log.debug { "Removed key '$key' from $path" }
     }
 
     override suspend fun clear() = mutex.withLock {
-        val sizeBefore = cache?.size
         writeAtomic(emptyMap())
         cache = emptyMap()
-        log.debug { "Cleared $path (was ${sizeBefore ?: "unknown"} entries)" }
+        log.debug { "Storage cleared" }
     }
 
     private fun ensureLoaded(): Map<String, String> {
         cache?.let { return it }
         val loaded: Map<String, String> = if (path.exists()) {
-            log.debug { "Loading storage from $path" }
             try {
                 val map = json.decodeFromString<Map<String, String>>(path.readText())
-                log.debug { "Loaded ${map.size} entries from $path: keys=${map.keys}" }
+                log.debug { "Storage loaded (${map.size} entries)" }
                 map
             } catch (e: Exception) {
                 throw JsonFileStorageException(
@@ -103,7 +91,7 @@ class JsonFileStorage(private val path: Path) : SdkStorage {
                 )
             }
         } else {
-            log.debug { "Storage file $path does not exist; starting with empty state" }
+            log.debug { "Storage empty (no file yet)" }
             emptyMap()
         }
         cache = loaded
@@ -113,14 +101,10 @@ class JsonFileStorage(private val path: Path) : SdkStorage {
     private fun writeAtomic(map: Map<String, String>) {
         val parent = path.toAbsolutePath().parent
             ?: error("storage path $path has no parent directory")
-        if (!parent.exists()) {
-            log.debug { "Creating parent directory $parent" }
-            Files.createDirectories(parent)
-        }
+        if (!parent.exists()) Files.createDirectories(parent)
 
         val tmp = parent.resolve(".${path.fileName}.tmp.${UUID.randomUUID()}")
         val content = json.encodeToString<Map<String, String>>(map)
-        log.debug { "Writing ${map.size} entries (${content.length} chars) to $path via $tmp" }
         try {
             openTempForWrite(tmp).use { channel ->
                 channel.write(ByteBuffer.wrap(content.toByteArray(Charsets.UTF_8)))
@@ -129,9 +113,7 @@ class JsonFileStorage(private val path: Path) : SdkStorage {
                 channel.force(true)
             }
             Files.move(tmp, path, ATOMIC_MOVE, REPLACE_EXISTING)
-            log.debug { "Atomic move of $tmp -> $path complete" }
         } catch (e: Throwable) {
-            log.debug(e) { "Write to $path failed; cleaning up $tmp" }
             runCatching { Files.deleteIfExists(tmp) }
             throw e
         }
