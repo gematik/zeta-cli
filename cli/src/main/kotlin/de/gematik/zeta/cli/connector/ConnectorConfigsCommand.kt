@@ -26,7 +26,7 @@ class ConnectorConfigsCommand : ZetaCliktCommand(name = "configs") {
 
         when (cliConfig.outputFormat) {
             OutputFormat.JSON -> echo(renderJson(jsonReport(configs), colorize = colorize))
-            OutputFormat.TEXT -> echo(textReport(configs))
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(textReport(configs))
         }
     }
 }

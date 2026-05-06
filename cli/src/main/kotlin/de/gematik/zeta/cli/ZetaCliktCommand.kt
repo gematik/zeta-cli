@@ -56,7 +56,7 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         "--connector-config",
         metavar = "NAME",
         envvar = "ZETA_CONNECTOR_CONFIG",
-        help = "Name or path of a .kon (Konnektor) configuration file. Resolved as: " +
+        help = "Name or path of a .kon (Connector) configuration file. Resolved as: " +
             "tilde-expanded path, exact path, <name>.kon in current dir, then " +
             "\$XDG_CONFIG_HOME/telematik/kon/<name>.kon. Default: 'default'. " +
             "(env: ZETA_CONNECTOR_CONFIG)",

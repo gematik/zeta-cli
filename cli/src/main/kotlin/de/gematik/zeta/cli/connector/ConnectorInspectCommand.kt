@@ -7,7 +7,7 @@ import de.gematik.connector.ConnectorException
 import de.gematik.connector.ConnectorServices
 import de.gematik.connector.Credentials
 import de.gematik.connector.Dotkon
-import de.gematik.connector.KonnektorClient
+import de.gematik.connector.ConnectorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
 import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.ZetaCliktCommand
@@ -30,7 +30,7 @@ private val log = KotlinLogging.logger {}
 
 class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
     override fun help(context: Context) =
-        "Connect to a Konnektor described by a .kon file and display product / service information."
+        "Connect to a Connector described by a .kon file and display product / service information."
 
     override fun runCommand() {
         val configFile = try {
@@ -57,12 +57,12 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
     private fun doRun(configFile: Path) {
         log.info { "Reading .kon from $configFile" }
         val dotkon = parseDotkon(configFile.readText())
-        log.info { "Connecting to Konnektor at ${dotkon.url}" }
+        log.info { "Connecting to Connector at ${dotkon.url}" }
         log.debug { "Mandant=${dotkon.mandantId} Workplace=${dotkon.workplaceId} ClientSystem=${dotkon.clientSystemId}" }
 
         // OkHttp engine for mutual TLS: Ktor CIO's TLS implementation drops the client
         // certificate whenever the server's CertificateRequest doesn't enumerate a matching
-        // CA name, which most Konnektor-fronting nginx instances don't do. OkHttp routes
+        // CA name, which most Connector-fronting nginx instances don't do. OkHttp routes
         // through JSSE and presents what's installed.
         val httpClient = dotkonOkHttpClient(dotkon) {
             install(HttpTimeout) {
@@ -73,14 +73,14 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
             // logging — same wire log format the rest of the CLI uses.
             installCurlieLogging()
         }
-        val konnektor = httpClient.use {
-            runBlocking { KonnektorClient.connect(it, dotkon) }
+        val connector = httpClient.use {
+            runBlocking { ConnectorClient.connect(it, dotkon) }
         }
-        log.info { "Loaded ${konnektor.services.serviceInformation.service.size} services from $configFile" }
+        log.info { "Loaded ${connector.services.serviceInformation.service.size} services from $configFile" }
 
         when (cliConfig.outputFormat) {
-            OutputFormat.JSON -> echo(renderJson(buildJsonReport(configFile, dotkon, konnektor.services), colorize = colorize))
-            OutputFormat.TEXT -> echo(renderTextReport(configFile, dotkon, konnektor.services))
+            OutputFormat.JSON -> echo(renderJson(buildJsonReport(configFile, dotkon, connector.services), colorize = colorize))
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(renderTextReport(configFile, dotkon, connector.services))
         }
     }
 

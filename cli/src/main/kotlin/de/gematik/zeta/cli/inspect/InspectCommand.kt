@@ -40,7 +40,7 @@ class InspectCommand : ZetaCliktCommand(name = "inspect") {
                 }
                 echo(renderJson(payload, colorize = colorize))
             }
-            OutputFormat.TEXT -> echo(renderTextLayout(resource, authServer))
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(renderTextLayout(resource, authServer))
         }
     }
 

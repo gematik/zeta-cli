@@ -1,7 +1,6 @@
 package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.Context
-import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
@@ -52,17 +51,23 @@ class WsCommand : ZetaSessionCommand("ws") {
         help = "Extra header on the WS upgrade request, 'Name: Value'. Repeatable.",
     ).multiple()
 
+    private val scopes: List<String> by option(
+        "-s", "--scope",
+        metavar = "NAME",
+        help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least one is required.",
+    ).multiple(required = true)
+
     override fun help(context: Context) =
         "Open a WebSocket to a Zeta-protected resource and round-trip JSON messages from stdin."
 
     override fun runCommand() {
-        val customHeaders = requestHeaders.associate(::parseHeader)
+        val customHeaders = requestHeaders.associate(::parseHeaderOption)
 
-        openSession { sdk ->
+        openSession(resource = originOf(url), scopes = scopes) { sdk, _ ->
             runBlocking {
                 sdk.ws(
                     targetUrl = url,
-                    builder = { applyCliHttpDefaults() },
+                    builder = { applyCliHttpDefaults(insecure = cliConfig.insecure) },
                     customHeaders = customHeaders,
                 ) {
                     log.info { "WebSocket connected to $url" }
@@ -151,9 +156,4 @@ class WsCommand : ZetaSessionCommand("ws") {
         println(renderJson(element, colorize = colorize))
     }
 
-    private fun parseHeader(s: String): Pair<String, String> {
-        val idx = s.indexOf(':')
-        if (idx <= 0) throw UsageError("invalid -H value: '$s' (expected 'Name: Value')")
-        return s.substring(0, idx).trim() to s.substring(idx + 1).trim()
-    }
 }

@@ -19,13 +19,13 @@ import javax.net.ssl.SSLContext
  * `expectedHost`, optional client-cert auth (PKCS#12) or HTTP basic auth, and any extra
  * [configure] block. The caller owns the returned client — close it when done.
  *
- * The SOAP-level code (`KonnektorClient`) does not call this: any pre-built
+ * The SOAP-level code (`ConnectorClient`) does not call this: any pre-built
  * [HttpClient] (any engine) works. This helper is offered for the common .kon-driven
  * case. Pull `io.ktor:ktor-client-okhttp` to use it.
  *
  * **Why OkHttp specifically:** Ktor CIO's TLS stack hard-codes RSA / DSS only and
  * silently drops EC client certs (see `CertificateType.kt` in CIO sources), which
- * breaks mutual TLS against any Konnektor that uses brainpool ECC card certs (KSP /
+ * breaks mutual TLS against any Connector that uses brainpool ECC card certs (KSP /
  * HBA / SMC-B). OkHttp routes through JSSE and presents whichever cert is installed.
  *
  * **SNI caveat:** OkHttp derives the SNI server name from the request URL's host. The

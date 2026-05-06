@@ -2,8 +2,19 @@ package de.gematik.connector
 
 import de.gematik.connector.api.gematik.conn.authsignatureservice74.ExternalAuthenticateEnvelope
 import de.gematik.connector.api.gematik.conn.authsignatureservice74.ExternalAuthenticateResponseEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice820.Operations as CardServiceOperations
 import de.gematik.connector.api.gematik.conn.cardservice81.Card
+import de.gematik.connector.api.gematik.conn.cardservice820.SecureSendAPDU
+import de.gematik.connector.api.gematik.conn.cardservice820.SecureSendAPDUEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice820.SecureSendAPDUResponseEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice820.StartCardSession
+import de.gematik.connector.api.gematik.conn.cardservice820.StartCardSessionEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice820.StartCardSessionResponseEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice820.StopCardSession
+import de.gematik.connector.api.gematik.conn.cardservice820.StopCardSessionEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice820.StopCardSessionResponseEnvelope
 import de.gematik.connector.api.gematik.conn.cardservicecommon20.CardType
+import de.gematik.connector.api.oasis.dss10core.SignatureObject
 import de.gematik.connector.api.gematik.conn.certificateservice601.CryptType
 import de.gematik.connector.api.gematik.conn.certificateservice601.ReadCardCertificate
 import de.gematik.connector.api.gematik.conn.certificateservice601.ReadCardCertificateCertRefList
@@ -36,13 +47,22 @@ private val log = KotlinLogging.logger {}
 
 /**
  * Standard signature-type URI for ECDSA on SMC-B / HBA cards (BSI TR-03111).
- * Required by the Konnektor's `ExternalAuthenticate` to pick the ECC card key.
+ * Required by the Connector's `ExternalAuthenticate` to pick the ECC card key.
  */
 private const val ECDSA_SIGNATURE_TYPE = "urn:bsi:tr:03111:ecdsa"
 
 /**
+ * CardService version pin for `SecureSendAPDU` + `StartCardSession` / `StopCardSession`.
+ * These operations were introduced in v8.2.0; the generated DTOs we ship are bound to that
+ * namespace. Calling them against a Connector that only advertises v8.1.x would result in a
+ * silent namespace mismatch — `ConnectorClient.serviceProxy(name, minVersion)` raises a
+ * clear [ServiceNotFoundException] before that happens.
+ */
+private const val CARD_SERVICE_V820 = "8.2.0"
+
+/**
  * Client-side context (`<ContextType>` in WSDL parlance) — identifies the calling
- * mandant, workplace, client system and (optionally) user against the Konnektor.
+ * mandant, workplace, client system and (optionally) user against the Connector.
  *
  * Constructible from a [Dotkon] via [Dotkon.toConnectorContext].
  */
@@ -71,7 +91,7 @@ fun Dotkon.toConnectorContext(): ConnectorContext =
     )
 
 /**
- * High-level Konnektor client.
+ * High-level Connector client.
  *
  * The HTTP client is **provided by the caller** — the lib does not own its lifecycle,
  * does not know which engine it uses, and never closes it. Use
@@ -81,7 +101,7 @@ fun Dotkon.toConnectorContext(): ConnectorContext =
  * Construct via [connect] (which loads the SDS) or directly when SDS contents are
  * already in hand (e.g. cached or test-injected).
  */
-class KonnektorClient(
+class ConnectorClient(
     val httpClient: HttpClient,
     val context: ConnectorContext,
     val services: ConnectorServices,
@@ -100,9 +120,48 @@ class KonnektorClient(
         )
     }
 
+    /**
+     * [ServiceProxy] for [serviceName] at the highest version that's at least [minVersion].
+     * Use this when you call into operations that were added in a specific WSDL revision
+     * (e.g. CardService 8.2.0's `SecureSendAPDU` / `StartCardSession` / `StopCardSession`)
+     * and don't want a silent namespace mismatch when the Connector only advertises older
+     * versions.
+     *
+     * Two kinds of failure get distinct messages so the operator knows whether their
+     * Connector is wrong or just stale:
+     *   - service entirely absent from the SDS;
+     *   - service present but no version satisfies [minVersion] (the message lists the
+     *     versions the Connector *did* advertise).
+     */
+    fun serviceProxy(serviceName: String, minVersion: String): ServiceProxy {
+        val service = services.serviceInformation.service
+            .firstOrNull { it.name == serviceName }
+            ?: throw ServiceNotFoundException(
+                "Connector does not advertise $serviceName in its service directory",
+            )
+        val minNum = semverAsNumber(minVersion)
+        val version = service.versions.version
+            .filter { semverAsNumber(it.version) >= minNum }
+            .maxByOrNull { semverAsNumber(it.version) }
+            ?: throw ServiceNotFoundException(
+                "Connector advertises $serviceName but no version ≥ $minVersion " +
+                    "(available: ${service.versions.version.joinToString(", ") { it.version }})",
+            )
+        log.debug {
+            "Selected $serviceName ${version.version} (required ≥ $minVersion) " +
+                "-> ${version.endpointTLS?.location ?: "<no endpoint>"}"
+        }
+        return ServiceProxy(
+            httpClient = httpClient,
+            endpoint = version.endpointTLS?.location.orEmpty(),
+            service = service,
+            serviceVersion = version,
+        )
+    }
+
     // ----- convenience methods (mirror koap-go's Client) ------------------------------
 
-    /** `EventService.GetCards` with no filter — returns every card the Konnektor sees. */
+    /** `EventService.GetCards` with no filter — returns every card the Connector sees. */
     suspend fun getAllCards(): List<Card> = getCardsByType(emptyList())
 
     /** `EventService.GetCards` filtered by [cardTypes]. Empty list = unfiltered. */
@@ -142,7 +201,7 @@ class KonnektorClient(
      * gematik card-based mTLS today. KSP / SMC-B / HBA / SMC-KT cards all carry an ECC
      * authentication cert; the RSA variants are legacy.
      *
-     * Throws [SoapFaultException] if the Konnektor reports a fault (card missing, PIN
+     * Throws [SoapFaultException] if the Connector reports a fault (card missing, PIN
      * not verified, …) or [IllegalStateException] if the response is shaped unexpectedly.
      */
     @OptIn(ExperimentalEncodingApi::class)
@@ -187,7 +246,7 @@ class KonnektorClient(
      * Caller is expected to convert DER → JOSE format if a JWT signature is needed
      * (the Zeta SDK's `BaseSmcbTokenProvider` handles that conversion).
      *
-     * Card must be PIN-verified at the card terminal before this call; the Konnektor
+     * Card must be PIN-verified at the card terminal before this call; the Connector
      * does not drive PIN entry from this operation.
      */
     @OptIn(ExperimentalEncodingApi::class)
@@ -229,6 +288,79 @@ class KonnektorClient(
     }
 
     /**
+     * Bind [cardHandle] to a Connector card session and return the session id (UUID). For
+     * popp's Connector-scenario flow this UUID is sent as `clientSessionId` in the popp
+     * `StartMessage`; the Connector uses it implicitly when [secureSendApdu] is called.
+     * Always paired with [stopCardSession] in a `try/finally` to free the session.
+     */
+    suspend fun startCardSession(cardHandle: String): String {
+        log.debug { "StartCardSession cardHandle=$cardHandle" }
+        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V820)
+        val envelope =
+            StartCardSessionEnvelope(
+                body = StartCardSessionEnvelope.Body(
+                    startCardSession = StartCardSession(context = context.toApiContext(), cardHandle = cardHandle),
+                ),
+            )
+        val resp: StartCardSessionResponseEnvelope = proxy.call(CardServiceOperations.StartCardSession, envelope)
+        resp.requireSuccess("StartCardSession(cardHandle=$cardHandle)")
+        return resp.body.startCardSessionResponse?.sessionId
+            ?.also { log.debug { "StartCardSession cardHandle=$cardHandle -> sessionId=$it" } }
+            ?: error("StartCardSession: no SessionId in response")
+    }
+
+    /**
+     * Release a session previously created by [startCardSession]. Idempotent: a Connector
+     * "Unbekannte Session ID" fault on a session that's already gone bubbles up — callers
+     * who want best-effort cleanup should wrap in `runCatching`.
+     */
+    suspend fun stopCardSession(sessionId: String) {
+        log.debug { "StopCardSession sessionId=$sessionId" }
+        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V820)
+        val envelope =
+            StopCardSessionEnvelope(
+                body = StopCardSessionEnvelope.Body(
+                    stopCardSession = StopCardSession(sessionId = sessionId),
+                ),
+            )
+        val resp: StopCardSessionResponseEnvelope = proxy.call(CardServiceOperations.StopCardSession, envelope)
+        resp.requireSuccess("StopCardSession(sessionId=$sessionId)")
+    }
+
+    /**
+     * Forward a signed scenario JWT to the Connector's `CardService.SecureSendAPDU`. The
+     * Connector decodes the JWT, executes the contained APDUs against the eGK bound by the
+     * active session (created via [startCardSession]), and returns a `transactionResult`
+     * blob. This layer treats the result opaquely — the popp client decodes it to produce
+     * the response APDU list for the popp service.
+     *
+     * Pinned to CardService **v8.2.0**: the Connector must advertise that version (or one
+     * with the same envelope namespace). [SecureSendAPDU.signatureObject] and
+     * [SecureSendAPDU.x509Certificate] were removed in v8.2.1; we send empty placeholders,
+     * which v8.2.0 Connectors observed in practice tolerate. A stricter v8.2.0 Connector
+     * may need them populated with the popp service's signing certificate.
+     */
+    suspend fun secureSendApdu(transactionData: String): String {
+        log.debug { "SecureSendAPDU (${transactionData.length}-char transactionData)" }
+        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V820)
+        val envelope =
+            SecureSendAPDUEnvelope(
+                body = SecureSendAPDUEnvelope.Body(
+                    secureSendAPDU = SecureSendAPDU(
+                        transactionData = transactionData,
+                        signatureObject = SignatureObject(),
+                        x509Certificate = "",
+                    ),
+                ),
+            )
+        val resp: SecureSendAPDUResponseEnvelope = proxy.call(CardServiceOperations.SecureSendAPDU, envelope)
+        resp.requireSuccess("SecureSendAPDU")
+        return resp.body.secureSendAPDUResponse?.transactionResult
+            ?.also { log.debug { "SecureSendAPDU returned ${it.length}-char transactionResult" } }
+            ?: error("SecureSendAPDU: no transactionResult in response")
+    }
+
+    /**
      * Snapshot of a single SMC-B card with its [telematikId] (extracted from the C.AUT
      * cert's admission extension; `null` if extraction fails) and the parsed [certificate]
      * itself when readable.
@@ -246,8 +378,8 @@ class KonnektorClient(
     )
 
     /**
-     * Enumerate every SMC-B currently available on the Konnektor, reading each card's
-     * C.AUT certificate to extract its Telematik-ID. One Konnektor round-trip per card
+     * Enumerate every SMC-B currently available on the Connector, reading each card's
+     * C.AUT certificate to extract its Telematik-ID. One Connector round-trip per card
      * (`ReadCardCertificate`) plus one for the card list.
      *
      * Cards whose certificate read fails are still returned with `telematikId = null`
@@ -311,7 +443,7 @@ class KonnektorClient(
     }
 
     /**
-     * Resolve a stable Telematik-ID to the (Konnektor-session-scoped) card handle.
+     * Resolve a stable Telematik-ID to the (Connector-session-scoped) card handle.
      *
      * If multiple SMC-Bs carry the same Telematik-ID — typical during a card-renewal
      * window where the old card has not yet been pulled — the candidate with the **most
@@ -370,14 +502,14 @@ class KonnektorClient(
         /**
          * Load the SDS via [httpClient] and build a client targeting [dotkon.url]. Honours
          * `rewriteServiceEndpoints`. The [httpClient] must already be configured for the
-         * Konnektor's TLS / auth — typically via
+         * Connector's TLS / auth — typically via
          * [de.gematik.connector.engine.okhttp.dotkonOkHttpClient].
          */
         suspend fun connect(
             httpClient: HttpClient,
             dotkon: Dotkon,
-        ): KonnektorClient {
-            log.debug { "Connecting to Konnektor at ${dotkon.url} (rewriteServiceEndpoints=${dotkon.rewriteServiceEndpoints})" }
+        ): ConnectorClient {
+            log.debug { "Connecting to Connector at ${dotkon.url} (rewriteServiceEndpoints=${dotkon.rewriteServiceEndpoints})" }
             val raw = loadConnectorServices(httpClient, dotkon.url)
             val services =
                 if (dotkon.rewriteServiceEndpoints) {
@@ -386,10 +518,10 @@ class KonnektorClient(
                     raw
                 }
             log.debug {
-                "Konnektor connected: ${services.serviceInformation.service.size} service(s) " +
+                "Connector connected: ${services.serviceInformation.service.size} service(s) " +
                     "advertised (${services.serviceInformation.service.joinToString { it.name }})"
             }
-            return KonnektorClient(
+            return ConnectorClient(
                 httpClient = httpClient,
                 context = dotkon.toConnectorContext(),
                 services = services,
@@ -398,7 +530,7 @@ class KonnektorClient(
     }
 }
 
-/** Lookup helper used by [KonnektorClient]; exposed for callers who hold a bare [ConnectorServices]. */
+/** Lookup helper used by [ConnectorClient]; exposed for callers who hold a bare [ConnectorServices]. */
 fun ConnectorServices.findLatest(serviceName: String): Pair<Service, ServiceVersion>? {
     val svc = serviceInformation.service.firstOrNull { it.name == serviceName } ?: return null
     val ver = svc.versions.version.maxByOrNull { semverAsNumber(it.version) } ?: return null

@@ -18,7 +18,7 @@ private val log = KotlinLogging.logger {}
 
 // The wrapper element lives in the ServiceDirectory namespace; its two main children
 // (ProductInformation, ServiceInformation) sit in their own namespaces — observed on
-// real Konnektors. Don't fold them into one constant.
+// real Connectors. Don't fold them into one constant.
 private const val SDS_NS = "http://ws.gematik.de/conn/ServiceDirectory/v3.1"
 private const val PRODUCT_INFO_NS = "http://ws.gematik.de/int/version/ProductInformation/v1.1"
 private const val SERVICE_INFO_NS = "http://ws.gematik.de/conn/ServiceInformation/v2.0"
@@ -27,7 +27,7 @@ internal const val SDS_PATH = "connector.sds"
 /**
  * Service Directory Service: the contents of `<base>/connector.sds` parsed.
  *
- * The Konnektor advertises which SOAP services it implements, in which versions, and at
+ * The Connector advertises which SOAP services it implements, in which versions, and at
  * which endpoint URLs. Discover at startup, never hardcode endpoints.
  */
 @Serializable
@@ -153,7 +153,7 @@ data class ServiceEndpoint(
     val location: String,
 )
 
-/** Common Konnektor service names — match the `Name` attribute on each `<Service>`. */
+/** Common Connector service names — match the `Name` attribute on each `<Service>`. */
 object ServiceNames {
     const val CardService = "CardService"
     const val EventService = "EventService"
@@ -166,7 +166,7 @@ object ServiceNames {
 
 /**
  * Replace scheme + host (+ port) of every TLS / non-TLS endpoint with the corresponding
- * components of [baseUrl], preserving the original path. Used when the Konnektor
+ * components of [baseUrl], preserving the original path. Used when the Connector
  * advertises internal hostnames that aren't reachable from the client.
  */
 fun ConnectorServices.withRewrittenEndpoints(baseUrl: String): ConnectorServices {

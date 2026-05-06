@@ -15,12 +15,12 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.serializer
 
 /**
- * Wraps a single SOAP endpoint of one Konnektor service version. Stateless apart from
+ * Wraps a single SOAP endpoint of one Connector service version. Stateless apart from
  * the [endpoint] URL — safe to share or to rebuild ad-hoc from a [ServiceVersion].
  *
  * The proxy *does not* check HTTP status codes: SOAP 1.1 transports faults via HTTP 500
  * with a Fault envelope body. Callers should inspect the response via [SoapEnvelope.isFault]
- * (or use a convenience method on [KonnektorClient] that does this for them).
+ * (or use a convenience method on [ConnectorClient] that does this for them).
  */
 class ServiceProxy internal constructor(
     val httpClient: HttpClient,

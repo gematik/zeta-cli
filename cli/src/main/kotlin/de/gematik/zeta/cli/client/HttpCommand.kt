@@ -1,7 +1,6 @@
 package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.Context
-import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
@@ -60,15 +59,21 @@ class HttpCommand : ZetaSessionCommand("http") {
         help = "Include the HTTP response status line and headers in the output.",
     ).flag(default = false)
 
+    private val scopes: List<String> by option(
+        "-s", "--scope",
+        metavar = "NAME",
+        help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least one is required.",
+    ).multiple(required = true)
+
     override fun help(context: Context) =
         "Send an HTTP request to a Zeta-protected resource."
 
     override fun runCommand() {
-        val parsedHeaders = requestHeaders.map(::parseHeader)
+        val parsedHeaders = requestHeaders.map(::parseHeaderOption)
         val method = resolveMethod()
 
-        openSession { sdk ->
-            val client = sdk.httpClient { applyCliHttpDefaults() }
+        openSession(resource = originOf(url), scopes = scopes) { sdk, _ ->
+            val client = sdk.httpClient { applyCliHttpDefaults(insecure = cliConfig.insecure) }
             try {
                 runBlocking {
                     val response = sendRequest(client, method, parsedHeaders, requestBody)
@@ -130,9 +135,4 @@ class HttpCommand : ZetaSessionCommand("http") {
         contentType.contains("application/json", ignoreCase = true) ||
             contentType.contains("+json", ignoreCase = true)
 
-    private fun parseHeader(s: String): Pair<String, String> {
-        val idx = s.indexOf(':')
-        if (idx <= 0) throw UsageError("invalid -H value: '$s' (expected 'Name: Value')")
-        return s.substring(0, idx).trim() to s.substring(idx + 1).trim()
-    }
 }

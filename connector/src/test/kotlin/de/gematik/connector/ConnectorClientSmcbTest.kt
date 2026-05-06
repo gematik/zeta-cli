@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalEncodingApi::class)
-class KonnektorClientSmcbTest {
+class ConnectorClientSmcbTest {
 
     private val baseUrl = "http://konnektor.test"
     private val sdsXml = """
@@ -28,7 +28,7 @@ class KonnektorClientSmcbTest {
                                xmlns:ns3="http://ws.gematik.de/conn/ServiceInformation/v2.0">
           <VERS:ProductInformation xmlns:VERS="http://ws.gematik.de/int/version/ProductInformation/v1.1">
             <VERS:ProductTypeInformation>
-              <VERS:ProductType>Konnektor</VERS:ProductType>
+              <VERS:ProductType>Connector</VERS:ProductType>
               <VERS:ProductTypeVersion>4.0.0</VERS:ProductTypeVersion>
             </VERS:ProductTypeInformation>
             <VERS:ProductIdentification>
@@ -119,15 +119,15 @@ class KonnektorClientSmcbTest {
     }
 
     /**
-     * Build a Konnektor wired to canned responses. [cardsXml] is returned for every
+     * Build a Connector wired to canned responses. [cardsXml] is returned for every
      * `GetCards` call; [readCertFor] resolves the response for each `ReadCardCertificate`
      * by looking at the `<CardHandle>` in the request body — returns null to surface a
-     * 404, mirroring "card not found" on a real Konnektor.
+     * 404, mirroring "card not found" on a real Connector.
      */
     private fun konnektor(
         cardsXml: String,
         readCertFor: (cardHandle: String) -> String?,
-    ): KonnektorClient = runBlocking {
+    ): ConnectorClient = runBlocking {
         // Match <CardHandle ...>VALUE</...CardHandle> tolerating namespace prefix and xmlns attrs.
         val cardHandlePattern = Regex("""<[^>]*\bCardHandle\b[^>]*>([^<]+)</[^>]*CardHandle>""")
         val engine = MockEngine { req ->
@@ -153,7 +153,7 @@ class KonnektorClientSmcbTest {
             mandantId = "M1", workplaceId = "W1", clientSystemId = "C1",
             credentials = Credentials.Basic("u", "p"),
         )
-        KonnektorClient.connect(httpClient, dotkon)
+        ConnectorClient.connect(httpClient, dotkon)
     }
 
     @Test

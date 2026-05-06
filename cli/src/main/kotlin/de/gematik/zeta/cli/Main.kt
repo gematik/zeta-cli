@@ -9,7 +9,11 @@ import de.gematik.zeta.cli.get.GetCommand
 import de.gematik.zeta.cli.inspect.InspectCommand
 import de.gematik.zeta.cli.connector.ConnectorCommand
 import de.gematik.zeta.cli.connector.ConnectorConfigsCommand
+import de.gematik.zeta.cli.connector.ConnectorGetCardsCommand
+import de.gematik.zeta.cli.connector.ConnectorGetCommand
 import de.gematik.zeta.cli.connector.ConnectorInspectCommand
+import de.gematik.zeta.cli.popp.PoppCommand
+import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.term.StderrColors
 import kotlin.system.exitProcess
 
@@ -27,7 +31,12 @@ fun main(args: Array<String>) {
             HttpCommand(),
             WsCommand(),
             GetCommand().subcommands(GetClientsCommand()),
-            ConnectorCommand().subcommands(ConnectorInspectCommand(), ConnectorConfigsCommand()),
+            ConnectorCommand().subcommands(
+                ConnectorInspectCommand(),
+                ConnectorConfigsCommand(),
+                ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
+            ),
+            PoppCommand().subcommands(PoppConnectorCommand()),
         )
         .main(args)
 

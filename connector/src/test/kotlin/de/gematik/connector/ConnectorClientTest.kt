@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-class KonnektorClientTest {
+class ConnectorClientTest {
 
     private val baseUrl = "http://konnektor.test"
     private val sdsXml = """
@@ -21,7 +21,7 @@ class KonnektorClientTest {
                                xmlns:ns3="http://ws.gematik.de/conn/ServiceInformation/v2.0">
           <VERS:ProductInformation xmlns:VERS="http://ws.gematik.de/int/version/ProductInformation/v1.1">
             <VERS:ProductTypeInformation>
-              <VERS:ProductType>Konnektor</VERS:ProductType>
+              <VERS:ProductType>Connector</VERS:ProductType>
               <VERS:ProductTypeVersion>4.0.0</VERS:ProductTypeVersion>
             </VERS:ProductTypeInformation>
             <VERS:ProductIdentification>
@@ -94,7 +94,7 @@ class KonnektorClientTest {
         </soap:Envelope>
     """.trimIndent()
 
-    private fun konnektor(soapHandler: () -> String): KonnektorClient = runBlocking {
+    private fun konnektor(soapHandler: () -> String): ConnectorClient = runBlocking {
         val engine = MockEngine { request ->
             when {
                 request.method == HttpMethod.Get && request.url.encodedPath.endsWith("/connector.sds") ->
@@ -110,7 +110,7 @@ class KonnektorClientTest {
             mandantId = "M1", workplaceId = "W1", clientSystemId = "C1",
             credentials = Credentials.Basic("u", "p"),
         )
-        KonnektorClient.connect(httpClient, dotkon)
+        ConnectorClient.connect(httpClient, dotkon)
     }
 
     @Test

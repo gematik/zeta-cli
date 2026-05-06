@@ -26,7 +26,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
  *
  * Builds a self-signed P-256 EC certificate with an ISIS-MTT admission extension
  * (`1.3.36.8.3.3`) carrying a single `ProfessionInfo` with the requested
- * `registrationNumber` (a.k.a. Telematik-ID). This is the exact shape real Konnektor
+ * `registrationNumber` (a.k.a. Telematik-ID). This is the exact shape real Connector
  * cards present, so the same parsing path exercised by the tests is what runs in prod.
  */
 private val ADMISSION_OID = ASN1ObjectIdentifier("1.3.36.8.3.3")

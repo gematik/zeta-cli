@@ -22,7 +22,7 @@ fun zetaConfigDir(): Path = xdgConfigHome().resolve(ZETA_SUBDIR)
  * `<zetaConfigDir>/<profile>.storage.json`. The compound `.storage.json` suffix leaves
  * room for future non-storage JSON files (configuration, exports, transient state)
  * to coexist in the same directory without name collisions. Multiple profiles let
- * users separate state per Konnektor / per environment without colliding; pair with
+ * users separate state per Connector / per environment without colliding; pair with
  * the `.kon` profile name for a one-to-one mapping.
  */
 fun zetaProfilePath(profile: String): Path = zetaConfigDir().resolve("$profile.storage.json")

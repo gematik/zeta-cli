@@ -18,7 +18,7 @@ class GetClientsCommand : ZetaCliktCommand(name = "clients") {
         log.info { "Listing OAuth2 clients" }
         when (cliConfig.outputFormat) {
             OutputFormat.JSON -> echo(renderJson(JsonArray(emptyList()), colorize = colorize))
-            OutputFormat.TEXT -> echo(currentContext.theme.muted("OAuth2 client listing is not yet implemented."))
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(currentContext.theme.muted("OAuth2 client listing is not yet implemented."))
         }
     }
 }

@@ -20,7 +20,7 @@ class VersionCommand : ZetaCliktCommand(name = "version") {
                 echo(renderJson(payload, colorize = colorize))
             }
 
-            OutputFormat.TEXT -> {
+            OutputFormat.TEXT, OutputFormat.RAW -> {
                 echo("zeta-cli ${BuildConfig.VERSION}")
                 echo("zeta-sdk ${BuildConfig.ZETA_SDK_VERSION}")
             }
