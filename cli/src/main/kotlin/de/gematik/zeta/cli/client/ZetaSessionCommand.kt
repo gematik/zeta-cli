@@ -110,7 +110,9 @@ class P12AuthOptions :
  * The popp resource and role-OID are hard-coded for now — generalising to other Zeta-Guard
  * services means lifting them into options on this base, not on each subcommand.
  */
-abstract class ZetaSessionCommand(name: String) : ZetaCliktCommand(name = name) {
+abstract class ZetaSessionCommand(
+    name: String,
+) : ZetaCliktCommand(name = name) {
     private val profile: String by option(
         "--profile",
         metavar = "NAME",
@@ -144,6 +146,7 @@ abstract class ZetaSessionCommand(name: String) : ZetaCliktCommand(name = name) 
     // `internal` rather than `protected` because [ConnectorSession] is `internal`; Kotlin
     // would otherwise complain about a stricter member exposing a looser parameter type.
     // All concrete subcommands live in the same module so this still works.
+
     /**
      * @param resource the OAuth resource indicator (RFC 8707) — typically the
      *   `scheme://host[:port]/` origin of the URL the subcommand is calling. Use [originOf]
@@ -178,34 +181,33 @@ abstract class ZetaSessionCommand(name: String) : ZetaCliktCommand(name = name) 
         storagePath: Path,
         tokenProvider: SubjectTokenProvider,
     ): ZetaSdkClient =
-        ZetaSdk.build(
-            resource,
-            BuildConfig(
-                productId = "zeta-cli",
-                productVersion = "0.2.0",
-                clientName = "zeta-cli",
-                storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
-                tpmConfig = object : TpmConfig {},
-                authConfig =
-                    AuthConfig(
-                        scopes = scopes,
-                        exp = 30,
-                        aslProdEnvironment = false,
-                        subjectTokenProvider = tokenProvider,
-                        attestation = AttestationConfig.software(),
-                        // SMC-B "Betriebsstätte Arzt" — must be present in the cert chain
-                        // or the ASL handshake will refuse to complete.
-                        requiredRoleOid = DEFAULT_ROLE_OID,
-                    ),
-                platformProductId =
-                    PlatformProductId.AppleProductId(
-                        PlatformProductId.PLATFORM_APPLE,
-                        "macos",
-                        listOf(),
-                    ),
-                httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(insecure = cliConfig.insecure),
-            ),
-        ).also { log.debug { "Created Zeta SDK client" } }
+        ZetaSdk
+            .build(
+                resource,
+                BuildConfig(
+                    productId = "zeta-cli",
+                    productVersion = "0.2.0",
+                    clientName = "zeta-cli",
+                    storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
+                    tpmConfig = object : TpmConfig {},
+                    authConfig =
+                        AuthConfig(
+                            scopes = scopes,
+                            exp = 30,
+                            aslProdEnvironment = false,
+                            subjectTokenProvider = tokenProvider,
+                            attestation = AttestationConfig.software(),
+                            requiredRoleOid = OID_ZETA_GUARD,
+                        ),
+                    platformProductId =
+                        PlatformProductId.AppleProductId(
+                            PlatformProductId.PLATFORM_APPLE,
+                            "macos",
+                            listOf(),
+                        ),
+                    httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(insecure = cliConfig.insecure),
+                ),
+            ).also { log.debug { "Created Zeta SDK client" } }
 
     /**
      * Enforce mutual exclusion + completeness. The two groups are mutually exclusive;
@@ -276,17 +278,19 @@ abstract class ZetaSessionCommand(name: String) : ZetaCliktCommand(name = name) 
         if (connectorActiveOptions().isNotEmpty()) {
             // .kon parsing + HttpClient construction (cheap); SDS load + SMC-B enumeration
             // are deferred to the first SDK `createSubjectToken` call via [LazySubjectTokenProvider].
-            val session = openConnectorSession(
-                connectorConfigName = cliConfig.connectorConfig,
-                connectTimeout = cliConfig.connectTimeout,
-                requestTimeout = cliConfig.requestTimeout,
-            )
-            val provider = buildConnectorTokenProvider(
-                session = session,
-                cardHandle = connectorAuth.cardHandle,
-                iccsn = connectorAuth.iccsn,
-                telematikId = connectorAuth.telematikId,
-            )
+            val session =
+                openConnectorSession(
+                    connectorConfigName = cliConfig.connectorConfig,
+                    connectTimeout = cliConfig.connectTimeout,
+                    requestTimeout = cliConfig.requestTimeout,
+                )
+            val provider =
+                buildConnectorTokenProvider(
+                    session = session,
+                    cardHandle = connectorAuth.cardHandle,
+                    iccsn = connectorAuth.iccsn,
+                    telematikId = connectorAuth.telematikId,
+                )
             return provider to session
         }
         if (p12ActiveOptions().isNotEmpty()) {
@@ -302,10 +306,6 @@ abstract class ZetaSessionCommand(name: String) : ZetaCliktCommand(name = name) 
     }
 
     protected companion object {
-        // SMC-B profession OID for "Betriebsstätte Arzt". The Zeta-Guard ASL handshake
-        // requires the server's TI cert to advertise this — the popp dev service does, and
-        // observed Zeta-Guard PEPs use the same OID. Will become a CLI option if a service
-        // ever needs a different one.
-        const val DEFAULT_ROLE_OID = "1.2.276.0.76.4.50"
+        const val OID_ZETA_GUARD = "1.2.276.0.76.4.324"
     }
 }

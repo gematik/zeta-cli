@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.popp
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -23,11 +24,13 @@ import kotlinx.serialization.json.JsonClassDiscriminator
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 @JsonClassDiscriminator("type")
-sealed interface PoppMessage
+internal sealed interface PoppMessage
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 @SerialName("Start")
 internal data class StartMessage(
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val version: String = "1.0.0",
     val cardConnectionType: String,
     val clientSessionId: String,

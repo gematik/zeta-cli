@@ -2,6 +2,7 @@ import org.gradle.api.tasks.bundling.Compression
 
 plugins {
     id("buildlogic.kotlin-application-conventions")
+    kotlin("plugin.serialization")
 }
 
 dependencies {
