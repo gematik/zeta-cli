@@ -352,7 +352,7 @@
     {
       "name": "CardService",
       "targetNamespace": "http://ws.gematik.de/conn/CardService/WSDL/v8.2",
-      "targetPackage": "de.gematik.ws.conn.CardService820",
+      "targetPackage": "de.gematik.ws.conn.CardService821",
       "ports": [
         {
           "name": "CardServicePort",
@@ -364,10 +364,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#VerifyPin",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.VerifyPin"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.VerifyPin"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.VerifyPinResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.VerifyPinResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -380,10 +380,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#ChangePin",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.ChangePin"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.ChangePin"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.ChangePinResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.ChangePinResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -396,10 +396,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#UnblockPin",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.UnblockPin"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.UnblockPin"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.UnblockPinResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.UnblockPinResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -412,10 +412,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#GetPinStatus",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.GetPinStatus"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.GetPinStatus"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.GetPinStatusResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.GetPinStatusResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -428,10 +428,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#EnablePin",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.EnablePin"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.EnablePin"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.EnablePinResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.EnablePinResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -444,10 +444,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#DisablePin",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.DisablePin"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.DisablePin"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.DisablePinResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.DisablePinResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -460,10 +460,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#SecureSendAPDU",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.SecureSendAPDU"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.SecureSendAPDU"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.SecureSendAPDUResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.SecureSendAPDUResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -476,10 +476,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#StartCardSession",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.StartCardSession"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.StartCardSession"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.StartCardSessionResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.StartCardSessionResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -492,10 +492,10 @@
               "soapAction": "http://ws.gematik.de/conn/CardService/v8.2#StopCardSession",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.StopCardSession"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.StopCardSession"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService820.StopCardSessionResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CardService821.StopCardSessionResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -618,7 +618,7 @@
     {
       "name": "CertificateService",
       "targetNamespace": "http://ws.gematik.de/conn/CertificateService/WSDL/v6.0",
-      "targetPackage": "de.gematik.ws.conn.CertificateService601",
+      "targetPackage": "de.gematik.ws.conn.CertificateService602",
       "ports": [
         {
           "name": "CertificateServicePort",
@@ -630,10 +630,10 @@
               "soapAction": "http://ws.gematik.de/conn/CertificateService/v6.0#CheckCertificateExpiration",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService601.CheckCertificateExpiration"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService602.CheckCertificateExpiration"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService601.CheckCertificateExpirationResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService602.CheckCertificateExpirationResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -646,10 +646,10 @@
               "soapAction": "http://ws.gematik.de/conn/CertificateService/v6.0#ReadCardCertificate",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService601.ReadCardCertificate"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService602.ReadCardCertificate"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService601.ReadCardCertificateResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService602.ReadCardCertificateResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -662,10 +662,10 @@
               "soapAction": "http://ws.gematik.de/conn/CertificateService/v6.0#VerifyCertificate",
               "style": "document",
               "input": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService601.VerifyCertificate"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService602.VerifyCertificate"
               },
               "output": {
-                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService601.VerifyCertificateResponse"
+                "soapBody": "#/components/schemas/de.gematik.ws.conn.CertificateService602.VerifyCertificateResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -13091,35 +13091,35 @@
           ]
         }
       },
-      "de.gematik.ws.conn.CardService820.Pin": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.PinType",
+      "de.gematik.ws.conn.CardService821.Pin": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.PinType",
         "xml": {
           "name": "Pin",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.Puk": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.PinType",
+      "de.gematik.ws.conn.CardService821.Puk": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.PinType",
         "xml": {
           "name": "Puk",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.OldPin": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.PinType",
+      "de.gematik.ws.conn.CardService821.OldPin": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.PinType",
         "xml": {
           "name": "OldPin",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.NewPin": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.PinType",
+      "de.gematik.ws.conn.CardService821.NewPin": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.PinType",
         "xml": {
           "name": "NewPin",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.Kvnr": {
+      "de.gematik.ws.conn.CardService821.Kvnr": {
         "type": "string",
         "minLength": 10,
         "maxLength": 10,
@@ -13128,14 +13128,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.CardHolderName": {
+      "de.gematik.ws.conn.CardService821.CardHolderName": {
         "type": "string",
         "xml": {
           "name": "CardHolderName",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.CertificateExpirationDate": {
+      "de.gematik.ws.conn.CardService821.CertificateExpirationDate": {
         "type": "string",
         "format": "date",
         "xml": {
@@ -13143,13 +13143,13 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.Cards": {
+      "de.gematik.ws.conn.CardService821.Cards": {
         "type": "object",
         "properties": {
           "card": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.Card"
+              "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.Card"
             }
           }
         },
@@ -13158,14 +13158,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.Card": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.CardInfoType",
+      "de.gematik.ws.conn.CardService821.Card": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.CardInfoType",
         "xml": {
           "name": "Card",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.VerifyPin": {
+      "de.gematik.ws.conn.CardService821.VerifyPin": {
         "type": "object",
         "properties": {
           "context": {
@@ -13188,14 +13188,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.VerifyPinResponse": {
+      "de.gematik.ws.conn.CardService821.VerifyPinResponse": {
         "$ref": "#/components/schemas/de.gematik.ws.conn.CardServiceCommon20.PinResponseType",
         "xml": {
           "name": "VerifyPinResponse",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.ChangePin": {
+      "de.gematik.ws.conn.CardService821.ChangePin": {
         "type": "object",
         "properties": {
           "context": {
@@ -13218,14 +13218,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.ChangePinResponse": {
+      "de.gematik.ws.conn.CardService821.ChangePinResponse": {
         "$ref": "#/components/schemas/de.gematik.ws.conn.CardServiceCommon20.PinResponseType",
         "xml": {
           "name": "ChangePinResponse",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.GetPinStatus": {
+      "de.gematik.ws.conn.CardService821.GetPinStatus": {
         "type": "object",
         "properties": {
           "context": {
@@ -13248,14 +13248,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.GetPinStatusResponse": {
+      "de.gematik.ws.conn.CardService821.GetPinStatusResponse": {
         "type": "object",
         "properties": {
           "status": {
             "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
           },
           "pinStatus": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.PinStatusEnum",
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.PinStatusEnum",
             "xml": {
               "name": "PinStatus",
               "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
@@ -13278,7 +13278,7 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.UnblockPin": {
+      "de.gematik.ws.conn.CardService821.UnblockPin": {
         "type": "object",
         "properties": {
           "context": {
@@ -13308,14 +13308,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.UnblockPinResponse": {
+      "de.gematik.ws.conn.CardService821.UnblockPinResponse": {
         "$ref": "#/components/schemas/de.gematik.ws.conn.CardServiceCommon20.PinResponseType",
         "xml": {
           "name": "UnblockPinResponse",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.EnablePin": {
+      "de.gematik.ws.conn.CardService821.EnablePin": {
         "type": "object",
         "properties": {
           "context": {
@@ -13338,14 +13338,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.EnablePinResponse": {
+      "de.gematik.ws.conn.CardService821.EnablePinResponse": {
         "$ref": "#/components/schemas/de.gematik.ws.conn.CardServiceCommon20.PinResponseType",
         "xml": {
           "name": "EnablePinResponse",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.DisablePin": {
+      "de.gematik.ws.conn.CardService821.DisablePin": {
         "type": "object",
         "properties": {
           "context": {
@@ -13368,14 +13368,14 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.DisablePinResponse": {
+      "de.gematik.ws.conn.CardService821.DisablePinResponse": {
         "$ref": "#/components/schemas/de.gematik.ws.conn.CardServiceCommon20.PinResponseType",
         "xml": {
           "name": "DisablePinResponse",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.StartCardSession": {
+      "de.gematik.ws.conn.CardService821.StartCardSession": {
         "type": "object",
         "properties": {
           "context": {
@@ -13394,14 +13394,18 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.StartCardSessionResponse": {
+      "de.gematik.ws.conn.CardService821.StartCardSessionResponse": {
         "type": "object",
         "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          },
           "sessionId": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.SessionId"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.SessionId"
           }
         },
         "required": [
+          "status",
           "sessionId"
         ],
         "xml": {
@@ -13409,72 +13413,49 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.SecureSendAPDU": {
+      "de.gematik.ws.conn.CardService821.SecureSendAPDU": {
         "type": "object",
         "properties": {
-          "transactionData": {
-            "type": "string",
-            "format": "byte",
+          "signedScenario": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.SignedScenarioType",
             "xml": {
-              "name": "TransactionData",
+              "name": "SignedScenario",
               "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
             }
-          },
-          "signatureObject": {
-            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
-          },
-          "x509Certificate": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateServiceCommon20.X509Certificate"
           }
         },
-        "required": [
-          "transactionData",
-          "signatureObject",
-          "x509Certificate"
-        ],
         "xml": {
           "name": "SecureSendAPDU",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.SecureSendAPDUResponse": {
+      "de.gematik.ws.conn.CardService821.SecureSendAPDUResponse": {
         "type": "object",
         "properties": {
           "status": {
             "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
           },
-          "transactionResult": {
-            "type": "string",
-            "format": "byte",
+          "signedScenarioResponse": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.SignedScenarioResponseType",
             "xml": {
-              "name": "TransactionResult",
-              "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
-            }
-          },
-          "timeSpan": {
-            "type": "integer",
-            "minimum": 0,
-            "xml": {
-              "name": "TimeSpan",
+              "name": "SignedScenarioResponse",
               "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
             }
           }
         },
         "required": [
-          "status",
-          "transactionResult",
-          "timeSpan"
+          "status"
         ],
         "xml": {
           "name": "SecureSendAPDUResponse",
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.StopCardSession": {
+      "de.gematik.ws.conn.CardService821.StopCardSession": {
         "type": "object",
         "properties": {
           "sessionId": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.SessionId"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.SessionId"
           }
         },
         "required": [
@@ -13485,7 +13466,7 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.StopCardSessionResponse": {
+      "de.gematik.ws.conn.CardService821.StopCardSessionResponse": {
         "type": "object",
         "properties": {
           "status": {
@@ -13500,7 +13481,7 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.CardService820.SessionId": {
+      "de.gematik.ws.conn.CardService821.SessionId": {
         "type": "string",
         "maxLength": 64,
         "xml": {
@@ -13508,796 +13489,7 @@
           "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
         }
       },
-      "de.gematik.ws.conn.SignatureService75.SignDocument": {
-        "type": "object",
-        "properties": {
-          "cardHandle": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
-          },
-          "crypt": {
-            "type": "string",
-            "xml": {
-              "name": "Crypt",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            },
-            "enum": [
-              "RSA",
-              "ECC",
-              "RSA_ECC"
-            ]
-          },
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          },
-          "tvMode": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.TvMode"
-          },
-          "jobNumber": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.JobNumber"
-          },
-          "signRequest": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignRequest"
-            }
-          }
-        },
-        "required": [
-          "cardHandle",
-          "context",
-          "tvMode",
-          "signRequest"
-        ],
-        "xml": {
-          "name": "SignDocument",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SignRequest": {
-        "type": "object",
-        "properties": {
-          "requestId": {
-            "type": "string",
-            "xml": {
-              "name": "RequestID",
-              "attribute": true
-            }
-          },
-          "optionalInputs": {
-            "type": "object",
-            "properties": {
-              "signatureType": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
-              },
-              "properties": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Properties"
-              },
-              "includeEnvelopedContent": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.IncludeEContent"
-              },
-              "includeObjects": {
-                "type": "object",
-                "properties": {
-                  "includeObject": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/oasis.names.tc.dss10.core.IncludeObject"
-                    }
-                  }
-                },
-                "required": [
-                  "includeObject"
-                ],
-                "xml": {
-                  "name": "IncludeObjects",
-                  "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-                }
-              },
-              "signaturePlacement": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignaturePlacement"
-              },
-              "returnUpdatedSignature": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.ReturnUpdatedSignature"
-              },
-              "schemas": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Schemas"
-              },
-              "generateUnderSignaturePolicy": {
-                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.SignaturePolicy.GenerateUnderSignaturePolicy"
-              },
-              "viewerInfo": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.ViewerInfo"
-              }
-            },
-            "xml": {
-              "name": "OptionalInputs",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "document": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.Document"
-          },
-          "includeRevocationInfo": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.IncludeRevocationInfo"
-          }
-        },
-        "required": [
-          "requestId",
-          "document",
-          "includeRevocationInfo"
-        ],
-        "xml": {
-          "name": "SignRequest",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SignatureSchemes": {
-        "type": "string",
-        "xml": {
-          "name": "SignatureSchemes",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        },
-        "enum": [
-          "RSASSA-PSS",
-          "RSASSA-PKCS1-v1_5"
-        ]
-      },
-      "de.gematik.ws.conn.SignatureService75.DocumentWithSignature": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentType",
-        "xml": {
-          "name": "DocumentWithSignature",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SignDocumentResponse": {
-        "type": "object",
-        "properties": {
-          "signResponse": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignResponse"
-            }
-          }
-        },
-        "required": [
-          "signResponse"
-        ],
-        "xml": {
-          "name": "SignDocumentResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SignResponse": {
-        "type": "object",
-        "properties": {
-          "requestId": {
-            "type": "string",
-            "xml": {
-              "name": "RequestID",
-              "attribute": true
-            }
-          },
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          },
-          "optionalOutputs": {
-            "type": "object",
-            "properties": {
-              "documentWithSignature": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentWithSignature"
-              },
-              "verificationReport": {
-                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
-              }
-            },
-            "xml": {
-              "name": "OptionalOutputs",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "signatureObject": {
-            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
-          }
-        },
-        "required": [
-          "requestId",
-          "status"
-        ],
-        "xml": {
-          "name": "SignResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.VerifyDocument": {
-        "type": "object",
-        "properties": {
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          },
-          "tvMode": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.TvMode"
-          },
-          "optionalInputs": {
-            "type": "object",
-            "properties": {
-              "verifyManifests": {
-                "type": "string",
-                "format": "xml",
-                "xml": {
-                  "name": "VerifyManifests",
-                  "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-                }
-              },
-              "useVerificationTime": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.UseVerificationTime"
-              },
-              "additionalKeyInfo": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.AdditionalKeyInfo"
-              },
-              "returnVerificationReport": {
-                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.ReturnVerificationReport"
-              },
-              "schemas": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Schemas"
-              },
-              "viewerInfo": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.ViewerInfo"
-              }
-            },
-            "xml": {
-              "name": "OptionalInputs",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "document": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.Document"
-          },
-          "signatureObject": {
-            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
-          },
-          "includeRevocationInfo": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.IncludeRevocationInfo"
-          }
-        },
-        "required": [
-          "context",
-          "includeRevocationInfo"
-        ],
-        "xml": {
-          "name": "VerifyDocument",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.UseVerificationTime": {
-        "$ref": "#/components/schemas/oasis.names.tc.dss10.core.UseVerificationTimeType",
-        "xml": {
-          "name": "UseVerificationTime",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.VerifyDocumentResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          },
-          "verificationResult": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.VerificationResultType",
-            "xml": {
-              "name": "VerificationResult",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "optionalOutputs": {
-            "type": "object",
-            "properties": {
-              "verifyManifestResults": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.VerifyManifestResults"
-              },
-              "documentWithSignature": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentWithSignature"
-              },
-              "updatedSignature": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.UpdatedSignature"
-              },
-              "verificationReport": {
-                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
-              }
-            },
-            "xml": {
-              "name": "OptionalOutputs",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          }
-        },
-        "required": [
-          "status",
-          "verificationResult"
-        ],
-        "xml": {
-          "name": "VerifyDocumentResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.GetJobNumber": {
-        "type": "object",
-        "properties": {
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          }
-        },
-        "required": [
-          "context"
-        ],
-        "xml": {
-          "name": "GetJobNumber",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.GetJobNumberResponse": {
-        "type": "object",
-        "properties": {
-          "jobNumber": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.JobNumber"
-          }
-        },
-        "required": [
-          "jobNumber"
-        ],
-        "xml": {
-          "name": "GetJobNumberResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ExternalAuthenticate": {
-        "type": "object",
-        "properties": {
-          "cardHandle": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
-          },
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          },
-          "optionalInputs": {
-            "type": "object",
-            "properties": {
-              "signatureType": {
-                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
-              },
-              "signatureSchemes": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureSchemes"
-              }
-            },
-            "xml": {
-              "name": "OptionalInputs",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "binaryString": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.BinaryString"
-          }
-        },
-        "required": [
-          "cardHandle",
-          "context",
-          "binaryString"
-        ],
-        "xml": {
-          "name": "ExternalAuthenticate",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ExternalAuthenticateResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          },
-          "signatureObject": {
-            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "xml": {
-          "name": "ExternalAuthenticateResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.StopSignature": {
-        "type": "object",
-        "properties": {
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          },
-          "jobNumber": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.JobNumber"
-          }
-        },
-        "required": [
-          "context",
-          "jobNumber"
-        ],
-        "xml": {
-          "name": "StopSignature",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.StopSignatureResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "xml": {
-          "name": "StopSignatureResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.TvMode": {
-        "type": "string",
-        "xml": {
-          "name": "TvMode",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        },
-        "enum": [
-          "NONE",
-          "UNCONFIRMED",
-          "CONFIRMED"
-        ]
-      },
-      "de.gematik.ws.conn.SignatureService75.JobNumber": {
-        "type": "string",
-        "pattern": "[A-Z][A-Z][A-Z]-[0-9][0-9][0-9]|[A-Z][A-Z][A-Z]-[0-9][0-9][0-9]|[A-Z][A-Z][A-Z]-[0-9][0-9][0-9]",
-        "xml": {
-          "name": "JobNumber",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ViewerInfo": {
-        "type": "object",
-        "properties": {
-          "xslStyleSheets": {
-            "type": "object",
-            "properties": {
-              "xslStylesheet": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.XslStylesheet"
-                }
-              }
-            },
-            "required": [
-              "xslStylesheet"
-            ],
-            "xml": {
-              "name": "XslStyleSheets",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          }
-        },
-        "xml": {
-          "name": "ViewerInfo",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.Deselected": {
-        "type": "string",
-        "format": "xml",
-        "xml": {
-          "name": "Deselected",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SignatureForm": {
-        "type": "string",
-        "xml": {
-          "name": "SignatureForm",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        },
-        "enum": [
-          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:BES",
-          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-T",
-          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-C",
-          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X",
-          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X-L"
-        ]
-      },
-      "de.gematik.ws.conn.SignatureService75.IncludeEContent": {
-        "type": "boolean",
-        "xml": {
-          "name": "IncludeEContent",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.IncludeRevocationInfo": {
-        "type": "boolean",
-        "xml": {
-          "name": "IncludeRevocationInfo",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.Document": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentType",
-        "xml": {
-          "name": "Document",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.BinaryString": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.BinaryDocumentType",
-        "xml": {
-          "name": "BinaryString",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ShortText": {
-        "type": "string",
-        "pattern": "[a-zA-Z 0-9_.\\-\u00e4\u00f6\u00fc\u00c4\u00d6\u00dc\u00df]*|[a-zA-Z 0-9_.\\-\u00e4\u00f6\u00fc\u00c4\u00d6\u00dc\u00df]*|[a-zA-Z 0-9_.\\-\u00e4\u00f6\u00fc\u00c4\u00d6\u00dc\u00df]*",
-        "maxLength": 30,
-        "xml": {
-          "name": "ShortText",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.CounterSignatureMarker": {
-        "type": "object",
-        "properties": {
-          "signatureValueReference": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "idRef": {
-                  "type": "string",
-                  "xml": {
-                    "name": "IdRef",
-                    "attribute": true
-                  }
-                }
-              },
-              "xml": {
-                "name": "SignatureValueReference",
-                "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-              }
-            }
-          }
-        },
-        "required": [
-          "signatureValueReference"
-        ],
-        "xml": {
-          "name": "CounterSignatureMarker",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.DisplayableAttributes": {
-        "type": "object",
-        "properties": {
-          "displayableAttribute": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "key": {
-                  "type": "string",
-                  "maxLength": 80,
-                  "xml": {
-                    "name": "Key",
-                    "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-                  }
-                },
-                "value": {
-                  "type": "string",
-                  "maxLength": 8000,
-                  "xml": {
-                    "name": "Value",
-                    "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-                  }
-                }
-              },
-              "required": [
-                "key",
-                "value"
-              ],
-              "xml": {
-                "name": "DisplayableAttribute",
-                "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-              }
-            }
-          }
-        },
-        "required": [
-          "displayableAttribute"
-        ],
-        "xml": {
-          "name": "DisplayableAttributes",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ReferenceToSignerCertificate": {
-        "type": "boolean",
-        "xml": {
-          "name": "ReferenceToSignerCertificate",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ActivateComfortSignature": {
-        "type": "object",
-        "properties": {
-          "cardHandle": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
-          },
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          }
-        },
-        "required": [
-          "cardHandle",
-          "context"
-        ],
-        "xml": {
-          "name": "ActivateComfortSignature",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.ActivateComfortSignatureResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          },
-          "signatureMode": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureMode"
-          }
-        },
-        "required": [
-          "status",
-          "signatureMode"
-        ],
-        "xml": {
-          "name": "ActivateComfortSignatureResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.DeactivateComfortSignature": {
-        "type": "object",
-        "properties": {
-          "cardHandle": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
-            }
-          }
-        },
-        "required": [
-          "cardHandle"
-        ],
-        "xml": {
-          "name": "DeactivateComfortSignature",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.DeactivateComfortSignatureResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "xml": {
-          "name": "DeactivateComfortSignatureResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.GetSignatureMode": {
-        "type": "object",
-        "properties": {
-          "cardHandle": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
-          },
-          "context": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
-          }
-        },
-        "required": [
-          "cardHandle",
-          "context"
-        ],
-        "xml": {
-          "name": "GetSignatureMode",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.GetSignatureModeResponse": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
-          },
-          "comfortSignatureStatus": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.ComfortSignatureStatusEnum",
-            "xml": {
-              "name": "ComfortSignatureStatus",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "comfortSignatureMax": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.CountType",
-            "xml": {
-              "name": "ComfortSignatureMax",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "comfortSignatureTimer": {
-            "type": "string",
-            "xml": {
-              "name": "ComfortSignatureTimer",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "sessionInfo": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SessionInfo"
-          }
-        },
-        "required": [
-          "status",
-          "comfortSignatureStatus",
-          "comfortSignatureMax",
-          "comfortSignatureTimer"
-        ],
-        "xml": {
-          "name": "GetSignatureModeResponse",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SessionInfo": {
-        "type": "object",
-        "properties": {
-          "signatureMode": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureMode"
-          },
-          "countRemaining": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.CountType",
-            "xml": {
-              "name": "CountRemaining",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          },
-          "timeRemaining": {
-            "type": "string",
-            "xml": {
-              "name": "TimeRemaining",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            }
-          }
-        },
-        "required": [
-          "signatureMode",
-          "countRemaining",
-          "timeRemaining"
-        ],
-        "xml": {
-          "name": "SessionInfo",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.SignatureMode": {
-        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureModeEnum",
-        "xml": {
-          "name": "SignatureMode",
-          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-        }
-      },
-      "de.gematik.ws.conn.CardService820.RequestCardResultEnum": {
+      "de.gematik.ws.conn.CardService821.RequestCardResultEnum": {
         "type": "string",
         "enum": [
           "ERROR",
@@ -14305,7 +13497,7 @@
           "ALREADY_INSERTED"
         ]
       },
-      "de.gematik.ws.conn.CardService820.PinStatusEnum": {
+      "de.gematik.ws.conn.CardService821.PinStatusEnum": {
         "type": "string",
         "enum": [
           "VERIFIED",
@@ -14316,11 +13508,11 @@
           "DISABLED"
         ]
       },
-      "de.gematik.ws.conn.CardService820.PinType": {
+      "de.gematik.ws.conn.CardService821.PinType": {
         "type": "string",
         "maxLength": 256
       },
-      "de.gematik.ws.conn.CardService820.CommonStepsEnum": {
+      "de.gematik.ws.conn.CardService821.CommonStepsEnum": {
         "type": "string",
         "enum": [
           "CheckCardHandle",
@@ -14336,7 +13528,7 @@
           "CardToCard"
         ]
       },
-      "de.gematik.ws.conn.CardService820.VersionInfoType": {
+      "de.gematik.ws.conn.CardService821.VersionInfoType": {
         "type": "object",
         "properties": {
           "major": {
@@ -14367,7 +13559,7 @@
           "revision"
         ]
       },
-      "de.gematik.ws.conn.CardService820.CardInfoType": {
+      "de.gematik.ws.conn.CardService821.CardInfoType": {
         "type": "object",
         "properties": {
           "cardHandle": {
@@ -14380,56 +13572,56 @@
             "type": "object",
             "properties": {
               "cosVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "COSVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "objectSystemVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "ObjectSystemVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "cardPtPersVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "CardPTPersVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "dataStructureVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "DataStructureVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "loggingVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "LoggingVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "atrVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "ATRVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "gdoVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "GDOVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "keyInfoVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "KeyInfoVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
@@ -14463,13 +13655,13 @@
             }
           },
           "cardHolderName": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.CardHolderName"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.CardHolderName"
           },
           "kvnr": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.Kvnr"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.Kvnr"
           },
           "certificateExpirationDate": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.CertificateExpirationDate"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.CertificateExpirationDate"
           }
         },
         "required": [
@@ -14483,7 +13675,7 @@
           "x-is-base": true
         }
       },
-      "de.gematik.ws.conn.CardService820.CardInfoErrType": {
+      "de.gematik.ws.conn.CardService821.CardInfoErrType": {
         "type": "object",
         "properties": {
           "cardHandle": {
@@ -14496,56 +13688,56 @@
             "type": "object",
             "properties": {
               "cosVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "COSVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "objectSystemVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "ObjectSystemVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "cardPtPersVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "CardPTPersVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "dataStructureVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "DataStructureVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "loggingVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "LoggingVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "atrVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "ATRVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "gdoVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "GDOVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
                 }
               },
               "keyInfoVersion": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.VersionInfoType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.VersionInfoType",
                 "xml": {
                   "name": "KeyInfoVersion",
                   "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
@@ -14579,13 +13771,13 @@
             }
           },
           "cardHolderName": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.CardHolderName"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.CardHolderName"
           },
           "kvnr": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.Kvnr"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.Kvnr"
           },
           "certificateExpirationDate": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService820.CertificateExpirationDate"
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CardService821.CertificateExpirationDate"
           },
           "error": {
             "$ref": "#/components/schemas/de.gematik.ws.tel.error20.Error"
@@ -14600,177 +13792,51 @@
         ],
         "xml": {
           "x-extends": [
-            "#/components/schemas/de.gematik.ws.conn.CardService820.CardInfoType"
+            "#/components/schemas/de.gematik.ws.conn.CardService821.CardInfoType"
           ]
         }
       },
-      "de.gematik.ws.conn.SignatureService75.DocumentType": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "xml": {
-              "name": "ID",
-              "attribute": true
-            }
-          },
-          "refUri": {
-            "type": "string",
-            "format": "uri",
-            "xml": {
-              "name": "RefURI",
-              "attribute": true
-            }
-          },
-          "refType": {
-            "type": "string",
-            "format": "uri",
-            "xml": {
-              "name": "RefType",
-              "attribute": true
-            }
-          },
-          "schemaRefs": {
-            "type": "string",
-            "xml": {
-              "name": "SchemaRefs",
-              "attribute": true
-            }
-          },
-          "shortText": {
-            "type": "string",
-            "xml": {
-              "name": "ShortText",
-              "attribute": true
-            }
-          },
-          "base64Xml": {
-            "type": "string",
-            "format": "byte",
-            "xml": {
-              "name": "Base64XML",
-              "namespace": "http://ws.gematik.de/conn/ConnectorCommon/v5.0"
-            }
-          },
-          "base64Data": {
-            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
-          }
-        },
-        "xml": {
-          "x-extends": [
-            "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.DocumentType",
-            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
-          ],
-          "x-is-base": true
-        }
+      "de.gematik.ws.conn.CardService821.SignedScenarioType": {
+        "type": "string",
+        "pattern": "[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+",
+        "maxLength": 750000
       },
-      "de.gematik.ws.conn.SignatureService75.BinaryDocumentType": {
+      "de.gematik.ws.conn.CardService821.SignedScenarioResponseType": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "xml": {
-              "name": "ID",
-              "attribute": true
-            }
-          },
-          "refUri": {
-            "type": "string",
-            "format": "uri",
-            "xml": {
-              "name": "RefURI",
-              "attribute": true
-            }
-          },
-          "refType": {
-            "type": "string",
-            "format": "uri",
-            "xml": {
-              "name": "RefType",
-              "attribute": true
-            }
-          },
-          "schemaRefs": {
-            "type": "string",
-            "xml": {
-              "name": "SchemaRefs",
-              "attribute": true
-            }
-          },
-          "base64Data": {
-            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
-          }
-        },
-        "required": [
-          "base64Data"
-        ],
-        "xml": {
-          "x-extends": [
-            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
-          ],
-          "x-is-base": true
-        }
-      },
-      "de.gematik.ws.conn.SignatureService75.VerificationResultType": {
-        "type": "object",
-        "properties": {
-          "highLevelResult": {
-            "type": "string",
-            "xml": {
-              "name": "HighLevelResult",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+          "responseApduList": {
+            "type": "object",
+            "properties": {
+              "responseApdu": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "([0-9a-fA-F]{2}){2,}",
+                  "maxLength": 10000,
+                  "xml": {
+                    "name": "ResponseApdu",
+                    "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
+                  }
+                }
+              }
             },
-            "enum": [
-              "VALID",
-              "INCONCLUSIVE",
-              "INVALID"
-            ]
-          },
-          "timestampType": {
-            "type": "string",
             "xml": {
-              "name": "TimestampType",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
-            },
-            "enum": [
-              "SIGNATURE_EMBEDDED_TIMESTAMP",
-              "QUALIFIED_TIMESTAMP",
-              "USER_DEFINED_TIMESTAMP",
-              "SYSTEM_TIMESTAMP"
-            ]
+              "name": "ResponseApduList",
+              "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
+            }
           },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time",
+          "timeSpan": {
+            "type": "integer",
+            "minimum": 0,
             "xml": {
-              "name": "Timestamp",
-              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+              "name": "TimeSpan",
+              "namespace": "http://ws.gematik.de/conn/CardService/v8.2"
             }
           }
         },
         "required": [
-          "highLevelResult",
-          "timestampType",
-          "timestamp"
-        ]
-      },
-      "de.gematik.ws.conn.SignatureService75.SignatureModeEnum": {
-        "type": "string",
-        "enum": [
-          "PIN",
-          "COMFORT"
-        ]
-      },
-      "de.gematik.ws.conn.SignatureService75.CountType": {
-        "type": "integer",
-        "maximum": 250.0,
-        "minimum": 0.0
-      },
-      "de.gematik.ws.conn.SignatureService75.ComfortSignatureStatusEnum": {
-        "type": "string",
-        "enum": [
-          "ENABLED",
-          "DISABLED"
+          "responseApduList",
+          "timeSpan"
         ]
       },
       "de.gematik.ws.conn.CardTerminalService11.RequestCard": {
@@ -15156,7 +14222,7 @@
           "INVALID"
         ]
       },
-      "de.gematik.ws.conn.CertificateService601.CheckCertificateExpiration": {
+      "de.gematik.ws.conn.CertificateService602.CheckCertificateExpiration": {
         "type": "object",
         "properties": {
           "cardHandle": {
@@ -15166,7 +14232,7 @@
             "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
           },
           "crypt": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService601.CryptType",
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService602.CryptType",
             "xml": {
               "name": "Crypt",
               "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
@@ -15181,7 +14247,7 @@
           "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
         }
       },
-      "de.gematik.ws.conn.CertificateService601.CheckCertificateExpirationResponse": {
+      "de.gematik.ws.conn.CertificateService602.CheckCertificateExpirationResponse": {
         "type": "object",
         "properties": {
           "status": {
@@ -15190,7 +14256,7 @@
           "certificateExpiration": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService601.CertificateExpirationType",
+              "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService602.CertificateExpirationType",
               "xml": {
                 "name": "CertificateExpiration",
                 "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
@@ -15206,7 +14272,7 @@
           "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
         }
       },
-      "de.gematik.ws.conn.CertificateService601.ReadCardCertificate": {
+      "de.gematik.ws.conn.CertificateService602.ReadCardCertificate": {
         "type": "object",
         "properties": {
           "cardHandle": {
@@ -15238,7 +14304,7 @@
             }
           },
           "crypt": {
-            "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService601.CryptType",
+            "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService602.CryptType",
             "xml": {
               "name": "Crypt",
               "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
@@ -15255,7 +14321,7 @@
           "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
         }
       },
-      "de.gematik.ws.conn.CertificateService601.ReadCardCertificateResponse": {
+      "de.gematik.ws.conn.CertificateService602.ReadCardCertificateResponse": {
         "type": "object",
         "properties": {
           "status": {
@@ -15274,7 +14340,7 @@
           "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
         }
       },
-      "de.gematik.ws.conn.CertificateService601.VerifyCertificate": {
+      "de.gematik.ws.conn.CertificateService602.VerifyCertificate": {
         "type": "object",
         "properties": {
           "context": {
@@ -15301,7 +14367,7 @@
           "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
         }
       },
-      "de.gematik.ws.conn.CertificateService601.VerifyCertificateResponse": {
+      "de.gematik.ws.conn.CertificateService602.VerifyCertificateResponse": {
         "type": "object",
         "properties": {
           "status": {
@@ -15311,7 +14377,7 @@
             "type": "object",
             "properties": {
               "verificationResult": {
-                "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService601.VerificationResultType",
+                "$ref": "#/components/schemas/de.gematik.ws.conn.CertificateService602.VerificationResultType",
                 "xml": {
                   "name": "VerificationResult",
                   "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
@@ -15362,7 +14428,7 @@
           "namespace": "http://ws.gematik.de/conn/CertificateService/v6.0"
         }
       },
-      "de.gematik.ws.conn.CertificateService601.CertificateExpirationType": {
+      "de.gematik.ws.conn.CertificateService602.CertificateExpirationType": {
         "type": "object",
         "properties": {
           "ctId": {
@@ -15414,14 +14480,14 @@
           "validity"
         ]
       },
-      "de.gematik.ws.conn.CertificateService601.CryptType": {
+      "de.gematik.ws.conn.CertificateService602.CryptType": {
         "type": "string",
         "enum": [
           "RSA",
           "ECC"
         ]
       },
-      "de.gematik.ws.conn.CertificateService601.VerificationResultType": {
+      "de.gematik.ws.conn.CertificateService602.VerificationResultType": {
         "type": "string",
         "enum": [
           "VALID",
@@ -16577,6 +15643,964 @@
       "de.gematik.ws.conn.CardTerminalInfo80.Ipv6": {
         "type": "string",
         "pattern": "[0-9A-Fa-f]{1,4}(:[0-9A-Fa-f]{1,4}){7}|:(:[0-9A-Fa-f]{1,4}){1,7}|([0-9A-Fa-f]{1,4}:){1,6}(:[0-9A-Fa-f]{1,4}){1}|([0-9A-Fa-f]{1,4}:){1,5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){1,4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){1,3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){1,2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){1}(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){1,7}:|((:(:0{1,4}){0,3}(:(0{1,4}|[fF]{4}))?)|(0{1,4}:(:0{1,4}){0,2}(:(0{1,4}|[fF]{4}))?)|((0{1,4}:){2}(:0{1,4})?(:(0{1,4}|[fF]{4}))?)|((0{1,4}:){3}(:(0{1,4}|[fF]{4}))?)|((0{1,4}:){4}(0{1,4}|[fF]{4})?)):(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])|::"
+      },
+      "de.gematik.ws.conn.SignatureService75.SignDocument": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
+          },
+          "crypt": {
+            "type": "string",
+            "xml": {
+              "name": "Crypt",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            },
+            "enum": [
+              "RSA",
+              "ECC",
+              "RSA_ECC"
+            ]
+          },
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          },
+          "tvMode": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.TvMode"
+          },
+          "jobNumber": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.JobNumber"
+          },
+          "signRequest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignRequest"
+            }
+          }
+        },
+        "required": [
+          "cardHandle",
+          "context",
+          "tvMode",
+          "signRequest"
+        ],
+        "xml": {
+          "name": "SignDocument",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SignRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "xml": {
+              "name": "RequestID",
+              "attribute": true
+            }
+          },
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "signatureType": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
+              },
+              "properties": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Properties"
+              },
+              "includeEnvelopedContent": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.IncludeEContent"
+              },
+              "includeObjects": {
+                "type": "object",
+                "properties": {
+                  "includeObject": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/oasis.names.tc.dss10.core.IncludeObject"
+                    }
+                  }
+                },
+                "required": [
+                  "includeObject"
+                ],
+                "xml": {
+                  "name": "IncludeObjects",
+                  "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+                }
+              },
+              "signaturePlacement": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignaturePlacement"
+              },
+              "returnUpdatedSignature": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.ReturnUpdatedSignature"
+              },
+              "schemas": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Schemas"
+              },
+              "generateUnderSignaturePolicy": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.SignaturePolicy.GenerateUnderSignaturePolicy"
+              },
+              "viewerInfo": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.ViewerInfo"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "document": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.Document"
+          },
+          "includeRevocationInfo": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.IncludeRevocationInfo"
+          }
+        },
+        "required": [
+          "requestId",
+          "document",
+          "includeRevocationInfo"
+        ],
+        "xml": {
+          "name": "SignRequest",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SignatureSchemes": {
+        "type": "string",
+        "xml": {
+          "name": "SignatureSchemes",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        },
+        "enum": [
+          "RSASSA-PSS",
+          "RSASSA-PKCS1-v1_5"
+        ]
+      },
+      "de.gematik.ws.conn.SignatureService75.DocumentWithSignature": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentType",
+        "xml": {
+          "name": "DocumentWithSignature",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SignDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "signResponse": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignResponse"
+            }
+          }
+        },
+        "required": [
+          "signResponse"
+        ],
+        "xml": {
+          "name": "SignDocumentResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SignResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "xml": {
+              "name": "RequestID",
+              "attribute": true
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          },
+          "optionalOutputs": {
+            "type": "object",
+            "properties": {
+              "documentWithSignature": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentWithSignature"
+              },
+              "verificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
+              }
+            },
+            "xml": {
+              "name": "OptionalOutputs",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "required": [
+          "requestId",
+          "status"
+        ],
+        "xml": {
+          "name": "SignResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.VerifyDocument": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          },
+          "tvMode": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.TvMode"
+          },
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "verifyManifests": {
+                "type": "string",
+                "format": "xml",
+                "xml": {
+                  "name": "VerifyManifests",
+                  "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+                }
+              },
+              "useVerificationTime": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.UseVerificationTime"
+              },
+              "additionalKeyInfo": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.AdditionalKeyInfo"
+              },
+              "returnVerificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.ReturnVerificationReport"
+              },
+              "schemas": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Schemas"
+              },
+              "viewerInfo": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.ViewerInfo"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "document": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.Document"
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          },
+          "includeRevocationInfo": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.IncludeRevocationInfo"
+          }
+        },
+        "required": [
+          "context",
+          "includeRevocationInfo"
+        ],
+        "xml": {
+          "name": "VerifyDocument",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.UseVerificationTime": {
+        "$ref": "#/components/schemas/oasis.names.tc.dss10.core.UseVerificationTimeType",
+        "xml": {
+          "name": "UseVerificationTime",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.VerifyDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          },
+          "verificationResult": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.VerificationResultType",
+            "xml": {
+              "name": "VerificationResult",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "optionalOutputs": {
+            "type": "object",
+            "properties": {
+              "verifyManifestResults": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.VerifyManifestResults"
+              },
+              "documentWithSignature": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentWithSignature"
+              },
+              "updatedSignature": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.UpdatedSignature"
+              },
+              "verificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
+              }
+            },
+            "xml": {
+              "name": "OptionalOutputs",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "verificationResult"
+        ],
+        "xml": {
+          "name": "VerifyDocumentResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.GetJobNumber": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          }
+        },
+        "required": [
+          "context"
+        ],
+        "xml": {
+          "name": "GetJobNumber",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.GetJobNumberResponse": {
+        "type": "object",
+        "properties": {
+          "jobNumber": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.JobNumber"
+          }
+        },
+        "required": [
+          "jobNumber"
+        ],
+        "xml": {
+          "name": "GetJobNumberResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ExternalAuthenticate": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
+          },
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          },
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "signatureType": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
+              },
+              "signatureSchemes": {
+                "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureSchemes"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "binaryString": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.BinaryString"
+          }
+        },
+        "required": [
+          "cardHandle",
+          "context",
+          "binaryString"
+        ],
+        "xml": {
+          "name": "ExternalAuthenticate",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ExternalAuthenticateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "xml": {
+          "name": "ExternalAuthenticateResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.StopSignature": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          },
+          "jobNumber": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.JobNumber"
+          }
+        },
+        "required": [
+          "context",
+          "jobNumber"
+        ],
+        "xml": {
+          "name": "StopSignature",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.StopSignatureResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "xml": {
+          "name": "StopSignatureResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.TvMode": {
+        "type": "string",
+        "xml": {
+          "name": "TvMode",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        },
+        "enum": [
+          "NONE",
+          "UNCONFIRMED",
+          "CONFIRMED"
+        ]
+      },
+      "de.gematik.ws.conn.SignatureService75.JobNumber": {
+        "type": "string",
+        "pattern": "[A-Z][A-Z][A-Z]-[0-9][0-9][0-9]|[A-Z][A-Z][A-Z]-[0-9][0-9][0-9]",
+        "xml": {
+          "name": "JobNumber",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ViewerInfo": {
+        "type": "object",
+        "properties": {
+          "xslStyleSheets": {
+            "type": "object",
+            "properties": {
+              "xslStylesheet": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.XslStylesheet"
+                }
+              }
+            },
+            "required": [
+              "xslStylesheet"
+            ],
+            "xml": {
+              "name": "XslStyleSheets",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          }
+        },
+        "xml": {
+          "name": "ViewerInfo",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.Deselected": {
+        "type": "string",
+        "format": "xml",
+        "xml": {
+          "name": "Deselected",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SignatureForm": {
+        "type": "string",
+        "xml": {
+          "name": "SignatureForm",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        },
+        "enum": [
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:BES",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-T",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-C",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X-L"
+        ]
+      },
+      "de.gematik.ws.conn.SignatureService75.IncludeEContent": {
+        "type": "boolean",
+        "xml": {
+          "name": "IncludeEContent",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.IncludeRevocationInfo": {
+        "type": "boolean",
+        "xml": {
+          "name": "IncludeRevocationInfo",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.Document": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.DocumentType",
+        "xml": {
+          "name": "Document",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.BinaryString": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.BinaryDocumentType",
+        "xml": {
+          "name": "BinaryString",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ShortText": {
+        "type": "string",
+        "pattern": "[a-zA-Z 0-9_.\\-\u00e4\u00f6\u00fc\u00c4\u00d6\u00dc\u00df]*|[a-zA-Z 0-9_.\\-\u00e4\u00f6\u00fc\u00c4\u00d6\u00dc\u00df]*",
+        "maxLength": 30,
+        "xml": {
+          "name": "ShortText",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.CounterSignatureMarker": {
+        "type": "object",
+        "properties": {
+          "signatureValueReference": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "idRef": {
+                  "type": "string",
+                  "xml": {
+                    "name": "IdRef",
+                    "attribute": true
+                  }
+                }
+              },
+              "xml": {
+                "name": "SignatureValueReference",
+                "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+              }
+            }
+          }
+        },
+        "required": [
+          "signatureValueReference"
+        ],
+        "xml": {
+          "name": "CounterSignatureMarker",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.DisplayableAttributes": {
+        "type": "object",
+        "properties": {
+          "displayableAttribute": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "xml": {
+                    "name": "Key",
+                    "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+                  }
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 8000,
+                  "xml": {
+                    "name": "Value",
+                    "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+                  }
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "xml": {
+                "name": "DisplayableAttribute",
+                "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+              }
+            }
+          }
+        },
+        "required": [
+          "displayableAttribute"
+        ],
+        "xml": {
+          "name": "DisplayableAttributes",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ReferenceToSignerCertificate": {
+        "type": "boolean",
+        "xml": {
+          "name": "ReferenceToSignerCertificate",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ActivateComfortSignature": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
+          },
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          }
+        },
+        "required": [
+          "cardHandle",
+          "context"
+        ],
+        "xml": {
+          "name": "ActivateComfortSignature",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.ActivateComfortSignatureResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          },
+          "signatureMode": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureMode"
+          }
+        },
+        "required": [
+          "status",
+          "signatureMode"
+        ],
+        "xml": {
+          "name": "ActivateComfortSignatureResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.DeactivateComfortSignature": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
+            }
+          }
+        },
+        "required": [
+          "cardHandle"
+        ],
+        "xml": {
+          "name": "DeactivateComfortSignature",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.DeactivateComfortSignatureResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "xml": {
+          "name": "DeactivateComfortSignatureResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.GetSignatureMode": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.CardHandle"
+          },
+          "context": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorContext20.Context"
+          }
+        },
+        "required": [
+          "cardHandle",
+          "context"
+        ],
+        "xml": {
+          "name": "GetSignatureMode",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.GetSignatureModeResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.Status"
+          },
+          "comfortSignatureStatus": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.ComfortSignatureStatusEnum",
+            "xml": {
+              "name": "ComfortSignatureStatus",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "comfortSignatureMax": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.CountType",
+            "xml": {
+              "name": "ComfortSignatureMax",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "comfortSignatureTimer": {
+            "type": "string",
+            "xml": {
+              "name": "ComfortSignatureTimer",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "sessionInfo": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SessionInfo"
+          }
+        },
+        "required": [
+          "status",
+          "comfortSignatureStatus",
+          "comfortSignatureMax",
+          "comfortSignatureTimer"
+        ],
+        "xml": {
+          "name": "GetSignatureModeResponse",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SessionInfo": {
+        "type": "object",
+        "properties": {
+          "signatureMode": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureMode"
+          },
+          "countRemaining": {
+            "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.CountType",
+            "xml": {
+              "name": "CountRemaining",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          },
+          "timeRemaining": {
+            "type": "string",
+            "xml": {
+              "name": "TimeRemaining",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          }
+        },
+        "required": [
+          "signatureMode",
+          "countRemaining",
+          "timeRemaining"
+        ],
+        "xml": {
+          "name": "SessionInfo",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.SignatureMode": {
+        "$ref": "#/components/schemas/de.gematik.ws.conn.SignatureService75.SignatureModeEnum",
+        "xml": {
+          "name": "SignatureMode",
+          "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.DocumentType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "xml": {
+              "name": "ID",
+              "attribute": true
+            }
+          },
+          "refUri": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefURI",
+              "attribute": true
+            }
+          },
+          "refType": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefType",
+              "attribute": true
+            }
+          },
+          "schemaRefs": {
+            "type": "string",
+            "xml": {
+              "name": "SchemaRefs",
+              "attribute": true
+            }
+          },
+          "shortText": {
+            "type": "string",
+            "xml": {
+              "name": "ShortText",
+              "attribute": true
+            }
+          },
+          "base64Xml": {
+            "type": "string",
+            "format": "byte",
+            "xml": {
+              "name": "Base64XML",
+              "namespace": "http://ws.gematik.de/conn/ConnectorCommon/v5.0"
+            }
+          },
+          "base64Data": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
+          }
+        },
+        "xml": {
+          "x-extends": [
+            "#/components/schemas/de.gematik.ws.conn.ConnectorCommon50.DocumentType",
+            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
+          ],
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.BinaryDocumentType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "xml": {
+              "name": "ID",
+              "attribute": true
+            }
+          },
+          "refUri": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefURI",
+              "attribute": true
+            }
+          },
+          "refType": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefType",
+              "attribute": true
+            }
+          },
+          "schemaRefs": {
+            "type": "string",
+            "xml": {
+              "name": "SchemaRefs",
+              "attribute": true
+            }
+          },
+          "base64Data": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
+          }
+        },
+        "required": [
+          "base64Data"
+        ],
+        "xml": {
+          "x-extends": [
+            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
+          ],
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.conn.SignatureService75.VerificationResultType": {
+        "type": "object",
+        "properties": {
+          "highLevelResult": {
+            "type": "string",
+            "xml": {
+              "name": "HighLevelResult",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            },
+            "enum": [
+              "VALID",
+              "INCONCLUSIVE",
+              "INVALID"
+            ]
+          },
+          "timestampType": {
+            "type": "string",
+            "xml": {
+              "name": "TimestampType",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            },
+            "enum": [
+              "SIGNATURE_EMBEDDED_TIMESTAMP",
+              "QUALIFIED_TIMESTAMP",
+              "USER_DEFINED_TIMESTAMP",
+              "SYSTEM_TIMESTAMP"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "xml": {
+              "name": "Timestamp",
+              "namespace": "http://ws.gematik.de/conn/SignatureService/v7.5"
+            }
+          }
+        },
+        "required": [
+          "highLevelResult",
+          "timestampType",
+          "timestamp"
+        ]
+      },
+      "de.gematik.ws.conn.SignatureService75.SignatureModeEnum": {
+        "type": "string",
+        "enum": [
+          "PIN",
+          "COMFORT"
+        ]
+      },
+      "de.gematik.ws.conn.SignatureService75.CountType": {
+        "type": "integer",
+        "maximum": 250.0,
+        "minimum": 0.0
+      },
+      "de.gematik.ws.conn.SignatureService75.ComfortSignatureStatusEnum": {
+        "type": "string",
+        "enum": [
+          "ENABLED",
+          "DISABLED"
+        ]
       }
     }
   }
