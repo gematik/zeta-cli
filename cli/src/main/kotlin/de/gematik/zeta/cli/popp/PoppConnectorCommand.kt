@@ -96,10 +96,7 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 customHeaders = null,
             ) {
                 log.info { "popp WS connected: $serviceUrl" }
-                val client = PoppClient(this) { signedScenario ->
-                    val transactionResult = connector.secureSendApdu(signedScenario)
-                    parseSecureSendApduResult(transactionResult)
-                }
+                val client = PoppClient(this, connector::secureSendApdu)
                 val start = StartMessage(
                     cardConnectionType = connectionType.popp,
                     clientSessionId = cardSessionId,

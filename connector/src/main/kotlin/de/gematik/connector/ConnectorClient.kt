@@ -2,24 +2,23 @@ package de.gematik.connector
 
 import de.gematik.connector.api.gematik.conn.authsignatureservice74.ExternalAuthenticateEnvelope
 import de.gematik.connector.api.gematik.conn.authsignatureservice74.ExternalAuthenticateResponseEnvelope
-import de.gematik.connector.api.gematik.conn.cardservice820.Operations as CardServiceOperations
+import de.gematik.connector.api.gematik.conn.cardservice821.Operations as CardServiceOperations
 import de.gematik.connector.api.gematik.conn.cardservice81.Card
-import de.gematik.connector.api.gematik.conn.cardservice820.SecureSendAPDU
-import de.gematik.connector.api.gematik.conn.cardservice820.SecureSendAPDUEnvelope
-import de.gematik.connector.api.gematik.conn.cardservice820.SecureSendAPDUResponseEnvelope
-import de.gematik.connector.api.gematik.conn.cardservice820.StartCardSession
-import de.gematik.connector.api.gematik.conn.cardservice820.StartCardSessionEnvelope
-import de.gematik.connector.api.gematik.conn.cardservice820.StartCardSessionResponseEnvelope
-import de.gematik.connector.api.gematik.conn.cardservice820.StopCardSession
-import de.gematik.connector.api.gematik.conn.cardservice820.StopCardSessionEnvelope
-import de.gematik.connector.api.gematik.conn.cardservice820.StopCardSessionResponseEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice821.SecureSendAPDU
+import de.gematik.connector.api.gematik.conn.cardservice821.SecureSendAPDUEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice821.SecureSendAPDUResponseEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice821.StartCardSession
+import de.gematik.connector.api.gematik.conn.cardservice821.StartCardSessionEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice821.StartCardSessionResponseEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice821.StopCardSession
+import de.gematik.connector.api.gematik.conn.cardservice821.StopCardSessionEnvelope
+import de.gematik.connector.api.gematik.conn.cardservice821.StopCardSessionResponseEnvelope
 import de.gematik.connector.api.gematik.conn.cardservicecommon20.CardType
-import de.gematik.connector.api.oasis.dss10core.SignatureObject
-import de.gematik.connector.api.gematik.conn.certificateservice601.CryptType
-import de.gematik.connector.api.gematik.conn.certificateservice601.ReadCardCertificate
-import de.gematik.connector.api.gematik.conn.certificateservice601.ReadCardCertificateCertRefList
-import de.gematik.connector.api.gematik.conn.certificateservice601.ReadCardCertificateEnvelope
-import de.gematik.connector.api.gematik.conn.certificateservice601.ReadCardCertificateResponseEnvelope
+import de.gematik.connector.api.gematik.conn.certificateservice602.CryptType
+import de.gematik.connector.api.gematik.conn.certificateservice602.ReadCardCertificate
+import de.gematik.connector.api.gematik.conn.certificateservice602.ReadCardCertificateCertRefList
+import de.gematik.connector.api.gematik.conn.certificateservice602.ReadCardCertificateEnvelope
+import de.gematik.connector.api.gematik.conn.certificateservice602.ReadCardCertificateResponseEnvelope
 import de.gematik.connector.api.gematik.conn.connectorcontext20.Context
 import de.gematik.connector.api.gematik.conn.eventservice72.GetCards
 import de.gematik.connector.api.gematik.conn.eventservice72.GetCardsEnvelope
@@ -41,7 +40,7 @@ import java.security.cert.X509Certificate
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import de.gematik.connector.api.gematik.conn.authsignatureservice741.Operations as AuthSignatureOperations
-import de.gematik.connector.api.gematik.conn.certificateservice601.Operations as CertificateServiceOperations
+import de.gematik.connector.api.gematik.conn.certificateservice602.Operations as CertificateServiceOperations
 
 private val log = KotlinLogging.logger {}
 
@@ -53,12 +52,13 @@ private const val ECDSA_SIGNATURE_TYPE = "urn:bsi:tr:03111:ecdsa"
 
 /**
  * CardService version pin for `SecureSendAPDU` + `StartCardSession` / `StopCardSession`.
- * These operations were introduced in v8.2.0; the generated DTOs we ship are bound to that
- * namespace. Calling them against a Connector that only advertises v8.1.x would result in a
- * silent namespace mismatch — `ConnectorClient.serviceProxy(name, minVersion)` raises a
- * clear [ServiceNotFoundException] before that happens.
+ * The operations were introduced in v8.2.0, but v8.2.1 reshaped `SecureSendAPDU` to take a
+ * single `SignedScenario` (dropping `TransactionData` / `SignatureObject` / `X509Certificate`)
+ * and that's the wire format real Connectors validate against. Our generated DTOs are
+ * bound to the v8.2.1 namespace; targeting a Connector that only advertises older versions
+ * surfaces a clear [ServiceNotFoundException] from [ConnectorClient.serviceProxy].
  */
-private const val CARD_SERVICE_V820 = "8.2.0"
+private const val CARD_SERVICE_V821 = "8.2.1"
 
 /**
  * Client-side context (`<ContextType>` in WSDL parlance) — identifies the calling
@@ -295,7 +295,7 @@ class ConnectorClient(
      */
     suspend fun startCardSession(cardHandle: String): String {
         log.debug { "StartCardSession cardHandle=$cardHandle" }
-        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V820)
+        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V821)
         val envelope =
             StartCardSessionEnvelope(
                 body = StartCardSessionEnvelope.Body(
@@ -316,7 +316,7 @@ class ConnectorClient(
      */
     suspend fun stopCardSession(sessionId: String) {
         log.debug { "StopCardSession sessionId=$sessionId" }
-        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V820)
+        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V821)
         val envelope =
             StopCardSessionEnvelope(
                 body = StopCardSessionEnvelope.Body(
@@ -329,35 +329,29 @@ class ConnectorClient(
 
     /**
      * Forward a signed scenario JWT to the Connector's `CardService.SecureSendAPDU`. The
-     * Connector decodes the JWT, executes the contained APDUs against the eGK bound by the
-     * active session (created via [startCardSession]), and returns a `transactionResult`
-     * blob. This layer treats the result opaquely — the popp client decodes it to produce
-     * the response APDU list for the popp service.
-     *
-     * Pinned to CardService **v8.2.0**: the Connector must advertise that version (or one
-     * with the same envelope namespace). [SecureSendAPDU.signatureObject] and
-     * [SecureSendAPDU.x509Certificate] were removed in v8.2.1; we send empty placeholders,
-     * which v8.2.0 Connectors observed in practice tolerate. A stricter v8.2.0 Connector
-     * may need them populated with the popp service's signing certificate.
+     * Connector decodes the JWT, executes the contained APDUs against the eGK bound by
+     * the active session (created via [startCardSession]), and returns the list of
+     * response APDU hex strings — exactly the shape popp's `ScenarioResponseMessage.steps`
+     * expects.
      */
-    suspend fun secureSendApdu(transactionData: String): String {
-        log.debug { "SecureSendAPDU (${transactionData.length}-char transactionData)" }
-        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V820)
+    suspend fun secureSendApdu(signedScenario: String): List<String> {
+        log.debug { "SecureSendAPDU (${signedScenario.length}-char SignedScenario JWT)" }
+        val proxy = serviceProxy(ServiceNames.CardService, minVersion = CARD_SERVICE_V821)
         val envelope =
             SecureSendAPDUEnvelope(
                 body = SecureSendAPDUEnvelope.Body(
-                    secureSendAPDU = SecureSendAPDU(
-                        transactionData = transactionData,
-                        signatureObject = SignatureObject(),
-                        x509Certificate = "",
-                    ),
+                    secureSendAPDU = SecureSendAPDU(signedScenario = signedScenario),
                 ),
             )
         val resp: SecureSendAPDUResponseEnvelope = proxy.call(CardServiceOperations.SecureSendAPDU, envelope)
         resp.requireSuccess("SecureSendAPDU")
-        return resp.body.secureSendAPDUResponse?.transactionResult
-            ?.also { log.debug { "SecureSendAPDU returned ${it.length}-char transactionResult" } }
-            ?: error("SecureSendAPDU: no transactionResult in response")
+        val apdus = resp.body.secureSendAPDUResponse
+            ?.signedScenarioResponse
+            ?.responseApduList
+            ?.responseApdu
+            ?: error("SecureSendAPDU: no SignedScenarioResponse in reply")
+        log.debug { "SecureSendAPDU returned ${apdus.size} response APDU(s)" }
+        return apdus
     }
 
     /**
