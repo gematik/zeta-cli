@@ -73,7 +73,7 @@ class HttpCommand : ZetaSessionCommand("http") {
         val method = resolveMethod()
 
         openSession(resource = originOf(url), scopes = scopes) { sdk, _ ->
-            val client = sdk.httpClient { applyCliHttpDefaults(insecure = cliConfig.insecure) }
+            val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }
             try {
                 runBlocking {
                     val response = sendRequest(client, method, parsedHeaders, requestBody)

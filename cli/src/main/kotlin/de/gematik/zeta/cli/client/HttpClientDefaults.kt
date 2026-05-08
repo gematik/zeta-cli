@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.client
 
+import de.gematik.zeta.cli.CliConfig
 import de.gematik.zeta.cli.http.WireLogger
 import de.gematik.zeta.cli.http.wireLogLevel
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
@@ -17,8 +18,22 @@ import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
  * Top-level extension so subcommand classes in any package can pull it in via the lambda
  * receiver chain without tripping on member-extension visibility from `ZetaSessionCommand`.
  *
- * Only `-k/--insecure` flows through; `--ca-cert` does not, as the SDK's builder has no
- * extension point for custom trust managers.
+ * Plumbed through:
+ *   - `-k/--insecure` → disable server validation;
+ *   - the curlie-style wire logger.
+ *
+ * **Not** plumbed (intentionally):
+ *   - `--proxy` and friends. The SDK's own proxy-auth handling is broken: in
+ *     `network/src/commonMain/.../ZetaHttpClient.kt::buildHttpClient` it interpolates
+ *     the `CharArray` password into a string template, producing the JVM array
+ *     `toString()` (`[C@…`) instead of the password content. Until the SDK fixes that,
+ *     we don't hand it a `ProxyConfig`. The proxy still applies to the CLI's own clients
+ *     via `HttpClientFactory.createHttpClient` (`zeta inspect`, `zeta connector inspect`,
+ *     `zeta connector get cards`).
+ *   - `--ca-cert` (SDK builder has no hook for a custom trust manager).
  */
-internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(insecure: Boolean): ZetaHttpClientBuilder =
-    disableServerValidation(insecure).logging(wireLogLevel, WireLogger)
+internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(cliConfig: CliConfig): ZetaHttpClientBuilder {
+    disableServerValidation(cliConfig.insecure)
+    logging(wireLogLevel, WireLogger)
+    return this
+}

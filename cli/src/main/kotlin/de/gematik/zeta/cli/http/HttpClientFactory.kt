@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.http
 
+import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -20,9 +21,16 @@ fun createHttpClient(
     requestTimeout: Duration,
     insecure: Boolean = false,
     caCertFiles: List<Path> = emptyList(),
+    proxy: ProxyConfig? = null,
 ): HttpClient {
     if (insecure) {
         log.warn { "TLS certificate verification is DISABLED. Use only for testing." }
+    }
+    proxy?.let {
+        log.info {
+            val auth = if (it.username != null) " (auth: ${it.username})" else ""
+            "HTTP proxy: ${it.host}:${it.port}$auth"
+        }
     }
     val customTrustManager: X509TrustManager? = when {
         insecure -> InsecureTrustManager
@@ -42,6 +50,7 @@ fun createHttpClient(
                     trustManager = customTrustManager
                 }
             }
+            proxy?.let { applyProxy(it) }
         }
     }
 }

@@ -1,6 +1,7 @@
 package de.gematik.zeta.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.findObject
 import com.github.ajalt.clikt.core.findOrSetObject
 import com.github.ajalt.clikt.core.terminal
@@ -12,6 +13,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.enum
 import com.github.ajalt.clikt.parameters.types.path
 import com.github.ajalt.mordant.rendering.AnsiLevel
+import de.gematik.zeta.cli.http.parseProxyConfig
 import de.gematik.zeta.cli.output.OutputFormat
 import java.nio.file.Path
 import kotlin.time.Duration
@@ -62,6 +64,28 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
             "(env: ZETA_CONNECTOR_CONFIG)",
     )
 
+    private val proxyUrlOpt: String? by option(
+        "--proxy",
+        metavar = "URL",
+        envvar = "ZETA_PROXY",
+        help = "HTTP forward proxy for every outbound connection. URL form " +
+            "'http[s]://[user:pass@]host[:port]'. (env: ZETA_PROXY)",
+    )
+
+    private val proxyUserOpt: String? by option(
+        "--proxy-user",
+        metavar = "USER",
+        envvar = "ZETA_PROXY_USER",
+        help = "Proxy username. Overrides any user-info embedded in --proxy. (env: ZETA_PROXY_USER)",
+    )
+
+    private val proxyPasswordOpt: String? by option(
+        "--proxy-password",
+        metavar = "PASSWORD",
+        envvar = "ZETA_PROXY_PASSWORD",
+        help = "Proxy password. Overrides any user-info embedded in --proxy. (env: ZETA_PROXY_PASSWORD)",
+    )
+
     /** Shared, lazily-built CLI configuration available to subcommands' `runCommand`. */
     internal val cliConfig: CliConfig
         get() = currentContext.findObject<CliConfig>()
@@ -83,6 +107,12 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         requestTimeoutOpt?.let { config.requestTimeout = it }
         outputFormatOpt?.let { config.outputFormat = it }
         connectorConfigOpt?.let { config.connectorConfig = it }
+        val proxyUrl = proxyUrlOpt?.takeIf { it.isNotBlank() }
+        if (proxyUrl != null) {
+            config.proxy = parseProxyConfig(proxyUrl, proxyUserOpt, proxyPasswordOpt)
+        } else if (proxyUserOpt != null || proxyPasswordOpt != null) {
+            throw UsageError("--proxy-user / --proxy-password require --proxy URL")
+        }
 
         Logging.applyVerbosity(config.verbose)
         runCommand()

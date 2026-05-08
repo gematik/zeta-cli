@@ -5,7 +5,10 @@ import de.gematik.connector.Dotkon
 import de.gematik.connector.ConnectorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
 import de.gematik.connector.parseDotkon
+import de.gematik.zeta.cli.http.applyProxy
+import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.zeta.cli.http.installCurlieLogging
+import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
@@ -55,11 +58,15 @@ internal class ConnectorSession(
  * logging. Does **not** connect to the Connector — that happens lazily on the first
  * [ConnectorSession.connector] call. Throws a clean [UsageError] when the .kon can't be
  * found.
+ *
+ * @param proxy when non-null, the same proxy used by the CLI's other HTTP clients is
+ *   applied to the OkHttp engine, so SOAP traffic to the Connector traverses it as well.
  */
 internal fun openConnectorSession(
     connectorConfigName: String,
     connectTimeout: Duration,
     requestTimeout: Duration,
+    proxy: ProxyConfig? = null,
 ): ConnectorSession {
     val konPath = try {
         resolveKonFile(connectorConfigName)
@@ -76,6 +83,12 @@ internal fun openConnectorSession(
             requestTimeoutMillis = requestTimeout.inWholeMilliseconds
         }
         installCurlieLogging()
+        engine {
+            proxy?.let {
+                applyProxy(it)
+                applyProxyAuthenticator(it)
+            }
+        }
     }
 
     return ConnectorSession(dotkon, httpClient)

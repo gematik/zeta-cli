@@ -92,7 +92,7 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
             var token: String? = null
             sdk.ws(
                 targetUrl = serviceUrl,
-                builder = { applyCliHttpDefaults(insecure = cliConfig.insecure) },
+                builder = { applyCliHttpDefaults(cliConfig) },
                 customHeaders = null,
             ) {
                 log.info { "popp WS connected: $serviceUrl" }

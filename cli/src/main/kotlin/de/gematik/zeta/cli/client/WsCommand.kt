@@ -67,7 +67,7 @@ class WsCommand : ZetaSessionCommand("ws") {
             runBlocking {
                 sdk.ws(
                     targetUrl = url,
-                    builder = { applyCliHttpDefaults(insecure = cliConfig.insecure) },
+                    builder = { applyCliHttpDefaults(cliConfig) },
                     customHeaders = customHeaders,
                 ) {
                     log.info { "WebSocket connected to $url" }

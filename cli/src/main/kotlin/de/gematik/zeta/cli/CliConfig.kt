@@ -2,6 +2,7 @@ package de.gematik.zeta.cli
 
 import de.gematik.zeta.cli.http.createHttpClient
 import de.gematik.zeta.cli.output.OutputFormat
+import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.ktor.client.HttpClient
 import java.nio.file.Path
 import kotlin.time.Duration
@@ -17,12 +18,20 @@ internal class CliConfig {
     /** `.kon` file selector for the `connector` subcommand tree. Resolution rules in `DotkonPaths.kt`. */
     var connectorConfig: String = "default"
 
+    /**
+     * HTTP/SOCKS proxy applied uniformly to every outbound HTTP/WebSocket connection — the
+     * CLI's own Ktor clients (`inspect`, `connector inspect`, `get clients`) and every
+     * `ZetaHttpClientBuilder` the SDK gets handed (token endpoint, ASL, app HTTP, app WS).
+     */
+    var proxy: ProxyConfig? = null
+
     val httpClient: HttpClient by lazy {
         createHttpClient(
             connectTimeout = connectTimeout,
             requestTimeout = requestTimeout,
             insecure = insecure,
             caCertFiles = caCertFiles,
+            proxy = proxy,
         )
     }
 }

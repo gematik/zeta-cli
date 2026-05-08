@@ -185,8 +185,8 @@ abstract class ZetaSessionCommand(
             .build(
                 resource,
                 BuildConfig(
-                    productId = "zeta-cli",
-                    productVersion = "0.2.0",
+                    productId = "demo_client",
+                    productVersion = "0.1.0",
                     clientName = "zeta-cli",
                     storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
                     tpmConfig = object : TpmConfig {},
@@ -205,7 +205,7 @@ abstract class ZetaSessionCommand(
                             "macos",
                             listOf(),
                         ),
-                    httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(insecure = cliConfig.insecure),
+                    httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(cliConfig),
                 ),
             ).also { log.debug { "Created Zeta SDK client" } }
 
@@ -283,6 +283,7 @@ abstract class ZetaSessionCommand(
                     connectorConfigName = cliConfig.connectorConfig,
                     connectTimeout = cliConfig.connectTimeout,
                     requestTimeout = cliConfig.requestTimeout,
+                    proxy = cliConfig.proxy,
                 )
             val provider =
                 buildConnectorTokenProvider(

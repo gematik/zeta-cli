@@ -9,6 +9,8 @@ import de.gematik.connector.Credentials
 import de.gematik.connector.Dotkon
 import de.gematik.connector.ConnectorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
+import de.gematik.zeta.cli.http.applyProxy
+import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.ZetaCliktCommand
 import de.gematik.zeta.cli.http.installCurlieLogging
@@ -72,6 +74,12 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
             // -vv (DEBUG on de.gematik.zeta.http.wire) toggles full curlie-style request/response
             // logging — same wire log format the rest of the CLI uses.
             installCurlieLogging()
+            engine {
+                cliConfig.proxy?.let {
+                    applyProxy(it)
+                    applyProxyAuthenticator(it)
+                }
+            }
         }
         val connector = httpClient.use {
             runBlocking { ConnectorClient.connect(it, dotkon) }
