@@ -105,9 +105,16 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
             }
             token ?: error("popp WebSocket closed without yielding a TokenMessage")
         } finally {
-            // Best-effort — popp sometimes closes the session itself when the flow completes.
+            // Best-effort cleanup: popp often closes the session itself when the flow
+            // completes, after which the Connector reports "Unbekannte Session ID"
+            // (Code 4288). Either way we just note it and continue — no stack trace.
             runCatching { connector.stopCardSession(cardSessionId) }
-                .onFailure { log.debug(it) { "stopCardSession($cardSessionId) failed; ignoring" } }
+                .onFailure { e ->
+                    log.debug {
+                        "stopCardSession($cardSessionId) failed (continuing): " +
+                            (e.message?.substringBefore('\n') ?: e::class.simpleName)
+                    }
+                }
         }
     }
 
@@ -143,13 +150,18 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
         }
     }
 
-    /** Default human view: the JWT, plus a JSON-rendered payload underneath for context. */
+    /**
+     * Default human view: the JWT's decoded claims, pretty-printed and syntax-highlighted.
+     * The raw JWT is reachable via `-o raw` for piping; this mode optimises for reading.
+     */
     private fun emitText(token: String) {
-        echo(token)
         val payload = decodeJwtSegment(token, segment = 1)
         if (payload != null) {
-            echo("")
             echo(renderJson(payload, colorize = colorize))
+        } else {
+            // Couldn't decode — fall back to the raw token so the user still gets
+            // something they can copy out.
+            echo(token)
         }
     }
 

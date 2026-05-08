@@ -131,7 +131,15 @@ private val defaultDotkonJson = Json {
 
 private val ENV_VAR_PATTERN = Regex("""\$\{([^}]+)\}""")
 
-internal fun expandEnvVars(text: String, envLookup: (String) -> String?): String =
+/**
+ * Expand `${VAR}` placeholders in [text] using [envLookup] (process environment by
+ * default). Missing variables expand to the empty string — matches the Go reference
+ * implementation and Docker Compose-style substitution behaviour.
+ *
+ * Public so other CLI surfaces (notably the YAML config-file value source) can apply
+ * the same substitution before parsing without re-implementing the regex.
+ */
+fun expandEnvVars(text: String, envLookup: (String) -> String? = { System.getenv(it) }): String =
     ENV_VAR_PATTERN.replace(text) { match -> envLookup(match.groupValues[1]) ?: "" }
 
 private val VALID_ENV_VALUES = setOf("ru", "tu", "pu")

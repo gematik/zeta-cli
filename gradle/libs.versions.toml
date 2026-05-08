@@ -10,7 +10,7 @@ ktor = "3.4.3"
 xmlutil = "0.91.1"
 bouncycastle = "1.83"
 jna = "5.14.0"
-tomlj = "1.1.1"
+snakeyaml = "2.5"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin-gradle-plugin" }
@@ -29,4 +29,4 @@ ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "k
 xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization-jvm", version.ref = "xmlutil" }
 bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
-tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
