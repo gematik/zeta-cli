@@ -185,7 +185,7 @@ abstract class ZetaSessionCommand(
             .build(
                 resource,
                 BuildConfig(
-                    productId = "demo_client",
+                    productId = "demo-client",
                     productVersion = "0.1.0",
                     clientName = "zeta-cli",
                     storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
