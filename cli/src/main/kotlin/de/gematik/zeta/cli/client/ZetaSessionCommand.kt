@@ -183,8 +183,8 @@ abstract class ZetaSessionCommand(
             .build(
                 resource,
                 BuildConfig(
-                    productId = "demo-client",
-                    productVersion = "0.1.0",
+                    productId = "ZETA-Test-Client",
+                    productVersion = "1.0.0",
                     clientName = "zeta-cli",
                     storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
                     tpmConfig = object : TpmConfig {},
