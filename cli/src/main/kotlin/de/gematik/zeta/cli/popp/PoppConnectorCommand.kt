@@ -40,11 +40,6 @@ private const val DEFAULT_SERVICE_URL =
  */
 class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
 
-    // The PoPP token is rarely useful as anything other than the raw JWT — that's what
-    // downstream consumers feed into the `PoPP` header. Default to raw, override with
-    // `-o text` (decoded claims) or `-o json` (decoded + structured) when inspecting.
-    override val defaultOutputFormat: OutputFormat get() = OutputFormat.RAW
-
     /**
      * Card handle of the eGK to use for the popp flow. Optional: when exactly one eGK is
      * visible to the Connector we auto-pick it; with zero or multiple, we error with the
@@ -147,34 +142,22 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
         }
     }
 
+    /**
+     * `text` and `raw` both emit the JWT verbatim — the typical consumer pipes it into
+     * `--popp-token` / `PoPP:` header where the compact serialisation is required. Use
+     * `-o json` to see the decoded JOSE header and payload.
+     */
     private fun emitToken(token: String) {
         when (cliConfig.outputFormat) {
-            OutputFormat.RAW -> echo(token)
-            OutputFormat.TEXT -> emitText(token)
+            OutputFormat.RAW, OutputFormat.TEXT -> echo(token)
             OutputFormat.JSON -> echo(renderJson(buildTokenJson(token), colorize = colorize))
         }
     }
 
-    /**
-     * Default human view: the JWT's decoded claims, pretty-printed and syntax-highlighted.
-     * The raw JWT is reachable via `-o raw` for piping; this mode optimises for reading.
-     */
-    private fun emitText(token: String) {
-        val payload = decodeJwtSegment(token, segment = 1)
-        if (payload != null) {
-            echo(renderJson(payload, colorize = colorize))
-        } else {
-            // Couldn't decode — fall back to the raw token so the user still gets
-            // something they can copy out.
-            echo(token)
-        }
-    }
-
-    /** Structured: token + decoded JOSE header + decoded claims (when decodable). */
+    /** Decoded view: JOSE header + payload. Segments that fail to decode are omitted. */
     private fun buildTokenJson(token: String): JsonObject = buildJsonObject {
-        put("token", token)
         decodeJwtSegment(token, segment = 0)?.let { put("header", it) }
-        decodeJwtSegment(token, segment = 1)?.let { put("claims", it) }
+        decodeJwtSegment(token, segment = 1)?.let { put("payload", it) }
     }
 
     enum class ConnectionType(val popp: String) {
