@@ -9,8 +9,6 @@ import com.github.ajalt.clikt.parameters.types.path
 import de.gematik.zeta.cli.ZetaCliktCommand
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.openConnectorSession
-import de.gematik.zeta.cli.http.WireLogger
-import de.gematik.zeta.cli.http.wireLogLevel
 import de.gematik.zeta.cli.storage.JsonFileStorage
 import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.sdk.BuildConfig
@@ -113,7 +111,7 @@ class P12AuthOptions :
 abstract class ZetaSessionCommand(
     name: String,
 ) : ZetaCliktCommand(name = name) {
-    private val profile: String by option(
+    protected val profile: String by option(
         "--profile",
         metavar = "NAME",
         envvar = "ZETA_PROFILE",

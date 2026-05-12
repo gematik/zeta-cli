@@ -65,11 +65,20 @@ class HttpCommand : ZetaSessionCommand("http") {
         help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least one is required.",
     ).multiple(required = true)
 
+    private val poppToken: String? by option(
+        "-p", "--popp-token",
+        metavar = "TOKEN",
+        envvar = "ZETA_POPP_TOKEN",
+        help = "Proof of Patient Presence token. Sent as the '$POPP_HEADER_NAME' header per " +
+            "gematik ZETA spec (A_25669). (env: ZETA_POPP_TOKEN)",
+    )
+
     override fun help(context: Context) =
         "Send an HTTP request to a Zeta-protected resource."
 
     override fun runCommand() {
-        val parsedHeaders = requestHeaders.map(::parseHeaderOption)
+        val poppHeader = poppToken?.let { listOf(POPP_HEADER_NAME to it) }.orEmpty()
+        val parsedHeaders = poppHeader + requestHeaders.map(::parseHeaderOption)
         val method = resolveMethod()
 
         openSession(resource = originOf(url), scopes = scopes) { sdk, _ ->

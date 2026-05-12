@@ -11,3 +11,10 @@ internal fun parseHeaderOption(value: String): Pair<String, String> {
     if (idx <= 0) throw UsageError("invalid -H value: '$value' (expected 'Name: Value')")
     return value.substring(0, idx).trim() to value.substring(idx + 1).trim()
 }
+
+/**
+ * HTTP header that carries a gematik Proof of Patient Presence (PoPP) token to a
+ * Zeta-protected resource. Defined by the gematik ZETA spec (A_25669) —
+ * https://gemspec.gematik.de/docs/gemSpec/gemSpec_ZETA/latest/#A_25669
+ */
+internal const val POPP_HEADER_NAME = "PoPP"

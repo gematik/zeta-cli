@@ -14,6 +14,7 @@ import de.gematik.zeta.cli.connector.ConnectorGetCommand
 import de.gematik.zeta.cli.connector.ConnectorInspectCommand
 import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
+import de.gematik.zeta.cli.status.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import kotlin.system.exitProcess
 
@@ -28,6 +29,7 @@ fun main(args: Array<String>) {
         .subcommands(
             VersionCommand(),
             InspectCommand(),
+            StatusCommand(),
             HttpCommand(),
             WsCommand(),
             GetCommand().subcommands(GetClientsCommand()),
