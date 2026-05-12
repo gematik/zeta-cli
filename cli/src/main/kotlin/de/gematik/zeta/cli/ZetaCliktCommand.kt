@@ -51,7 +51,8 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
     private val outputFormatOpt: OutputFormat? by option(
         "-o", "--output-format",
         metavar = "FORMAT",
-        help = "Output format: text (default) or json.",
+        help = "Output format: text, json, or raw. Default depends on the command " +
+            "(most are text; single-value commands like `popp connector` default to raw).",
     ).enum<OutputFormat>(ignoreCase = true)
 
     private val connectorConfigOpt: String? by option(
@@ -98,6 +99,13 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
     internal val colorize: Boolean
         get() = currentContext.terminal.terminalInfo.ansiLevel != AnsiLevel.NONE
 
+    /**
+     * Per-command default for `-o/--output-format` when the user didn't pass `-o` anywhere
+     * in the command chain. Override on a leaf subcommand to flip its default (e.g. PoPP
+     * token output is most useful raw, while every other command is more readable as text).
+     */
+    protected open val defaultOutputFormat: OutputFormat get() = OutputFormat.TEXT
+
     final override fun run() {
         val config = currentContext.findOrSetObject { CliConfig() }
         if (verbose > 0) config.verbose = maxOf(config.verbose, verbose)
@@ -105,7 +113,16 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         if (caCertFiles.isNotEmpty()) config.caCertFiles = config.caCertFiles + caCertFiles
         connectTimeoutOpt?.let { config.connectTimeout = it }
         requestTimeoutOpt?.let { config.requestTimeout = it }
-        outputFormatOpt?.let { config.outputFormat = it }
+        outputFormatOpt?.let {
+            config.outputFormat = it
+            config.outputFormatExplicit = true
+        }
+        // At the leaf, when no `-o` was supplied anywhere in the chain, apply this
+        // command's default. `invokedSubcommand == null` means Clikt won't dispatch
+        // further — this run() is the terminal one.
+        if (!config.outputFormatExplicit && currentContext.invokedSubcommand == null) {
+            config.outputFormat = defaultOutputFormat
+        }
         connectorConfigOpt?.let { config.connectorConfig = it }
         val proxyUrl = proxyUrlOpt?.takeIf { it.isNotBlank() }
         if (proxyUrl != null) {

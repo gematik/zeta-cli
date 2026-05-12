@@ -40,6 +40,11 @@ private const val DEFAULT_SERVICE_URL =
  */
 class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
 
+    // The PoPP token is rarely useful as anything other than the raw JWT — that's what
+    // downstream consumers feed into the `PoPP` header. Default to raw, override with
+    // `-o text` (decoded claims) or `-o json` (decoded + structured) when inspecting.
+    override val defaultOutputFormat: OutputFormat get() = OutputFormat.RAW
+
     /**
      * Card handle of the eGK to use for the popp flow. Optional: when exactly one eGK is
      * visible to the Connector we auto-pick it; with zero or multiple, we error with the

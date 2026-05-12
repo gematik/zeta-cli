@@ -15,6 +15,13 @@ internal class CliConfig {
     var connectTimeout: Duration = 5.seconds
     var requestTimeout: Duration = 30.seconds
     var outputFormat: OutputFormat = OutputFormat.TEXT
+
+    /**
+     * `true` once any command in the chain has resolved `-o/--output-format` from a user
+     * value. Lets a leaf subcommand apply a different per-command default (see
+     * [ZetaCliktCommand.defaultOutputFormat]) without overriding an explicit user choice.
+     */
+    var outputFormatExplicit: Boolean = false
     /** `.kon` file selector for the `connector` subcommand tree. Resolution rules in `DotkonPaths.kt`. */
     var connectorConfig: String = "default"
 
