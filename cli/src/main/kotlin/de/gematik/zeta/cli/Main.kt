@@ -4,8 +4,6 @@ import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import de.gematik.zeta.cli.client.HttpCommand
 import de.gematik.zeta.cli.client.WsCommand
-import de.gematik.zeta.cli.get.GetClientsCommand
-import de.gematik.zeta.cli.get.GetCommand
 import de.gematik.zeta.cli.inspect.InspectCommand
 import de.gematik.zeta.cli.connector.ConnectorCommand
 import de.gematik.zeta.cli.connector.ConnectorConfigsCommand
@@ -48,7 +46,6 @@ fun main(args: Array<String>) {
                 StatusCommand(),
                 HttpCommand(),
                 WsCommand(),
-                GetCommand().subcommands(GetClientsCommand()),
                 ConnectorCommand().subcommands(
                     ConnectorInspectCommand(),
                     ConnectorConfigsCommand(),
