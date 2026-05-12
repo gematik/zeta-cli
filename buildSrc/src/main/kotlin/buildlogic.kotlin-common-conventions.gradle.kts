@@ -8,9 +8,14 @@ plugins {
 }
 
 repositories {
-    // to test latest ZETA
-    mavenLocal()
-    // Use Maven Central for resolving dependencies.
+    // Local-only for ZETA SDK snapshots ("to test latest ZETA"). Scoped to the gematik
+    // group so KMP root modules (e.g. okhttp:5.3.2) — whose `okhttp-jvm` redirect lives
+    // in Gradle module metadata that mavenLocal doesn't read — keep resolving from
+    // Central where the redirect works. An unscoped mavenLocal pulls the empty
+    // okhttp-5.3.2.jar stub onto the classpath and breaks `OkHttpClient.Builder`.
+    mavenLocal {
+        content { includeGroupByRegex("de\\.gematik\\..*") }
+    }
     mavenCentral()
 }
 

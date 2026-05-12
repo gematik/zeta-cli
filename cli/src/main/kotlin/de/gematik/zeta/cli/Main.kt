@@ -19,14 +19,16 @@ import de.gematik.zeta.cli.term.StderrColors
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.system.exitProcess
 
-private val log = KotlinLogging.logger {}
-
 fun main(args: Array<String>) {
-    // Resolved before the first SLF4J call so Logback picks up the right encoder pattern.
-    // logback.xml falls back to a coloured pattern when this property is unset.
+    // Must run before *any* SLF4J access — Logback resolves `${zeta.stderr.pattern:-…}` at
+    // config-load time, which is triggered by the first `LoggerFactory.getLogger` call. If
+    // we let a top-level `val log = KotlinLogging.logger {}` initialize before this line,
+    // Logback locks in the coloured fallback and later `setProperty` calls have no effect
+    // (so `NO_COLOR=1` would not disable colours in redirected output).
     if (!StderrColors.enabled) {
         System.setProperty("zeta.stderr.pattern", "%-5level %logger{24} - %msg%n")
     }
+    val log = KotlinLogging.logger("de.gematik.zeta.cli.Main")
 
     // Both the Zeta SDK and the CLI's own clients run on Ktor's OkHttp engine. OkHttp's default
     // Dispatcher uses non-daemon worker threads with a 60-second keepAlive — none of those
