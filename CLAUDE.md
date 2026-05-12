@@ -36,8 +36,6 @@ Commands are wired together in `Main.kt` via Clikt's `subcommands(...)`. Each to
 - `de.gematik.zeta.cli.ZetaCommand` — root, name `zeta`.
 - `de.gematik.zeta.cli.VersionCommand` — `zeta version` (simple, in the cli package).
 - `de.gematik.zeta.cli.inspect.InspectCommand` — `zeta inspect <URL>` — top-level command that hits `<URL>/.well-known/oauth-protected-resource` and prints everything Zeta Guard advertises about that resource.
-- `de.gematik.zeta.cli.get.GetCommand` — parent for `zeta get …`
-  - `GetClientsCommand` — `zeta get clients`
 
 When adding a new top-level command group: create a package under `de.gematik.zeta.cli`, put the parent command and its children there, and register the parent (with its `.subcommands(...)` chain) in `Main.kt`. **All commands extend `ZetaCliktCommand`, never `CliktCommand` directly** — this is what gives every command the sticky `-v/--verbose` option (see below). Override `runCommand()`, not `run()` (the base class makes `run` final and calls `Logging.applyVerbosity` before dispatching). Help text goes in `override fun help(context: Context)` (Clikt 5 moved help out of the `CliktCommand` constructor).
 
@@ -57,7 +55,7 @@ When adding a new HTTP-using subcommand: declare `private val httpClient: HttpCl
 
 `cli/src/main/resources/logback.xml` configures Logback: stderr appender, default level **WARN**, coloured pattern (`%highlight` + `%gray`). Libraries log via `io.github.oshai:kotlin-logging` (`private val log = KotlinLogging.logger {}`); both `api` and `cli` depend on it.
 
-The `-v/--verbose` option on `ZetaCliktCommand` is `counted()`, so it's sticky — accepted at any depth (`zeta -v get clients`, `zeta get -v clients`, `zeta get clients -v` are all valid). Each `-v` increments: 1 → INFO, 2 → DEBUG, 3+ → TRACE. `Logging.applyVerbosity` is no-op at count 0, so an unspecified `-v` on a deeper command does **not** reset a level set higher up. To globally raise verbosity in tests or dev, prefer `-v` on the root.
+The `-v/--verbose` option on `ZetaCliktCommand` is `counted()`, so it's sticky — accepted at any depth (`zeta -v inspect <URL>`, `zeta inspect -v <URL>` are both valid). Each `-v` increments: 1 → INFO, 2 → DEBUG, 3+ → TRACE. `Logging.applyVerbosity` is no-op at count 0, so an unspecified `-v` on a deeper command does **not** reset a level set higher up. To globally raise verbosity in tests or dev, prefer `-v` on the root.
 
 ### CLI output styling
 

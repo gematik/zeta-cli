@@ -56,7 +56,6 @@ zeta-cli/
 | `cli/output/` | 4 | JSON / XML / sections renderers, output enum |
 | `cli/storage/` | 2 | XDG paths + atomic JSON file storage |
 | `cli/http/` | 2 | Wire logger + custom HTTP client factory |
-| `cli/get/` | 2 | `zeta get` parent + `clients` placeholder |
 | `cli/config/` | 2 | YAML config-file value source + path discovery |
 | `cli/term/` | 1 | TTY detection for stderr coloring |
 | `cli/inspect/` | 1 | `zeta inspect URL` |
