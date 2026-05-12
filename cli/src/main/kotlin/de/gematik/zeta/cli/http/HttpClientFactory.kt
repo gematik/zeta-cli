@@ -3,12 +3,14 @@ package de.gematik.zeta.cli.http
 import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import java.nio.file.Path
 import java.security.KeyStore
+import java.security.SecureRandom
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlin.io.path.inputStream
@@ -16,6 +18,17 @@ import kotlin.time.Duration
 
 private val log = KotlinLogging.logger {}
 
+/**
+ * Ktor [HttpClient] for the CLI's own (non-SDK) calls — `zeta inspect`, `zeta connector inspect`,
+ * `zeta connector get cards`.
+ *
+ * Engine choice: **OkHttp**. We were on Ktor CIO, but CIO's CONNECT-tunnel implementation
+ * doesn't send `Proxy-Authorization` preemptively and drops the connection on a 407 reply,
+ * which presents as `SocketException: Connection reset` against any authenticating HTTP
+ * forward proxy (corporate proxies fronting HTTPS upstreams). OkHttp's `proxyAuthenticator`
+ * answers the 407 correctly — same engine the connector module already uses for its mTLS
+ * traffic, so we now have one proxy story across the CLI.
+ */
 fun createHttpClient(
     connectTimeout: Duration,
     requestTimeout: Duration,
@@ -37,7 +50,7 @@ fun createHttpClient(
         caCertFiles.isNotEmpty() -> buildTrustManager(caCertFiles)
         else -> null
     }
-    return HttpClient(CIO) {
+    return HttpClient(OkHttp) {
         install(HttpTimeout) {
             connectTimeoutMillis = connectTimeout.inWholeMilliseconds
             requestTimeoutMillis = requestTimeout.inWholeMilliseconds
@@ -45,12 +58,22 @@ fun createHttpClient(
         installCurlieLogging()
         expectSuccess = false
         engine {
-            if (customTrustManager != null) {
-                https {
-                    trustManager = customTrustManager
+            // OkHttp wants the SSLSocketFactory built from the same trust manager. The
+            // factory ultimately lives in JSSE — same code path the SDK takes in
+            // ZetaHttpClient.jvm.kt::buildInsecureTls, so behaviour is consistent.
+            customTrustManager?.let { tm ->
+                val ctx = SSLContext.getInstance("TLS").apply {
+                    init(null, arrayOf(tm), SecureRandom())
+                }
+                config {
+                    sslSocketFactory(ctx.socketFactory, tm)
+                    if (insecure) hostnameVerifier { _, _ -> true }
                 }
             }
-            proxy?.let { applyProxy(it) }
+            proxy?.let {
+                applyProxy(it)
+                applyProxyAuthenticator(it)
+            }
         }
     }
 }

@@ -27,7 +27,7 @@ cli (application, de.gematik.zeta.cli)  ──►  api (library, de.gematik.zeta
 ```
 
 - **`api`** — `de.gematik.zeta.api`. Pure library: data models (`ProtectedResource`, `OAuth2Client`) and Ktor-based clients (`ProtectedResourceClient`). **The `api` module never instantiates an `HttpClient`** — clients are constructor-injected by the host (CLI). `api` only depends on `ktor-client-core` (the engine lives in `cli`). It also depends on `de.gematik.zeta:zeta-sdk-jvm`; the SDK transitively pulls `slf4j-simple`, which is excluded in `api/build.gradle.kts` so it doesn't clash with our Logback binding.
-- **`cli`** — `de.gematik.zeta.cli`. Clikt-based CLI. Entry point is `de.gematik.zeta.cli.MainKt#main` (see `cli/build.gradle.kts`, `applicationName = "zeta"`). Owns the Ktor engine (`ktor-client-cio`) and `HttpClient` lifecycle.
+- **`cli`** — `de.gematik.zeta.cli`. Clikt-based CLI. Entry point is `de.gematik.zeta.cli.MainKt#main` (see `cli/build.gradle.kts`, `applicationName = "zeta"`). Owns the Ktor engine (`ktor-client-okhttp` — single engine for the whole CLI; CIO is not on the classpath) and `HttpClient` lifecycle.
 
 ### CLI command layout
 
@@ -43,7 +43,7 @@ When adding a new top-level command group: create a package under `de.gematik.ze
 
 ### HTTP client wiring
 
-The CLI owns the `HttpClient`. `de.gematik.zeta.cli.http.createHttpClient(...)` builds a Ktor CIO client with the `HttpTimeout` plugin and an optional custom `X509TrustManager` for TLS. The HTTP options are sticky — declared on `ZetaCliktCommand` so they accept anywhere. Each command merges its parsed values into the shared `CliConfig` on the Clikt context, and the `HttpClient` is created lazily on first access:
+The CLI owns the `HttpClient`. `de.gematik.zeta.cli.http.createHttpClient(...)` builds a Ktor OkHttp client with the `HttpTimeout` plugin and an optional custom `X509TrustManager` for TLS. OkHttp was chosen over CIO because (a) CIO's TLS stack hard-codes `RSA`/`DSS` cert types, dropping brainpool-ECC client certs in mTLS — see the connector module CLAUDE.md for the full story — and (b) CIO doesn't preemptively send `Proxy-Authorization` on `CONNECT`, which causes `Connection reset` against authenticating corporate proxies. The HTTP options are sticky — declared on `ZetaCliktCommand` so they accept anywhere. Each command merges its parsed values into the shared `CliConfig` on the Clikt context, and the `HttpClient` is created lazily on first access:
 
 - `--connect-timeout SECONDS` / `--request-timeout SECONDS` — Ktor `HttpTimeout` plugin.
 - `-k/--insecure` — installs an all-accepting `X509TrustManager` (disables TLS verification entirely; logs a WARN). Use only for dev/test.

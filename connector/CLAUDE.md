@@ -32,7 +32,7 @@ Inputs that *are* checked in and editable:
 
 - `connector/Konnektor-OPB6.json` — the source spec.
 - `connector/naming-strategy.json` — `basePackage` + regex `packageMappings` that flatten the upstream XML namespaces. Current rules: `de.gematik.ws.* → gematik.*`, `oasis.names.tc.x.y → oasis.xy`, `org.* → *`.
-- `connector/build.gradle.kts` — `buildlogic.kotlin-library-conventions` + `kotlin("plugin.serialization")`, plus `ktor-client-core` (api), `kotlinx-coroutines-core`, `kotlinx-serialization-json`, `xmlutil-serialization`, and `ktor-client-cio` as `compileOnly` so the CIO helper compiles without forcing CIO on every consumer.
+- `connector/build.gradle.kts` — `buildlogic.kotlin-library-conventions` + `kotlin("plugin.serialization")`, plus `ktor-client-core` (api), `kotlinx-coroutines-core`, `kotlinx-serialization-json`, `xmlutil-serialization`, and `ktor-client-okhttp` as `compileOnly` so the OkHttp bridge compiles without forcing OkHttp on every consumer.
 
 The generator does not clean its output directory. After a regen with structural changes, wipe `src/main/kotlin/de/gematik/connector/api/` first and rerun — but **do not wipe other packages** under `de.gematik.connector/`, those are hand-written.
 

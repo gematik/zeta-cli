@@ -23,16 +23,19 @@ import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
  *
  * Plumbed through:
  *   - `-k/--insecure` → disable server validation;
+ *   - `--proxy` (and `--proxy-user`/`--proxy-password`) → forward to `ZetaHttpClientBuilder.proxy(...)`;
  *   - the curlie-style wire logger (via [SdkLogBridge]).
  *
+ * SDK proxy caveats (as of `latest`):
+ *   - The earlier `CharArray.toString()` interpolation bug is fixed (the SDK now calls
+ *     `password.concatToString()` when forwarding SOCKS credentials).
+ *   - **SOCKS auth** works, but via *global* JVM system properties (`java.net.socks.username` /
+ *     `java.net.socks.password`) — last-writer-wins across SDK instances in the same process.
+ *   - **HTTP-proxy auth** is not wired: `ZetaHttpClient.jvm.kt::applyProxy` does not set
+ *     OkHttp's `proxyAuthenticator`. Unauthenticated HTTP proxies and SOCKS work; HTTP
+ *     proxies that require credentials will get a 407 from the SDK's internal calls.
+ *
  * **Not** plumbed (intentionally):
- *   - `--proxy` and friends. The SDK's own proxy-auth handling is broken: in
- *     `network/src/commonMain/.../ZetaHttpClient.kt::buildHttpClient` it interpolates
- *     the `CharArray` password into a string template, producing the JVM array
- *     `toString()` (`[C@…`) instead of the password content. Until the SDK fixes that,
- *     we don't hand it a `ProxyConfig`. The proxy still applies to the CLI's own clients
- *     via `HttpClientFactory.createHttpClient` (`zeta inspect`, `zeta connector inspect`,
- *     `zeta connector get cards`).
  *   - `--ca-cert` (SDK builder has no hook for a custom trust manager).
  */
 internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(cliConfig: CliConfig): ZetaHttpClientBuilder {
@@ -41,5 +44,6 @@ internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(cliConfig: CliConfig): Z
     installSdkLogBridge()
     disableServerValidation(cliConfig.insecure)
     logging(wireLogLevel)
+    cliConfig.proxy?.let { proxy(it) }
     return this
 }

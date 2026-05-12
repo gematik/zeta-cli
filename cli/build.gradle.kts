@@ -11,10 +11,11 @@ dependencies {
     implementation(libs.clikt)
     implementation(libs.kotlin.logging)
     implementation(libs.logback.classic)
-    implementation(libs.ktor.client.cio)
-    // OkHttp is used by the kon command for mutual TLS — Ktor CIO's TLS implementation
-    // doesn't reliably present client certs when the server's CertificateRequest doesn't
-    // list a matching CA name, while OkHttp routes through JSSE which is more permissive.
+    // OkHttp is the single engine for every CLI-owned Ktor client. Routes through JSSE
+    // for mTLS (so brainpool-ECC SMC-B / HBA / KSP certs are sent — Ktor CIO's TLS stack
+    // hard-codes RSA/DSS only) and exposes `proxyAuthenticator` for HTTP-CONNECT proxy
+    // auth (Ktor CIO doesn't preemptively send `Proxy-Authorization`, which presents as
+    // `SocketException: Connection reset` against authenticating corporate proxies).
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.logging)
     implementation(libs.kotlinx.serialization.json)
