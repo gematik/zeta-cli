@@ -2,17 +2,13 @@ package de.gematik.zeta.cli.inspect
 
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
-import de.gematik.zeta.api.AuthorizationServer
-import de.gematik.zeta.api.AuthorizationServerClient
-import de.gematik.zeta.api.ProtectedResource
-import de.gematik.zeta.api.ProtectedResourceClient
 import de.gematik.zeta.cli.ZetaCliktCommand
 import de.gematik.zeta.cli.output.OutputFormat
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderSections
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.HttpClient
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 
 private val log = KotlinLogging.logger {}
@@ -28,31 +24,22 @@ class InspectCommand : ZetaCliktCommand(name = "inspect") {
 
     override fun runCommand() {
         log.info { "Inspecting protected resource at $url" }
-        val httpClient = cliConfig.httpClient
+        val http = cliConfig.httpClient
 
-        val (resource, authServer) = runBlocking { fetchAll(httpClient) }
+        val data = runBlocking {
+            val (resource, resourceRaw) = fetchProtectedResource(http, url)
+            val auth = resource.authorizationServers.firstOrNull()?.let { iss ->
+                runCatching { fetchAuthorizationServer(http, iss) }
+                    .onFailure { log.warn(it) { "Could not fetch authorization-server metadata from $iss" } }
+                    .getOrNull()
+            }
+            InspectData(resource, resourceRaw, auth?.first, auth?.second)
+        }
 
         when (cliConfig.outputFormat) {
-            OutputFormat.JSON -> {
-                val payload = buildJsonObject {
-                    put("oauth-protected-resource", resource.raw)
-                    if (authServer != null) put("oauth-authorization-server", authServer.raw)
-                }
-                echo(renderJson(payload, colorize = colorize))
-            }
-            OutputFormat.TEXT, OutputFormat.RAW -> echo(renderTextLayout(resource, authServer))
+            OutputFormat.JSON -> echo(renderJson(data.toJsonEnvelope(), colorize = colorize))
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(renderTextLayout(data.resource, data.authServer))
         }
-    }
-
-    private suspend fun fetchAll(httpClient: HttpClient): Pair<ProtectedResource, AuthorizationServer?> {
-        val resource = ProtectedResourceClient(httpClient).fetch(url)
-        val issuer = resource.authorizationServers.firstOrNull()
-        val authServer = issuer?.let { iss ->
-            runCatching { AuthorizationServerClient(httpClient).fetch(iss) }
-                .onFailure { log.warn(it) { "Could not fetch authorization-server metadata from $iss" } }
-                .getOrNull()
-        }
-        return resource to authServer
     }
 
     private fun renderTextLayout(
@@ -89,6 +76,18 @@ class InspectCommand : ZetaCliktCommand(name = "inspect") {
                 field("Policy", authServer.opPolicyUri)
                 field("ToS", authServer.opTosUri)
             }
+        }
+    }
+
+    private data class InspectData(
+        val resource: ProtectedResource,
+        val resourceRaw: JsonObject,
+        val authServer: AuthorizationServer?,
+        val authServerRaw: JsonObject?,
+    ) {
+        fun toJsonEnvelope() = buildJsonObject {
+            put("oauth-protected-resource", resourceRaw)
+            if (authServerRaw != null) put("oauth-authorization-server", authServerRaw)
         }
     }
 }

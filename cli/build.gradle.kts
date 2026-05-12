@@ -6,8 +6,11 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":api"))
     implementation(project(":connector"))
+    implementation(libs.zeta.sdk) {
+        // zeta-sdk transitively pulls slf4j-simple, which clashes with our Logback binding.
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+    }
     implementation(libs.clikt)
     implementation(libs.kotlin.logging)
     implementation(libs.logback.classic)

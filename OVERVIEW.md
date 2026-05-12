@@ -8,12 +8,11 @@ and drives the popp WebSocket service for proof-of-patient-presence tokens.
 
 ```
 zeta-cli/
-├── api/                  RFC 8414 / 9728 OAuth metadata clients (small, dep-light)
 ├── connector/            Konnektor SOAP client (generated DTOs + handwritten facade)
 ├── cli/                  Clikt application — entry point, commands, output, config
 ├── buildSrc/             3 convention plugins (common / library / application)
 ├── gradle/libs.versions.toml   single source of truth for dependency versions
-├── settings.gradle.kts   include("api", "connector", "cli")
+├── settings.gradle.kts   include("connector", "cli")
 ├── Formula/zeta.rb       Homebrew formula
 ├── zeta-dev              dev wrapper around `:cli:run`
 ├── justfile              convenience tasks (regen connector, etc.)
@@ -24,11 +23,10 @@ zeta-cli/
 
 | Module | Hand-written `main` | `test` | Notes |
 |---|---:|---:|---|
-| `api` | 217 | 79 | 4 source files + 1 helper. |
-| `connector` | 1,407 | 805 | Hand-written facade. **Plus 18,386 lines / 69 files generated** under `api/gematik/...`. |
-| `cli` | 3,455 | 285 | Application code. |
-| **total non-generated** | **5,079** | **1,169** | ~6.25k Kotlin we own. |
-| Generated DTOs | 18,386 | — | XML-schema-driven. Regenerate via `just generate-connector`. |
+| `connector` | 1,312 | 751 | Hand-written facade. **Plus generated SOAP DTOs** under `de/gematik/connector/api/`. |
+| `cli` | 3,671 | 253 | Application code. Owns the `inspect` wire types + fetch functions. |
+| **total non-generated** | **4,983** | **1,004** | ~6k Kotlin we own. |
+| Generated DTOs | (~18k) | — | XML-schema-driven. Regenerate via `just generate-connector`. |
 
 ### Top files (excluding generated)
 
@@ -58,28 +56,25 @@ zeta-cli/
 | `cli/http/` | 2 | Wire logger + custom HTTP client factory |
 | `cli/config/` | 2 | YAML config-file value source + path discovery |
 | `cli/term/` | 1 | TTY detection for stderr coloring |
-| `cli/inspect/` | 1 | `zeta inspect URL` |
+| `cli/inspect/` | 4 | `zeta inspect URL` — command + RFC 8414/9728 wire models + two suspend fetch fns |
 
 ## Module dependencies
 
 ```
-api ──► zeta-sdk (api), ktor-client-core (api)
-        │ kotlinx-{serialization-json, coroutines}, kotlin-logging
-
 connector ──► ktor-client-core (api)
               │ xmlutil-serialization, bouncycastle-bcpkix
               │ ktor-client-okhttp (compileOnly — JSSE engine bridge)
               │ kotlinx-{serialization-json, coroutines}, kotlin-logging
 
-cli ──► api, connector
+cli ──► connector, zeta-sdk
         │ clikt, logback-classic, kotlin-logging
-        │ ktor-{cio, okhttp, logging, core}, kotlinx-serialization-json
+        │ ktor-{okhttp, logging, core}, kotlinx-serialization-json
         │ snakeyaml (zeta.yaml), jna (isatty)
 ```
 
-`api` and `connector` deliberately stay framework-free (no Clikt, no Logback) so they're
-consumable by anything that brings its own `HttpClient` and SLF4J binding. Only `cli`
-pulls the application stack.
+`connector` deliberately stays framework-free (no Clikt, no Logback) so it's consumable by
+anything that brings its own `HttpClient` and SLF4J binding. Only `cli` pulls the
+application stack.
 
 ## Library versions (`gradle/libs.versions.toml`)
 
@@ -104,7 +99,7 @@ Three precompiled Kotlin DSL plugins; each module applies exactly one:
 
 - `buildlogic.kotlin-common-conventions` — Kotlin JVM, JDK 21 toolchain, Maven Central +
   mavenLocal, JUnit Jupiter, dependency-version constraints.
-- `buildlogic.kotlin-library-conventions` — common + `java-library` (`api`, `connector`).
+- `buildlogic.kotlin-library-conventions` — common + `java-library` (`connector`).
 - `buildlogic.kotlin-application-conventions` — common + `application` (`cli`).
 
 `cli` additionally code-generates `BuildConfig.kt` at build time, stamping `VERSION` and
@@ -125,13 +120,12 @@ Three precompiled Kotlin DSL plugins; each module applies exactly one:
             │   └─ connector get cards    │
             └─────────────────────────────┘
                         │
-                ┌───────┴────────┐
-                ▼                ▼
-            :api             :connector
-        well-known          ConnectorClient ──► generated SOAP DTOs
-        metadata           Dotkon (.kon, env subst)
-                           ServiceDiscovery (SDS)
-                           CardService 8.2.1 / EventService / AuthSignature / …
+                        ▼
+                   :connector
+              ConnectorClient ──► generated SOAP DTOs
+              Dotkon (.kon, env subst)
+              ServiceDiscovery (SDS)
+              CardService 8.2.1 / EventService / AuthSignature / …
                                           │
                                           ▼
                                  Konnektor (SOAP, OkHttp+JSSE, mTLS)
@@ -190,11 +184,11 @@ across platforms without symlinks or platform-specific code.
 
 - **Hand-written / generated split ≈ 1 : 3.6**. Connector is small in spirit (1.4k
   hand-written) but the generated SOAP surface dominates total bytes.
-- **No circular deps**: `api` ← `connector` ← `cli`. SDK depends on nothing from us.
+- **No circular deps**: `connector` ← `cli`. SDK depends on nothing from us.
 - **Single application module** — `cli` is the only one that produces a distribution
   (`./gradlew :cli:installDist`).
-- **Testing density**: connector ≈ 57%, api ≈ 36%, cli ≈ 8%. The cli's coverage focuses
-  on `JsonFileStorage` and `PoppMessages` round-trip — areas where regression risk
+- **Testing density**: connector ≈ 57%, cli ≈ 7%. The cli's coverage focuses on
+  `JsonFileStorage` and `PoppMessages` round-trip — areas where regression risk
   outweighs the tooling cost.
 - **Version catalog is exhaustive** — every dep is named in `libs.versions.toml`;
   modules reference via `libs.foo`. Single-place version bumps.

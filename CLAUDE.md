@@ -12,7 +12,7 @@ Gradle multi-project build using the wrapper. All commands run from the repo roo
 - Build a runnable distribution: `./gradlew :cli:installDist` (script at `cli/build/install/zeta/bin/zeta`)
 - Build the release tarball: `./gradlew :cli:distTar` → `cli/build/distributions/zeta-<version>.tar.gz`
 - Run all tests: `./gradlew test`
-- Single module: `./gradlew :api:test`
+- Single module: `./gradlew :connector:test`
 - Single test class: `./gradlew :cli:test --tests "de.gematik.zeta.cli.SomeTest"`
 - Clean: `./gradlew clean`
 
@@ -23,11 +23,12 @@ The version is set via `gradle.properties` (`version=…`) and propagated to sub
 ## Architecture
 
 ```
-cli (application, de.gematik.zeta.cli)  ──►  api (library, de.gematik.zeta.api)
+cli (application, de.gematik.zeta.cli)  ──►  connector (library, de.gematik.connector)
+                                        ──►  de.gematik.zeta:zeta-sdk-jvm
 ```
 
-- **`api`** — `de.gematik.zeta.api`. Pure library: data models (`ProtectedResource`, `OAuth2Client`) and Ktor-based clients (`ProtectedResourceClient`). **The `api` module never instantiates an `HttpClient`** — clients are constructor-injected by the host (CLI). `api` only depends on `ktor-client-core` (the engine lives in `cli`). It also depends on `de.gematik.zeta:zeta-sdk-jvm`; the SDK transitively pulls `slf4j-simple`, which is excluded in `api/build.gradle.kts` so it doesn't clash with our Logback binding.
-- **`cli`** — `de.gematik.zeta.cli`. Clikt-based CLI. Entry point is `de.gematik.zeta.cli.MainKt#main` (see `cli/build.gradle.kts`, `applicationName = "zeta"`). Owns the Ktor engine (`ktor-client-okhttp` — single engine for the whole CLI; CIO is not on the classpath) and `HttpClient` lifecycle.
+- **`cli`** — `de.gematik.zeta.cli`. Clikt-based CLI. Entry point is `de.gematik.zeta.cli.MainKt#main` (see `cli/build.gradle.kts`, `applicationName = "zeta"`). Owns the Ktor engine (`ktor-client-okhttp` — single engine for the whole CLI; CIO is not on the classpath) and `HttpClient` lifecycle. Depends directly on `de.gematik.zeta:zeta-sdk-jvm`; the SDK transitively pulls `slf4j-simple`, which is excluded in `cli/build.gradle.kts` so it doesn't clash with our Logback binding.
+- **`connector`** — see `connector/CLAUDE.md`. Hand-written facade over the generated Konnektor SOAP API.
 
 ### CLI command layout
 
@@ -35,7 +36,7 @@ Commands are wired together in `Main.kt` via Clikt's `subcommands(...)`. Each to
 
 - `de.gematik.zeta.cli.ZetaCommand` — root, name `zeta`.
 - `de.gematik.zeta.cli.VersionCommand` — `zeta version` (simple, in the cli package).
-- `de.gematik.zeta.cli.inspect.InspectCommand` — `zeta inspect <URL>` — top-level command that hits `<URL>/.well-known/oauth-protected-resource` and prints everything Zeta Guard advertises about that resource.
+- `de.gematik.zeta.cli.inspect.InspectCommand` — `zeta inspect <URL>` — top-level command that hits `<URL>/.well-known/oauth-protected-resource` and prints everything Zeta Guard advertises about that resource. The package is self-contained: wire models (`ProtectedResource`, `AuthorizationServer`) and two suspend fetch functions (`fetchProtectedResource`, `fetchAuthorizationServer` in `WellKnown.kt`) live alongside the command.
 
 When adding a new top-level command group: create a package under `de.gematik.zeta.cli`, put the parent command and its children there, and register the parent (with its `.subcommands(...)` chain) in `Main.kt`. **All commands extend `ZetaCliktCommand`, never `CliktCommand` directly** — this is what gives every command the sticky `-v/--verbose` option (see below). Override `runCommand()`, not `run()` (the base class makes `run` final and calls `Logging.applyVerbosity` before dispatching). Help text goes in `override fun help(context: Context)` (Clikt 5 moved help out of the `CliktCommand` constructor).
 
@@ -47,13 +48,11 @@ The CLI owns the `HttpClient`. `de.gematik.zeta.cli.http.createHttpClient(...)` 
 - `-k/--insecure` — installs an all-accepting `X509TrustManager` (disables TLS verification entirely; logs a WARN). Use only for dev/test.
 - `--ca-cert FILE` (repeatable) — adds PEM-encoded CA certs to the trust store on top of the default JVM roots. Use this for corporate/self-signed CAs when `curl` works but the JVM doesn't trust the cert (typical macOS Temurin behaviour: Keychain isn't on the JVM trust path).
 
-Subcommands that need HTTP read it from context with `by requireObject<HttpClient>()`, then construct the api-side client they need (e.g. `ProtectedResourceClient(httpClient).fetch(url)`). They bridge to suspend code via `runBlocking`.
-
-When adding a new HTTP-using subcommand: declare `private val httpClient: HttpClient by requireObject()`, construct the relevant `*Client` from `de.gematik.zeta.api`, and call its `suspend fun` from inside `runBlocking { ... }`. Don't create a new `HttpClient` in the command — reuse the shared one so timeouts/proxies/headers stay consistent.
+Subcommands that need HTTP read the shared client via `cliConfig.httpClient` and bridge to suspend code with `runBlocking`. Don't create a new `HttpClient` in a command — reuse the shared one so timeouts/proxies/headers stay consistent.
 
 ### Logging & verbosity
 
-`cli/src/main/resources/logback.xml` configures Logback: stderr appender, default level **WARN**, coloured pattern (`%highlight` + `%gray`). Libraries log via `io.github.oshai:kotlin-logging` (`private val log = KotlinLogging.logger {}`); both `api` and `cli` depend on it.
+`cli/src/main/resources/logback.xml` configures Logback: stderr appender, default level **WARN**, coloured pattern (`%highlight` + `%gray`). Libraries log via `io.github.oshai:kotlin-logging` (`private val log = KotlinLogging.logger {}`); both `cli` and `connector` depend on it.
 
 The `-v/--verbose` option on `ZetaCliktCommand` is `counted()`, so it's sticky — accepted at any depth (`zeta -v inspect <URL>`, `zeta inspect -v <URL>` are both valid). Each `-v` increments: 1 → INFO, 2 → DEBUG, 3+ → TRACE. `Logging.applyVerbosity` is no-op at count 0, so an unspecified `-v` on a deeper command does **not** reset a level set higher up. To globally raise verbosity in tests or dev, prefer `-v` on the root.
 
@@ -66,14 +65,14 @@ Two reusable renderers live in `de.gematik.zeta.cli.output`:
 
 Every command supports `-o, --output-format text|json` (sticky on `ZetaCliktCommand`, default `text`). Commands branch on `cliConfig.outputFormat`. For colour control, pass `currentContext.terminal.terminalInfo.outputInteractive` as the `colorize` flag — true on a TTY, false when piped/redirected, so `… -o json | jq` always gets plain JSON. Help text and Clikt errors keep Mordant's default colour treatment.
 
-Output models that need `-o json` should be `@Serializable` in the `api` module (see `ProtectedResource` for the pattern: `@Serializable` + `@SerialName(...)` per RFC field). `cli` then calls `Json.encodeToJsonElement(Foo.serializer(), value)` and hands the result to `renderJson`.
+Output models that need `-o json` should be `@Serializable` and live next to the command that owns them (see `inspect/ProtectedResource.kt` for the pattern: `@Serializable` + `@SerialName(...)` per RFC field). The command calls `Json.encodeToJsonElement(Foo.serializer(), value)` and hands the result to `renderJson`.
 
 ### Convention plugins (`buildSrc`)
 
 Shared build logic lives in `buildSrc/src/main/kotlin/` as precompiled Kotlin DSL plugins. Module build files apply one of these instead of repeating config:
 
 - `buildlogic.kotlin-common-conventions` — Kotlin JVM, Maven Central, JUnit Jupiter on the test classpath, JDK 21 toolchain, dependency version constraints.
-- `buildlogic.kotlin-library-conventions` — common + `java-library` (`api`/`implementation` split). Used by `api`.
+- `buildlogic.kotlin-library-conventions` — common + `java-library` (`api`/`implementation` split). Used by `connector`.
 - `buildlogic.kotlin-application-conventions` — common + `application` (provides `run` + `installDist`). Used by `cli`.
 
 Shared library versions live in `gradle/libs.versions.toml` (the `libs` version catalog is shared between the main build and `buildSrc` via `buildSrc/settings.gradle.kts`). Pin new third-party versions there. Cross-module dependency-version constraints (e.g. transitive pins) belong in `buildlogic.kotlin-common-conventions`.

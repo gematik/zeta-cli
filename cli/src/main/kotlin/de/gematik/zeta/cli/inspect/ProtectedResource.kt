@@ -1,20 +1,9 @@
-package de.gematik.zeta.api
+package de.gematik.zeta.cli.inspect
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
-import kotlinx.serialization.json.JsonObject
 
-/**
- * OAuth Protected Resource Metadata, as defined in RFC 9728.
- *
- * Doubles as the wire format (the `@SerialName` annotations match the spec) and the
- * domain model exposed to consumers. Returned by [ProtectedResourceClient.fetch].
- *
- * [raw] holds the complete, untyped JSON object returned by the server — useful for
- * extension fields not modelled here. It's populated by the client after decoding and
- * excluded from serialization.
- */
+/** OAuth Protected Resource Metadata, RFC 9728. */
 @Serializable
 data class ProtectedResource(
     val resource: String,
@@ -27,6 +16,4 @@ data class ProtectedResource(
     @SerialName("resource_documentation") val resourceDocumentation: String? = null,
     @SerialName("resource_policy_uri") val resourcePolicyUri: String? = null,
     @SerialName("resource_tos_uri") val resourceTosUri: String? = null,
-    @Transient
-    val raw: JsonObject = JsonObject(emptyMap()),
 )

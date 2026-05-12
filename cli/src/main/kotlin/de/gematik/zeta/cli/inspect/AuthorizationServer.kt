@@ -1,16 +1,9 @@
-package de.gematik.zeta.api
+package de.gematik.zeta.cli.inspect
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
-import kotlinx.serialization.json.JsonObject
 
-/**
- * OAuth Authorization Server Metadata, as defined in RFC 8414.
- *
- * Returned by [AuthorizationServerClient.fetch]. [raw] holds the complete untyped JSON
- * object returned by the server (excluded from serialization).
- */
+/** OAuth Authorization Server Metadata, RFC 8414. */
 @Serializable
 data class AuthorizationServer(
     val issuer: String,
@@ -33,6 +26,4 @@ data class AuthorizationServer(
     @SerialName("service_documentation") val serviceDocumentation: String? = null,
     @SerialName("op_policy_uri") val opPolicyUri: String? = null,
     @SerialName("op_tos_uri") val opTosUri: String? = null,
-    @Transient
-    val raw: JsonObject = JsonObject(emptyMap()),
 )
