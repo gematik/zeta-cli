@@ -4,15 +4,20 @@ import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import de.gematik.zeta.cli.client.HttpCommand
 import de.gematik.zeta.cli.client.WsCommand
-import de.gematik.zeta.cli.inspect.InspectCommand
 import de.gematik.zeta.cli.connector.ConnectorCommand
 import de.gematik.zeta.cli.connector.ConnectorConfigsCommand
 import de.gematik.zeta.cli.connector.ConnectorGetCardsCommand
 import de.gematik.zeta.cli.connector.ConnectorGetCommand
 import de.gematik.zeta.cli.connector.ConnectorInspectCommand
+import de.gematik.zeta.cli.lifecycle.AuthenticateCommand
+import de.gematik.zeta.cli.lifecycle.DiscoverCommand
+import de.gematik.zeta.cli.lifecycle.ForgetCommand
+import de.gematik.zeta.cli.lifecycle.LoginCommand
+import de.gematik.zeta.cli.lifecycle.LogoutCommand
+import de.gematik.zeta.cli.lifecycle.RegisterCommand
 import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
-import de.gematik.zeta.cli.status.StatusCommand
+import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.system.exitProcess
@@ -42,8 +47,13 @@ fun main(args: Array<String>) {
         ZetaCommand()
             .subcommands(
                 VersionCommand(),
-                InspectCommand(),
+                DiscoverCommand(),
                 StatusCommand(),
+                RegisterCommand(),
+                AuthenticateCommand(),
+                LoginCommand(),
+                LogoutCommand(),
+                ForgetCommand(),
                 HttpCommand(),
                 WsCommand(),
                 ConnectorCommand().subcommands(

@@ -30,15 +30,47 @@ cli (application, de.gematik.zeta.cli)  ──►  connector (library, de.gemati
 - **`cli`** — `de.gematik.zeta.cli`. Clikt-based CLI. Entry point is `de.gematik.zeta.cli.MainKt#main` (see `cli/build.gradle.kts`, `applicationName = "zeta"`). Owns the Ktor engine (`ktor-client-okhttp` — single engine for the whole CLI; CIO is not on the classpath) and `HttpClient` lifecycle. Depends directly on `de.gematik.zeta:zeta-sdk-jvm`; the SDK transitively pulls `slf4j-simple`, which is excluded in `cli/build.gradle.kts` so it doesn't clash with our Logback binding.
 - **`connector`** — see `connector/CLAUDE.md`. Hand-written facade over the generated Konnektor SOAP API.
 
-### CLI command layout
+### CLI commands
 
-Commands are wired together in `Main.kt` via Clikt's `subcommands(...)`. Each top-level command that has children lives in its own subpackage; standalone commands live directly in `de.gematik.zeta.cli`.
+Wired in `Main.kt` via Clikt's `subcommands(...)`. Each top-level command lives in its own subpackage (or directly in `de.gematik.zeta.cli` for one-off verbs).
 
-- `de.gematik.zeta.cli.ZetaCommand` — root, name `zeta`.
-- `de.gematik.zeta.cli.VersionCommand` — `zeta version` (simple, in the cli package).
-- `de.gematik.zeta.cli.inspect.InspectCommand` — `zeta inspect <URL>` — top-level command that hits `<URL>/.well-known/oauth-protected-resource` and prints everything Zeta Guard advertises about that resource. The package is self-contained: wire models (`ProtectedResource`, `AuthorizationServer`) and two suspend fetch functions (`fetchProtectedResource`, `fetchAuthorizationServer` in `WellKnown.kt`) live alongside the command.
+| Command | Package | Purpose |
+| --- | --- | --- |
+| `zeta version` | `cli` | Print build version. |
+| `zeta discover URL` | `lifecycle` | Run the SDK's `discover()` flow against the resource origin (RFC 9728 — host root, no sub-path). Persists protected-resource + AS metadata under the active profile and renders everything the SDK extracts. |
+| `zeta status [URL]` | `state` | Read-only view of cached SDK state for one or every resource in the profile. No SDK build, no auth options shown. `--reveal` exposes raw access JWS, `client_secret`, `registration_access_token`. Refresh tokens never emitted. |
+| `zeta register URL` | `lifecycle` | DCR — register with the AS, persist response. |
+| `zeta authenticate URL --scope …` | `lifecycle` | Token exchange — get access + refresh, persist. |
+| `zeta login URL --scope …` | `lifecycle` | Idempotent `register` + `authenticate`; prints a small trace of which steps ran vs were skipped. |
+| `zeta logout URL` | `lifecycle` | SDK `logout()` — revoke + clear tokens locally, keep registration. |
+| `zeta forget [URL]` / `--all` | `lifecycle` | Per-URL: drive `ZetaSdk.forget(client)` via [NoopSubjectTokenProvider] (auth options not required). `--all`: delete profile storage file. Interactive confirmation, suppressed by `--force`; non-TTY without `--force` refuses. |
+| `zeta http URL` / `zeta ws URL` | `client` | Bearer-bound HTTP / WebSocket via the SDK's authenticated client. |
+| `zeta connector …` | `connector` | Talk to a Konnektor described by a `.kon` file. |
+| `zeta popp …` | `popp` | Retrieve a Proof-of-Patient-Presence token. |
 
-When adding a new top-level command group: create a package under `de.gematik.zeta.cli`, put the parent command and its children there, and register the parent (with its `.subcommands(...)` chain) in `Main.kt`. **All commands extend `ZetaCliktCommand`, never `CliktCommand` directly** — this is what gives every command the sticky `-v/--verbose` option (see below). Override `runCommand()`, not `run()` (the base class makes `run` final and calls `Logging.applyVerbosity` before dispatching). Help text goes in `override fun help(context: Context)` (Clikt 5 moved help out of the `CliktCommand` constructor).
+Command-base hierarchy:
+
+```
+ZetaCliktCommand            // sticky -v, --output-format, --connect-timeout, --insecure, --ca-cert, …
+  ZetaProfileCommand        // adds --profile; helpers loadEntry / renderEntry. Used by discover / status / forget.
+    ZetaSessionCommand      // adds Connector + PKCS#12 auth groups; openSession(...). Used by register / authenticate / login / logout / http / ws.
+```
+
+**All commands extend `ZetaCliktCommand`** (or one of its subclasses), never `CliktCommand` directly — this is what gives them the sticky options. Override `runCommand()`, not `run()` (the base makes `run` final and calls `Logging.applyVerbosity` before dispatching). Help text goes in `override fun help(context: Context)` (Clikt 5 moved help out of the constructor).
+
+### SDK builder + read-only stub
+
+`sdk/SdkBuilder.kt` exports `buildZetaSdkClient(...)` — the single place that constructs a `ZetaSdkClient` with the CLI-wide defaults (product id, JsonFileStorage, software attestation, ZETA Guard role OID). Both `ZetaSessionCommand.buildSdk` and the auth-free commands (`discover`, `forget URL`) call this helper.
+
+`NoopSubjectTokenProvider` is the stub used for SDK operations that never call `createSubjectToken` — `discover()`, `forget()`. If the SDK ever does invoke it, the stub `error()`s loudly rather than hanging or returning empty.
+
+### State / enumeration
+
+`state/ProfileEnumeration.kt` walks a profile's `JsonFileStorage` via the public SDK storage interfaces (`ConfigurationStorage`, `ClientRegistrationStorage`, `AuthenticationStorage`) and builds an `Entry` per cached resource. `Entry` carries the linked AS, the [SdkStatus] enum, decoded access-token claims, and a `RegistrationInfo` view of `ClientRegistrationResponse`.
+
+The status enum is computed bug-for-bug with the SDK's own `status()`: tokens are looked up by `authServer.issuer` while `AccessTokenProviderImpl` saves them by build-time resource URL, so the enum under-reports. Mirroring the bug avoids the CLI disagreeing with the SDK. Track the upstream fix.
+
+`state/EntryRenderer.kt` exposes `renderEntryText` / `renderEntryJson` — `status` uses both directly; lifecycle commands use them via `ZetaProfileCommand.renderEntry`.
 
 ### HTTP client wiring
 
@@ -54,7 +86,7 @@ Subcommands that need HTTP read the shared client via `cliConfig.httpClient` and
 
 `cli/src/main/resources/logback.xml` configures Logback: stderr appender, default level **WARN**, coloured pattern (`%highlight` + `%gray`). Libraries log via `io.github.oshai:kotlin-logging` (`private val log = KotlinLogging.logger {}`); both `cli` and `connector` depend on it.
 
-The `-v/--verbose` option on `ZetaCliktCommand` is `counted()`, so it's sticky — accepted at any depth (`zeta -v inspect <URL>`, `zeta inspect -v <URL>` are both valid). Each `-v` increments: 1 → INFO, 2 → DEBUG, 3+ → TRACE. `Logging.applyVerbosity` is no-op at count 0, so an unspecified `-v` on a deeper command does **not** reset a level set higher up. To globally raise verbosity in tests or dev, prefer `-v` on the root.
+The `-v/--verbose` option on `ZetaCliktCommand` is `counted()`, so it's sticky — accepted at any depth (`zeta -v status`, `zeta status -v` are both valid). Each `-v` increments: 1 → INFO, 2 → DEBUG, 3+ → TRACE. `Logging.applyVerbosity` is no-op at count 0, so an unspecified `-v` on a deeper command does **not** reset a level set higher up. To globally raise verbosity in tests or dev, prefer `-v` on the root.
 
 ### CLI output styling
 
@@ -65,7 +97,7 @@ Two reusable renderers live in `de.gematik.zeta.cli.output`:
 
 Every command supports `-o, --output-format text|json` (sticky on `ZetaCliktCommand`, default `text`). Commands branch on `cliConfig.outputFormat`. For colour control, pass `currentContext.terminal.terminalInfo.outputInteractive` as the `colorize` flag — true on a TTY, false when piped/redirected, so `… -o json | jq` always gets plain JSON. Help text and Clikt errors keep Mordant's default colour treatment.
 
-Output models that need `-o json` should be `@Serializable` and live next to the command that owns them (see `inspect/ProtectedResource.kt` for the pattern: `@Serializable` + `@SerialName(...)` per RFC field). The command calls `Json.encodeToJsonElement(Foo.serializer(), value)` and hands the result to `renderJson`.
+Output models that need `-o json` should be `@Serializable` and live next to the command that owns them. The command calls `Json.encodeToJsonElement(Foo.serializer(), value)` and hands the result to `renderJson`. When the SDK already provides a `@Serializable` model (e.g. `ProtectedResourceMetadata`), reuse it — `DiscoverCommand` does this rather than maintaining a parallel CLI-side schema.
 
 ### Convention plugins (`buildSrc`)
 

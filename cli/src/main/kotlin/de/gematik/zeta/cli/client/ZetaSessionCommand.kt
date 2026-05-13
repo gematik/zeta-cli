@@ -3,24 +3,15 @@ package de.gematik.zeta.cli.client
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
-import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.path
-import de.gematik.zeta.cli.ZetaCliktCommand
+import de.gematik.zeta.cli.ZetaProfileCommand
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.openConnectorSession
-import de.gematik.zeta.cli.storage.JsonFileStorage
+import de.gematik.zeta.cli.sdk.buildZetaSdkClient
 import de.gematik.zeta.cli.storage.zetaProfilePath
-import de.gematik.zeta.sdk.BuildConfig
-import de.gematik.zeta.sdk.TpmConfig
-import de.gematik.zeta.sdk.ZetaSdk
 import de.gematik.zeta.sdk.ZetaSdkClient
-import de.gematik.zeta.sdk.attestation.model.AttestationConfig
-import de.gematik.zeta.sdk.attestation.model.PlatformProductId
-import de.gematik.zeta.sdk.authentication.AuthConfig
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
-import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
-import de.gematik.zeta.sdk.storage.StorageConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
 
@@ -110,15 +101,8 @@ class P12AuthOptions :
  */
 abstract class ZetaSessionCommand(
     name: String,
-) : ZetaCliktCommand(name = name) {
-    protected val profile: String by option(
-        "--profile",
-        metavar = "NAME",
-        envvar = "ZETA_PROFILE",
-        help =
-            "Storage profile name. SDK state (registration, tokens, …) is persisted to " +
-                "\$XDG_CONFIG_HOME/telematik/zeta/<profile>.storage.json. (env: ZETA_PROFILE)",
-    ).default("default")
+) : ZetaProfileCommand(name = name) {
+    // `--profile` is inherited from [ZetaProfileCommand].
 
     // Both groups are plain (non-cooccurring) [OptionGroup]s and always present.
     //
@@ -179,33 +163,13 @@ abstract class ZetaSessionCommand(
         storagePath: Path,
         tokenProvider: SubjectTokenProvider,
     ): ZetaSdkClient =
-        ZetaSdk
-            .build(
-                resource,
-                BuildConfig(
-                    productId = "ZETA-Test-Client",
-                    productVersion = "1.0.0",
-                    clientName = "zeta-cli",
-                    storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
-                    tpmConfig = object : TpmConfig {},
-                    authConfig =
-                        AuthConfig(
-                            scopes = scopes,
-                            exp = 30,
-                            aslProdEnvironment = false,
-                            subjectTokenProvider = tokenProvider,
-                            attestation = AttestationConfig.software(),
-                            requiredRoleOid = OID_ZETA_GUARD,
-                        ),
-                    platformProductId =
-                        PlatformProductId.AppleProductId(
-                            PlatformProductId.PLATFORM_APPLE,
-                            "macos",
-                            listOf(),
-                        ),
-                    httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(cliConfig),
-                ),
-            ).also { log.debug { "Created Zeta SDK client" } }
+        buildZetaSdkClient(
+            resource = resource,
+            scopes = scopes,
+            storagePath = storagePath,
+            tokenProvider = tokenProvider,
+            cliConfig = cliConfig,
+        ).also { log.debug { "Created Zeta SDK client" } }
 
     /**
      * Enforce mutual exclusion + completeness. The two groups are mutually exclusive;
@@ -304,7 +268,4 @@ abstract class ZetaSessionCommand(
         error("unreachable: no auth group active after validation")
     }
 
-    protected companion object {
-        const val OID_ZETA_GUARD = "1.2.276.0.76.4.324"
-    }
 }
