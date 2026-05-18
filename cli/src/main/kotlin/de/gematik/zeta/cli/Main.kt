@@ -17,6 +17,7 @@ import de.gematik.zeta.cli.lifecycle.LogoutCommand
 import de.gematik.zeta.cli.lifecycle.RegisterCommand
 import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
+import de.gematik.zeta.cli.popp.PoppKartosCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -61,7 +62,7 @@ fun main(args: Array<String>) {
                     ConnectorConfigsCommand(),
                     ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
                 ),
-                PoppCommand().subcommands(PoppConnectorCommand()),
+                PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),
             )
             .main(args)
         0

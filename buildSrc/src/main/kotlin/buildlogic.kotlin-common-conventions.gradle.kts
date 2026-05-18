@@ -13,8 +13,18 @@ repositories {
     // in Gradle module metadata that mavenLocal doesn't read — keep resolving from
     // Central where the redirect works. An unscoped mavenLocal pulls the empty
     // okhttp-5.3.2.jar stub onto the classpath and breaks `OkHttpClient.Builder`.
+    //
+    // Pin to POM-only metadata: zeta-sdk is published via `publishJvmPublicationToMavenLocal`
+    // which only deposits the `*-jvm` artifacts. The Gradle module metadata in those JARs
+    // still references KMP root modules (`flow-controller`, not `flow-controller-jvm`), so
+    // letting Gradle read it would chase missing roots. The POM lists the `-jvm` deps
+    // directly, which is exactly what we have on disk.
     mavenLocal {
         content { includeGroupByRegex("de\\.gematik\\..*") }
+        metadataSources {
+            mavenPom()
+            ignoreGradleMetadataRedirection()
+        }
     }
     mavenCentral()
 }

@@ -10,20 +10,19 @@ import kotlinx.serialization.json.Json
 private val log = KotlinLogging.logger {}
 
 /**
- * Drive popp's `/token-generation-ehc` WebSocket through the **Connector** scenario:
- * `Start → ConnectorScenario → ScenarioResponse → … → Token`.
+ * Drive popp's `/token-generation-ehc` WebSocket through either the **Connector** or
+ * **Standard** scenario: `Start → (Connector|Standard)Scenario → ScenarioResponse → … → Token`.
  *
- * Stateless apart from the session. The state machine is one method ([runConnectorScenario])
- * with explicit dispatch on the message `type` discriminator — easier to follow than the
- * Spring `@EventListener` chain in the Java reference client.
+ * Stateless apart from the session. Each scenario is one method with explicit dispatch on
+ * the message `type` discriminator — easier to follow than the Spring `@EventListener`
+ * chain in the Java reference client.
  *
- * The client doesn't talk to the Connector itself — it receives a `signedScenario` JWT
- * and forwards it through the [secureSendApdu] callback the caller provides. That keeps
- * this class testable with a stub callback and decouples it from the connector module.
+ * The client never talks to the card itself — it forwards each APDU round through the
+ * caller-supplied callback. That keeps this class testable with a stub callback and
+ * decouples it from both the connector module and any local card simulator.
  */
 internal class PoppClient(
     private val session: DefaultClientWebSocketSession,
-    private val secureSendApdu: suspend (signedScenario: String) -> List<String>,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -34,7 +33,10 @@ internal class PoppClient(
      * The server may send multiple `ConnectorScenarioMessage`s in sequence (one per APDU
      * round) before issuing the final `TokenMessage`; we handle that by looping.
      */
-    suspend fun runConnectorScenario(start: StartMessage): String {
+    suspend fun runConnectorScenario(
+        start: StartMessage,
+        secureSendApdu: suspend (signedScenario: String) -> List<String>,
+    ): String {
         sendMessage(start)
         while (true) {
             when (val msg = receiveMessage()) {
@@ -54,6 +56,45 @@ internal class PoppClient(
                     "UNEXPECTED_MESSAGE",
                     "Server returned StandardScenarioMessage; this client only supports the " +
                         "Connector flow (cardConnectionType=*-connector).",
+                )
+
+                is StartMessage,
+                is ScenarioResponseMessage -> throw PoppProtocolException(
+                    "UNEXPECTED_MESSAGE",
+                    "Server echoed a client-only message type: ${msg::class.simpleName}",
+                )
+            }
+        }
+    }
+
+    /**
+     * Send [start] and drive the **Standard** scenario: the server delivers plain
+     * [StandardScenarioMessage]s (no JWT), [executeApdus] runs the steps against the
+     * card, and the response APDU hex strings are returned in a [ScenarioResponseMessage].
+     */
+    suspend fun runStandardScenario(
+        start: StartMessage,
+        executeApdus: suspend (List<ScenarioStep>) -> List<String>,
+    ): String {
+        sendMessage(start)
+        while (true) {
+            when (val msg = receiveMessage()) {
+                is StandardScenarioMessage -> {
+                    val responseSteps = executeApdus(msg.steps)
+                    sendMessage(ScenarioResponseMessage(steps = responseSteps))
+                }
+
+                is TokenMessage -> {
+                    log.info { "PoPP token received (${msg.token.length} chars)" }
+                    return msg.token
+                }
+
+                is ErrorMessage -> throw PoppProtocolException(msg.errorCode, msg.errorDetail)
+
+                is ConnectorScenarioMessage -> throw PoppProtocolException(
+                    "UNEXPECTED_MESSAGE",
+                    "Server returned ConnectorScenarioMessage; this client only supports the " +
+                        "Standard flow (cardConnectionType=*-standard).",
                 )
 
                 is StartMessage,

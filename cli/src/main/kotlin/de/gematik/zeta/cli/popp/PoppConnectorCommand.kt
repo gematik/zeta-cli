@@ -14,16 +14,8 @@ import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.sdk.ZetaSdkClient
-import de.gematik.zeta.cli.output.OutputFormat
-import de.gematik.zeta.cli.output.renderJson
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import java.util.Base64
 
 private val log = KotlinLogging.logger {}
 
@@ -77,7 +69,7 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 )
             }
             val token = runPoppFlow(sdk, session)
-            emitToken(token)
+            emitPoppToken(token, cliConfig.outputFormat, colorize)
         }
     }
 
@@ -96,12 +88,12 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 customHeaders = null,
             ) {
                 log.info { "popp WS connected: $serviceUrl" }
-                val client = PoppClient(this, connector::secureSendApdu)
+                val client = PoppClient(this)
                 val start = StartMessage(
                     cardConnectionType = connectionType.popp,
                     clientSessionId = cardSessionId,
                 )
-                token = client.runConnectorScenario(start)
+                token = client.runConnectorScenario(start, connector::secureSendApdu)
             }
             token ?: error("popp WebSocket closed without yielding a TokenMessage")
         } finally {
@@ -142,39 +134,8 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
         }
     }
 
-    /**
-     * `text` and `raw` both emit the JWT verbatim — the typical consumer pipes it into
-     * `--popp-token` / `PoPP:` header where the compact serialisation is required. Use
-     * `-o json` to see the decoded JOSE header and payload.
-     */
-    private fun emitToken(token: String) {
-        when (cliConfig.outputFormat) {
-            OutputFormat.RAW, OutputFormat.TEXT -> echo(token)
-            OutputFormat.JSON -> echo(renderJson(buildTokenJson(token), colorize = colorize))
-        }
-    }
-
-    /** Decoded view: JOSE header + payload. Segments that fail to decode are omitted. */
-    private fun buildTokenJson(token: String): JsonObject = buildJsonObject {
-        decodeJwtSegment(token, segment = 0)?.let { put("header", it) }
-        decodeJwtSegment(token, segment = 1)?.let { put("payload", it) }
-    }
-
     enum class ConnectionType(val popp: String) {
         CONTACT("contact-connector"),
         CONTACTLESS("contactless-connector"),
     }
 }
-
-/**
- * Decode a single segment (`0` = JOSE header, `1` = payload) of a JWT compact serialisation
- * into a [JsonElement]. Returns `null` for malformed input — the popp service is the
- * authority on token validity, not us; we just want to render what we can.
- */
-private fun decodeJwtSegment(token: String, segment: Int): JsonElement? = runCatching {
-    val parts = token.split('.')
-    require(segment in parts.indices) { "JWT segment $segment out of range (got ${parts.size} parts)" }
-    val padded = parts[segment] + "=".repeat((4 - parts[segment].length % 4) % 4)
-    val bytes = Base64.getUrlDecoder().decode(padded)
-    Json.parseToJsonElement(bytes.decodeToString())
-}.getOrNull()
