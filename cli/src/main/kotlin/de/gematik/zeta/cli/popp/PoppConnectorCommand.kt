@@ -14,6 +14,9 @@ import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.openConnectorSession
+import de.gematik.zeta.cli.connector.traced
+import de.gematik.zeta.cli.connector.tracedUnder
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -72,6 +75,12 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 proxy = cliConfig.proxy,
             )
             try {
+                // Make the SDK acquire (or refresh) its tokens up-front, before any popp /
+                // Connector work. Keeps SDS load + SMC-B ExternalAuthenticate scoped to a
+                // sibling `sdk.authenticate` span instead of mixing into popp.flow.
+                runBlocking {
+                    Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
+                }
                 val token = runPoppFlow(sdk, poppSession)
                 emitPoppToken(token, cliConfig.outputFormat, colorize)
             } finally {
@@ -82,46 +91,63 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
     }
 
     private fun runPoppFlow(sdk: ZetaSdkClient, session: ConnectorSession): String = runBlocking {
-        // First Connector touch: triggers the lazy SDS load behind [ConnectorSession.connector].
-        val connector = session.connector()
-        val egkHandle = resolveEgkHandle(connector)
-        val cardSessionId = connector.startCardSession(egkHandle)
-        log.info { "Connector card session $cardSessionId opened on eGK $egkHandle" }
+        Tracer.spanSuspend("popp.flow", attrs = mapOf("scenario" to "connector")) {
+            // First Connector touch from popp's side. When sdk.authenticate already loaded
+            // the SDS (cold token cache), this returns the cached ConnectorClient; otherwise
+            // the http.request /connector.sds shows up as a sibling here.
+            val connector = session.connector()
+            val egkHandle = resolveEgkHandle(connector)
+            val cardSessionId = session.traced("startCardSession") { connector.startCardSession(egkHandle) }
+            log.info { "Connector card session $cardSessionId opened on eGK $egkHandle" }
 
-        try {
-            var token: String? = null
-            sdk.ws(
-                targetUrl = serviceUrl,
-                builder = { applyCliHttpDefaults(cliConfig) },
-                customHeaders = null,
-            ) {
-                log.info { "popp WS connected: $serviceUrl" }
-                val client = PoppClient(this)
-                val start = StartMessage(
-                    cardConnectionType = connectionType.popp,
-                    clientSessionId = cardSessionId,
-                )
-                token = client.runConnectorScenario(start, connector::secureSendApdu)
-            }
-            token ?: error("popp WebSocket closed without yielding a TokenMessage")
-        } finally {
-            // Best-effort cleanup: popp often closes the session itself when the flow
-            // completes, after which the Connector reports "Unbekannte Session ID"
-            // (Code 4288). Either way we just note it and continue — no stack trace.
-            runCatching { connector.stopCardSession(cardSessionId) }
-                .onFailure { e ->
+            try {
+                // Capture the parent for ws.recv/send + secureSendApdu: we want those as
+                // siblings of popp.connect under popp.flow, not nested inside the
+                // long-lived popp.connect span.
+                val wsParent = Tracer.current()
+                Tracer.spanSuspend("popp.connect", attrs = mapOf("service_url" to serviceUrl)) {
+                    var token: String? = null
+                    sdk.ws(
+                        targetUrl = serviceUrl,
+                        builder = { applyCliHttpDefaults(cliConfig) },
+                        customHeaders = null,
+                    ) {
+                        log.info { "popp WS connected: $serviceUrl" }
+                        val client = PoppClient(this, wsSpanParent = wsParent)
+                        val start = StartMessage(
+                            cardConnectionType = connectionType.popp,
+                            clientSessionId = cardSessionId,
+                        )
+                        token = client.runConnectorScenario(start) { signed ->
+                            session.tracedUnder(wsParent, "secureSendApdu") {
+                                connector.secureSendApdu(signed)
+                            }
+                        }
+                    }
+                    token ?: error("popp WebSocket closed without yielding a TokenMessage")
+                }
+            } finally {
+                // Best-effort cleanup: popp often closes the session itself when the flow
+                // completes, after which the Connector reports "Unbekannte Session ID"
+                // (Code 4288). Either way we just note it and continue — no stack trace.
+                runCatching {
+                    session.traced("stopCardSession") { connector.stopCardSession(cardSessionId) }
+                }.onFailure { e ->
                     log.debug {
                         "stopCardSession($cardSessionId) failed (continuing): " +
                             (e.message?.substringBefore('\n') ?: e::class.simpleName)
                     }
                 }
+            }
         }
     }
 
     private suspend fun resolveEgkHandle(connector: ConnectorClient): String {
         egkHandleArg?.let { return it }
 
-        val cards = connector.getCardsByType(listOf(CardType.Egk))
+        val cards = Tracer.spanSuspend("connector.getCards") {
+            connector.getCardsByType(listOf(CardType.Egk))
+        }
         return when (cards.size) {
             1 -> cards.single().cardHandle.also {
                 log.info { "Auto-selected eGK card handle: $it" }

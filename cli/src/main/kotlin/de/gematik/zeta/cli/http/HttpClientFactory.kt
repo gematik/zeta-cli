@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.http
 
+import de.gematik.zeta.cli.trace.HttpTracingPlugin
 import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
@@ -56,6 +57,7 @@ fun createHttpClient(
             requestTimeoutMillis = requestTimeout.inWholeMilliseconds
         }
         installCurlieLogging()
+        install(HttpTracingPlugin)
         expectSuccess = false
         engine {
             // OkHttp wants the SSLSocketFactory built from the same trust manager. The

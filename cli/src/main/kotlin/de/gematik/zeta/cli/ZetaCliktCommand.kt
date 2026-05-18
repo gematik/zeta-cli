@@ -94,6 +94,17 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         help = "Proxy password. Overrides any user-info embedded in --proxy. (env: ZETA_PROXY_PASSWORD)",
     )
 
+    // Declared so Clikt accepts `--trace` at any depth and lists it in --help.
+    // The real activation happens in Main.kt before Clikt parses, so the SDK init / root
+    // span open before any subcommand runs. Reading this option here is therefore only for
+    // help-text / value-source completeness; we never branch on it.
+    @Suppress("unused")
+    private val trace: Boolean by option(
+        "--trace",
+        envvar = "ZETA_TRACE",
+        help = "Print an in-process span tree at end of command. (env: ZETA_TRACE)",
+    ).flag(default = false)
+
     /** Shared, lazily-built CLI configuration available to subcommands' `runCommand`. */
     internal val cliConfig: CliConfig
         get() = currentContext.findObject<CliConfig>()

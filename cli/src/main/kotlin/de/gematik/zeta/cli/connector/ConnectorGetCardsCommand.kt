@@ -35,7 +35,7 @@ class ConnectorGetCardsCommand : ZetaCliktCommand(name = "cards") {
             proxy = cliConfig.proxy,
         )
         try {
-            val cards = runBlocking { session.connector().getAllCards() }
+            val cards = runBlocking { session.traced("getAllCards") { connector().getAllCards() } }
             log.debug { "Connector reported ${cards.size} card(s)" }
             when (cliConfig.outputFormat) {
                 OutputFormat.JSON -> echo(renderJson(jsonReport(cards), colorize = colorize))

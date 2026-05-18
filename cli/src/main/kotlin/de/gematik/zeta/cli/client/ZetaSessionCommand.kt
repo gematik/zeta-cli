@@ -14,6 +14,7 @@ import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.openConnectorSession
 import de.gematik.zeta.cli.sdk.buildZetaSdkClient
 import de.gematik.zeta.cli.storage.zetaProfilePath
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -192,15 +193,20 @@ abstract class ZetaSessionCommand(
         scopes: List<String>,
         action: (ZetaSdkClient, ConnectorSession?) -> Unit,
     ) {
-        val storagePath = zetaProfilePath(profile)
-        log.info { "Persisting SDK state to $storagePath (profile: $profile, resource: $resource, scopes: $scopes)" }
+        Tracer.span(
+            "sdk.session",
+            attrs = mapOf("resource" to resource, "scopes" to scopes.joinToString(",")),
+        ) {
+            val storagePath = zetaProfilePath(profile)
+            log.info { "Persisting SDK state to $storagePath (profile: $profile, resource: $resource, scopes: $scopes)" }
 
-        val (tokenProvider, session) = buildTokenProvider()
-        try {
-            val sdk = buildSdk(resource, scopes, storagePath, tokenProvider)
-            action(sdk, session)
-        } finally {
-            session?.close()
+            val (tokenProvider, session) = buildTokenProvider()
+            try {
+                val sdk = buildSdk(resource, scopes, storagePath, tokenProvider)
+                action(sdk, session)
+            } finally {
+                session?.close()
+            }
         }
     }
 

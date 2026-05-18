@@ -1,5 +1,7 @@
 package de.gematik.zeta.cli.popp
 
+import de.gematik.zeta.cli.trace.Span
+import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.websocket.Frame
@@ -23,6 +25,13 @@ private val log = KotlinLogging.logger {}
  */
 internal class PoppClient(
     private val session: DefaultClientWebSocketSession,
+    /**
+     * Parent span for per-message `popp.ws.recv` / `popp.ws.send` spans. When non-null
+     * (only when `--trace` is on), each frame produces a sibling of the surrounding
+     * `popp.connect` rather than a nested child — keeps the tree readable for long
+     * sessions. Null in tests / when tracing is off.
+     */
+    private val wsSpanParent: Span? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -108,17 +117,23 @@ internal class PoppClient(
 
     private suspend fun sendMessage(msg: PoppMessage) {
         val text = json.encodeToString<PoppMessage>(msg)
+        val type = msg::class.simpleName ?: "Unknown"
         log.debug { "popp send: $text" }
-        session.send(Frame.Text(text))
+        traceWs("popp.ws.send", mapOf("type" to type, "bytes" to text.length)) {
+            session.send(Frame.Text(text))
+        }
     }
 
-    private suspend fun receiveMessage(): PoppMessage {
+    private suspend fun receiveMessage(): PoppMessage = traceWs("popp.ws.recv") { span ->
         for (frame in session.incoming) {
             when (frame) {
                 is Frame.Text -> {
                     val text = frame.readText()
                     log.debug { "popp recv: $text" }
-                    return json.decodeFromString<PoppMessage>(text)
+                    val msg = json.decodeFromString<PoppMessage>(text)
+                    span.attr("type", msg::class.simpleName ?: "Unknown")
+                    span.attr("bytes", text.length)
+                    return@traceWs msg
                 }
 
                 is Frame.Close -> throw PoppProtocolException(
@@ -132,5 +147,15 @@ internal class PoppClient(
             }
         }
         throw PoppProtocolException("WS_CLOSED", "WebSocket incoming channel ended")
+    }
+
+    private suspend inline fun <T> traceWs(
+        name: String,
+        attrs: Map<String, Any?> = emptyMap(),
+        crossinline block: suspend (Span) -> T,
+    ): T = if (wsSpanParent != null) {
+        Tracer.spanUnder(wsSpanParent, name, attrs) { block(it) }
+    } else {
+        Tracer.spanSuspend(name, attrs) { block(it) }
     }
 }

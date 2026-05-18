@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.originOf
+import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 
@@ -47,7 +48,9 @@ class AuthenticateCommand : ZetaSessionCommand(name = "authenticate") {
         val resource = originOf(url)
         log.info { "Authenticating against $resource with scopes $scopes" }
         openSession(resource = resource, scopes = scopes) { sdk, _ ->
-            runBlocking { sdk.authenticate().getOrThrow() }
+            runBlocking {
+                Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
+            }
             renderEntry(loadEntry(resource), reveal)
         }
     }

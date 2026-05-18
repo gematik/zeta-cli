@@ -23,6 +23,14 @@
         <appender-ref ref="WIRE" />
     </logger>
 
+    <!-- Trace tree: emitted once at end of command via log.info when tracing is on.
+         Reuses the WIRE appender's `%msg%n` pattern so the multi-line ASCII tree isn't
+         prefixed on every line. Level pinned to INFO so the tree prints regardless of
+         verbosity. Gating happens at the Tracer (enabled flag), not here. -->
+    <logger name="de.gematik.zeta.trace" level="INFO" additivity="false">
+        <appender-ref ref="WIRE" />
+    </logger>
+
     <root level="WARN">
         <appender-ref ref="STDERR" />
     </root>

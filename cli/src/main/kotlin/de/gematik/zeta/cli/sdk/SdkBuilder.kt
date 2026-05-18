@@ -3,6 +3,7 @@ package de.gematik.zeta.cli.sdk
 import de.gematik.zeta.cli.CliConfig
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.storage.JsonFileStorage
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.BuildConfig
 import de.gematik.zeta.sdk.TpmConfig
 import de.gematik.zeta.sdk.ZetaSdk
@@ -34,7 +35,10 @@ internal fun buildZetaSdkClient(
     storagePath: Path,
     tokenProvider: SubjectTokenProvider,
     cliConfig: CliConfig,
-): ZetaSdkClient =
+): ZetaSdkClient = Tracer.span(
+    "sdk.init",
+    attrs = mapOf("resource" to resource, "scopes" to scopes.joinToString(",")),
+) {
     ZetaSdk.build(
         resource,
         BuildConfig(
@@ -59,6 +63,7 @@ internal fun buildZetaSdkClient(
             httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(cliConfig),
         ),
     )
+}
 
 /**
  * Stand-in [SubjectTokenProvider] for SDK operations that never trigger the auth flow:

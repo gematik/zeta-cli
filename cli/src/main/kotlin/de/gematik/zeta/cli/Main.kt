@@ -20,6 +20,7 @@ import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
+import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.system.exitProcess
 
@@ -34,6 +35,14 @@ fun main(args: Array<String>) {
     }
     val log = KotlinLogging.logger("de.gematik.zeta.cli.Main")
 
+    // Pre-detect --trace so the tracer is initialised before the root span opens. Clikt
+    // doesn't parse the flag until ZetaCliktCommand.run(), which is too late — by then
+    // we're already inside the Tracer.root block. The flag is declared on
+    // ZetaCliktCommand for help-text + sticky-at-any-depth parsing.
+    if (args.any { it == "--trace" } || System.getenv("ZETA_TRACE")?.lowercase() in setOf("1", "true", "yes")) {
+        Tracer.init()
+    }
+
     // Both the Zeta SDK and the CLI's own clients run on Ktor's OkHttp engine. OkHttp's default
     // Dispatcher uses non-daemon worker threads with a 60-second keepAlive — none of those
     // OkHttpClient instances get closed today (the SDK's `ZetaSdkClient.close()` is a TODO,
@@ -44,35 +53,38 @@ fun main(args: Array<String>) {
     // PrintHelpMessage, …) but rethrows everything else. On the success path AND the
     // "uncaught throwable from a command" path we have to exit ourselves — otherwise the
     // process hangs for a minute after the failure.
-    val exitCode = try {
-        ZetaCommand()
-            .subcommands(
-                VersionCommand(),
-                DiscoverCommand(),
-                StatusCommand(),
-                RegisterCommand(),
-                AuthenticateCommand(),
-                LoginCommand(),
-                LogoutCommand(),
-                ForgetCommand(),
-                HttpCommand(),
-                WsCommand(),
-                ConnectorCommand().subcommands(
-                    ConnectorInspectCommand(),
-                    ConnectorConfigsCommand(),
-                    ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
-                ),
-                PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),
-            )
-            .main(args)
-        0
-    } catch (e: Throwable) {
-        // Renders the message + stacktrace through Logback (so `-v`, NO_COLOR, the
-        // `zeta.stderr.pattern` formatting all apply) instead of the JVM's default uncaught
-        // handler. Without this branch the throwable would print *and then* the process
-        // would block on OkHttp's keepalive — much worse UX than an immediate exit 1.
-        log.error(e) { "Command failed" }
-        1
+    val exitCode = Tracer.root("cli.run", attrs = mapOf("argv" to args.joinToString(" "))) {
+        try {
+            ZetaCommand()
+                .subcommands(
+                    VersionCommand(),
+                    DiscoverCommand(),
+                    StatusCommand(),
+                    RegisterCommand(),
+                    AuthenticateCommand(),
+                    LoginCommand(),
+                    LogoutCommand(),
+                    ForgetCommand(),
+                    HttpCommand(),
+                    WsCommand(),
+                    ConnectorCommand().subcommands(
+                        ConnectorInspectCommand(),
+                        ConnectorConfigsCommand(),
+                        ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
+                    ),
+                    PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),
+                )
+                .main(args)
+            0
+        } catch (e: Throwable) {
+            // Renders the message + stacktrace through Logback (so `-v`, NO_COLOR, the
+            // `zeta.stderr.pattern` formatting all apply) instead of the JVM's default uncaught
+            // handler. Without this branch the throwable would print *and then* the process
+            // would block on OkHttp's keepalive — much worse UX than an immediate exit 1.
+            log.error(e) { "Command failed" }
+            1
+        }
     }
+    Tracer.emit()
     exitProcess(exitCode)
 }

@@ -12,6 +12,7 @@ import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderSections
 import de.gematik.zeta.cli.state.renderEntryJson
 import de.gematik.zeta.cli.state.renderEntryText
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.SdkStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -68,7 +69,9 @@ class LoginCommand : ZetaSessionCommand(name = "login") {
             val ranAuthenticate = initial != SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN
             if (ranAuthenticate) {
                 log.debug { "Initial status was $initial — running authenticate()" }
-                runBlocking { sdk.authenticate().getOrThrow() }
+                runBlocking {
+                    Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
+                }
             }
 
             renderLogin(resource, ranRegister, ranAuthenticate)

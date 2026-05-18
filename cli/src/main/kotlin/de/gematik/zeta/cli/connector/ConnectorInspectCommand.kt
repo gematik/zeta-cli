@@ -17,6 +17,8 @@ import de.gematik.zeta.cli.http.installCurlieLogging
 import de.gematik.zeta.cli.output.OutputFormat
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderSections
+import de.gematik.zeta.cli.trace.HttpTracingPlugin
+import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.plugins.HttpTimeout
 import java.nio.file.Path
@@ -74,6 +76,7 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
             // -vv (DEBUG on de.gematik.zeta.http.wire) toggles full curlie-style request/response
             // logging — same wire log format the rest of the CLI uses.
             installCurlieLogging()
+            install(HttpTracingPlugin)
             engine {
                 cliConfig.proxy?.let {
                     applyProxy(it)
@@ -81,8 +84,8 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
                 }
             }
         }
-        val connector = httpClient.use {
-            runBlocking { ConnectorClient.connect(it, dotkon) }
+        val connector = httpClient.use { http ->
+            runBlocking { Tracer.spanSuspend("connector.connect") { ConnectorClient.connect(http, dotkon) } }
         }
         log.info { "Loaded ${connector.services.serviceInformation.service.size} services from $configFile" }
 

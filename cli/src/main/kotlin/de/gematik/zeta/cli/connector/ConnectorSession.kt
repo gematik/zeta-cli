@@ -8,6 +8,9 @@ import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.http.applyProxy
 import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.zeta.cli.http.installCurlieLogging
+import de.gematik.zeta.cli.trace.HttpTracingPlugin
+import de.gematik.zeta.cli.trace.Span
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
@@ -42,16 +45,52 @@ internal class ConnectorSession(
     @Volatile
     private var cached: ConnectorClient? = null
 
-    /** Connect to the Connector (loads the SDS) on first call; reuse the result thereafter. */
+    /**
+     * Connect to the Connector (loads the SDS) on first call; reuse the result thereafter.
+     * The first-call SDS load is wrapped in a `connector.connect` span so the underlying
+     * `http.request /connector.sds` always has a named, visible parent in the trace tree
+     * regardless of which caller (popp flow, SDK auth via [LazySubjectTokenProvider], …)
+     * happened to trigger it.
+     */
     suspend fun connector(): ConnectorClient =
         cached ?: mutex.withLock {
-            cached ?: ConnectorClient.connect(httpClient, dotkon).also { cached = it }
+            cached ?: Tracer.spanSuspend("connector.connect", attrs = mapOf("url" to dotkon.url)) {
+                ConnectorClient.connect(httpClient, dotkon)
+            }.also { cached = it }
         }
 
     override fun close() {
         httpClient.close()
     }
 }
+
+/**
+ * Wrap a Connector call in a `connector.<op>` span. Reusable across both standalone
+ * `zeta connector …` commands and the popp flow, so popp's connector sub-operations
+ * appear under the same span name format.
+ */
+internal suspend fun <T> ConnectorSession.traced(
+    op: String,
+    attrs: Map<String, Any?> = emptyMap(),
+    block: suspend ConnectorSession.() -> T,
+): T = Tracer.spanSuspend("connector.$op", attrs) { block() }
+
+/**
+ * Variant of [traced] that explicitly parents the span under [parent] instead of the
+ * thread-local current span. Used inside long-lived blocks (e.g. `popp.connect`) to keep
+ * short-lived sub-spans flat at the surrounding parent level rather than nesting deep —
+ * mirrors how [Tracer.spanUnder] is used for the per-frame `popp.ws.*` spans. With
+ * [parent] null (tracer off, or no parent captured) it falls back to [traced]'s
+ * current-span behaviour.
+ */
+internal suspend fun <T> ConnectorSession.tracedUnder(
+    parent: Span?,
+    op: String,
+    attrs: Map<String, Any?> = emptyMap(),
+    block: suspend ConnectorSession.() -> T,
+): T =
+    if (parent != null) Tracer.spanUnder(parent, "connector.$op", attrs) { block() }
+    else Tracer.spanSuspend("connector.$op", attrs) { block() }
 
 /**
  * Resolve a `.kon` by name and build the OkHttp client with the .kon's TLS + curlie
@@ -83,6 +122,7 @@ internal fun openConnectorSession(
             requestTimeoutMillis = requestTimeout.inWholeMilliseconds
         }
         installCurlieLogging()
+        install(HttpTracingPlugin)
         engine {
             proxy?.let {
                 applyProxy(it)

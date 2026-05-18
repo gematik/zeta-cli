@@ -88,6 +88,30 @@ Subcommands that need HTTP read the shared client via `cliConfig.httpClient` and
 
 The `-v/--verbose` option on `ZetaCliktCommand` is `counted()`, so it's sticky — accepted at any depth (`zeta -v status`, `zeta status -v` are both valid). Each `-v` increments: 1 → INFO, 2 → DEBUG, 3+ → TRACE. `Logging.applyVerbosity` is no-op at count 0, so an unspecified `-v` on a deeper command does **not** reset a level set higher up. To globally raise verbosity in tests or dev, prefer `-v` on the root.
 
+### Tracing
+
+`--trace` (env: `ZETA_TRACE=1`) turns on an in-process span tracer (`cli/src/main/kotlin/de/gematik/zeta/cli/trace/`). At end of command, the collected tree prints to stderr via the `de.gematik.zeta.trace` Logback logger (pinned to INFO so it shows regardless of `-v`). When the flag is absent, the tracer is a no-op — every `Tracer.span(...)` short-circuits to `block(NoopSpan)` with zero allocation.
+
+Activation is pre-detected in `Main.kt` by sniffing `args` for `--trace` (and the `ZETA_TRACE` env var) before Clikt parses anything, so the root span is open before the first subcommand runs. The same `--trace` option is also declared on `ZetaCliktCommand` for help-text + value-source completeness.
+
+Span hierarchy:
+
+```
+cli.run
+├─ sdk.init                          (in buildZetaSdkClient)
+├─ sdk.session                       (in ZetaSessionCommand.openSession; wraps the auth flow)
+│  ├─ connector.<op>                 (one per call via ConnectorSession.traced helper)
+│  │  └─ http.request                (Ktor plugin on the connector HttpClient)
+│  └─ popp.connect
+│  ├─ popp.ws.recv  type=…           (sibling of popp.connect, child of sdk.session)
+│  ├─ popp.ws.send  type=…
+│  └─ connector.secureSendApdu       (one per APDU round)
+```
+
+WS message spans are deliberately siblings of `popp.connect`, not children — long-lived connections would otherwise produce an unreadably-deep nest. `PoppClient` takes a `wsSpanParent: Span?` and uses `Tracer.spanUnder(parent, …)` to bypass the ThreadLocal parent lookup.
+
+To wrap a new connector call: `session.traced("opName") { connector().yourCall() }`. To wrap a new SDK / HTTP call inside a command, use `Tracer.span("name") { … }` (blocking) or `Tracer.spanSuspend("name") { … }` (inside a coroutine). Cross-`runBlocking` parent propagation works because `Tracer.spanSuspend` uses `ThreadLocal.asContextElement` to restore the parent on every coroutine dispatch.
+
 ### CLI output styling
 
 Two reusable renderers live in `de.gematik.zeta.cli.output`:
