@@ -28,30 +28,38 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
     private val connectTimeoutOpt: Duration? by option(
         "--connect-timeout",
         metavar = "SECONDS",
-        help = "TCP connection timeout in seconds (default: 5).",
+        envvar = "ZETA_CONNECT_TIMEOUT",
+        help = "TCP connection timeout in seconds. Default: 5. (env: ZETA_CONNECT_TIMEOUT)",
     ).convert { it.toLong().seconds }
 
     private val requestTimeoutOpt: Duration? by option(
         "--request-timeout",
         metavar = "SECONDS",
-        help = "Total HTTP request timeout in seconds (default: 30).",
+        envvar = "ZETA_REQUEST_TIMEOUT",
+        help = "Total HTTP request timeout in seconds. Default: 30. (env: ZETA_REQUEST_TIMEOUT)",
     ).convert { it.toLong().seconds }
 
     private val insecure: Boolean by option(
         "-k", "--insecure",
-        help = "Disable TLS certificate verification. Dangerous — use only for testing.",
+        envvar = "ZETA_INSECURE",
+        help = "Disable TLS certificate verification. Dangerous — use only for testing. " +
+            "(env: ZETA_INSECURE)",
     ).flag(default = false)
 
     private val caCertFiles: List<Path> by option(
         "--ca-cert",
         metavar = "FILE",
-        help = "Add a CA certificate (PEM) to the trust store. Default JVM roots are kept. Repeat for multiple files.",
+        envvar = "ZETA_CA_CERT",
+        help = "Add a CA certificate (PEM) to the trust store. Default JVM roots are kept. " +
+            "Repeat the flag for multiple files; the env var supplies a single file. " +
+            "(env: ZETA_CA_CERT)",
     ).path(mustExist = true, canBeFile = true, canBeDir = false).multiple()
 
     private val outputFormatOpt: OutputFormat? by option(
         "-o", "--output-format",
         metavar = "FORMAT",
-        help = "Output format: text (default) or json.",
+        envvar = "ZETA_OUTPUT_FORMAT",
+        help = "Output format: text (default), json, or raw. (env: ZETA_OUTPUT_FORMAT)",
     ).enum<OutputFormat>(ignoreCase = true)
 
     private val connectorConfigOpt: String? by option(

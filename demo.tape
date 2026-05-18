@@ -1,5 +1,5 @@
 # VHS tape — animated demo of the zeta CLI.
-# Render with: just demo  (or: vhs demo.tape)
+# Render with: just demo   (or: vhs demo.tape)
 # Requires: brew install vhs  +  ./gradlew :cli:installDist
 
 Output demo.gif
@@ -7,10 +7,10 @@ Output demo.gif
 Set Shell           "bash"
 Set FontSize        16
 Set Width           1200
-Set Height          720
+Set Height          760
 Set Padding         20
 Set Theme           "Catppuccin Mocha"
-Set TypingSpeed     45ms
+Set TypingSpeed     40ms
 Set PlaybackSpeed   1.0
 
 # Put the freshly-built distribution on PATH without recording the setup.
@@ -19,40 +19,55 @@ Type "export PATH=$PWD/cli/build/install/zeta/bin:$PATH" Enter
 Type "clear" Enter
 Show
 
-# 1) Top-level help — the lay of the land.
+# 1) Lay of the land.
 Type "zeta --help"
-Sleep 600ms
+Sleep 500ms
 Enter
-Sleep 4s
+Sleep 5s
 
-Type "clear"
-Enter
+Type "clear" Enter
 Sleep 300ms
 
-# 2) Version — quickest proof that the CLI is wired up.
+# 2) Version — quickest proof it's wired up.
 Type "zeta version"
 Sleep 400ms
 Enter
-Sleep 2s
+Sleep 1500ms
 
-Type "clear"
-Enter
+Type "clear" Enter
 Sleep 300ms
 
-# 3) Inspect demo
-Type "zeta inspect https://popp.dev.poppservice.de"
-Sleep 600ms
+# 3) Discover a Zeta-Guard-protected resource (RFC 9728). No auth needed.
+Type "zeta discover https://popp.dev.poppservice.de"
+Sleep 500ms
 Enter
-Sleep 4s
+Sleep 6s
 
-Type "clear"
-Enter
+Type "clear" Enter
 Sleep 300ms
 
-# 4) Register help — second showcase command.
-Type "zeta register --help"
-Sleep 600ms
+# 4) Status — show what got cached locally.
+Type "zeta status"
+Sleep 400ms
 Enter
-Sleep 4s
+Sleep 3500ms
+
+Type "clear" Enter
+Sleep 300ms
+
+# 5) Authentication options — Connector method or PKCS#12 fallback.
+Type "zeta login --help"
+Sleep 500ms
+Enter
+Sleep 6s
+
+Type "clear" Enter
+Sleep 300ms
+
+# 6) PoPP via the Konnektor — the eGK scenario.
+Type "zeta popp connector --help"
+Sleep 500ms
+Enter
+Sleep 5s
 
 Sleep 1s

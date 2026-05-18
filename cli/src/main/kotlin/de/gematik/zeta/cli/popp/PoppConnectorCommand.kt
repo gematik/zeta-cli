@@ -55,7 +55,9 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
     private val connectionType: ConnectionType by option(
         "--connection",
         metavar = "TYPE",
-        help = "Smartcard connection type. Default: contact.",
+        envvar = "ZETA_POPP_CONNECTION",
+        help = "Smartcard connection type: contact or contactless. Default: contact. " +
+            "(env: ZETA_POPP_CONNECTION)",
     ).enum<ConnectionType>(ignoreCase = true).default(ConnectionType.CONTACT)
 
     override fun help(context: Context) =

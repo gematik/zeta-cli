@@ -39,12 +39,15 @@ class LoginCommand : ZetaSessionCommand(name = "login") {
     private val scopes: List<String> by option(
         "-s", "--scope",
         metavar = "NAME",
-        help = "OAuth2 scope to request. Repeatable; at least one is required.",
+        envvar = "ZETA_SCOPE",
+        help = "OAuth2 scope to request. Repeatable; at least one is required. " +
+            "The env var supplies a single scope. (env: ZETA_SCOPE)",
     ).multiple(required = true)
 
     private val reveal: Boolean by option(
         "--reveal",
-        help = "Include normally-redacted secrets in the resulting status output.",
+        envvar = "ZETA_REVEAL",
+        help = "Include normally-redacted secrets in the resulting status output. (env: ZETA_REVEAL)",
     ).flag(default = false)
 
     override fun help(context: Context) =

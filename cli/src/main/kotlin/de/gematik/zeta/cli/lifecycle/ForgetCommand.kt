@@ -43,12 +43,16 @@ class ForgetCommand : ZetaProfileCommand(name = "forget") {
 
     private val all: Boolean by option(
         "--all",
-        help = "Wipe the entire profile storage file. Cannot be combined with a URL.",
+        envvar = "ZETA_FORGET_ALL",
+        help = "Wipe the entire profile storage file. Cannot be combined with a URL. " +
+            "(env: ZETA_FORGET_ALL)",
     ).flag(default = false)
 
     private val force: Boolean by option(
         "--force",
-        help = "Skip the interactive confirmation prompt. Required in non-interactive (scripted) mode.",
+        envvar = "ZETA_FORGET_FORCE",
+        help = "Skip the interactive confirmation prompt. Required in non-interactive (scripted) mode. " +
+            "(env: ZETA_FORGET_FORCE)",
     ).flag(default = false)
 
     override fun help(context: Context) =

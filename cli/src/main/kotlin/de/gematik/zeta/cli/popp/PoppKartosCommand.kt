@@ -35,7 +35,9 @@ class PoppKartosCommand : ZetaSessionCommand(name = "kartos") {
     private val image: Path by option(
         "-i", "--image",
         metavar = "PATH",
-        help = "XML card image to load into the kartos smartcard simulator.",
+        envvar = "ZETA_POPP_KARTOS_IMAGE",
+        help = "XML card image to load into the kartos smartcard simulator. " +
+            "(env: ZETA_POPP_KARTOS_IMAGE)",
     ).path(mustExist = true, canBeFile = true, canBeDir = false).required()
 
     private val executable: String by option(

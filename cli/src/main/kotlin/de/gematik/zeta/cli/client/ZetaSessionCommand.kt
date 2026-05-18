@@ -112,7 +112,8 @@ internal class P12AuthOptions : AuthMethodOptions(
     val file: Path by option(
         "--auth-p12-file",
         metavar = "FILE",
-        help = "PKCS#12 keystore file.",
+        envvar = "ZETA_AUTH_P12_FILE",
+        help = "PKCS#12 keystore file. (env: ZETA_AUTH_P12_FILE)",
     ).path(canBeFile = true, canBeDir = false).requiredOpt()
 
     val alias: String by option(

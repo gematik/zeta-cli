@@ -48,13 +48,17 @@ class WsCommand : ZetaSessionCommand("ws") {
     private val requestHeaders: List<String> by option(
         "-H", "--header",
         metavar = "HEADER",
-        help = "Extra header on the WS upgrade request, 'Name: Value'. Repeatable.",
+        envvar = "ZETA_WS_HEADER",
+        help = "Extra header on the WS upgrade request, 'Name: Value'. Repeat the flag for " +
+            "multiple headers; the env var supplies one. (env: ZETA_WS_HEADER)",
     ).multiple()
 
     private val scopes: List<String> by option(
         "-s", "--scope",
         metavar = "NAME",
-        help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least one is required.",
+        envvar = "ZETA_SCOPE",
+        help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least " +
+            "one is required. The env var supplies a single scope. (env: ZETA_SCOPE)",
     ).multiple(required = true)
 
     private val poppToken: String? by option(

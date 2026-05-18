@@ -39,30 +39,39 @@ class HttpCommand : ZetaSessionCommand("http") {
     private val requestMethod: String by option(
         "-X", "--request",
         metavar = "METHOD",
-        help = "HTTP method to use. Default: GET.",
+        envvar = "ZETA_HTTP_METHOD",
+        help = "HTTP method to use. Default: GET. (env: ZETA_HTTP_METHOD)",
     ).default("GET")
 
     private val requestHeaders: List<String> by option(
         "-H", "--header",
         metavar = "HEADER",
-        help = "Extra request header in 'Name: Value' format. Repeatable.",
+        envvar = "ZETA_HTTP_HEADER",
+        help = "Extra request header in 'Name: Value' format. Repeat the flag for multiple " +
+            "headers; the env var supplies one. (env: ZETA_HTTP_HEADER)",
     ).multiple()
 
     private val requestBody: String? by option(
         "-d", "--data",
         metavar = "DATA",
-        help = "Request body as a literal string. Forces method to POST when -X is not set.",
+        envvar = "ZETA_HTTP_DATA",
+        help = "Request body as a literal string. Forces method to POST when -X is not set. " +
+            "(env: ZETA_HTTP_DATA)",
     )
 
     private val include: Boolean by option(
         "-i", "--include",
-        help = "Include the HTTP response status line and headers in the output.",
+        envvar = "ZETA_HTTP_INCLUDE",
+        help = "Include the HTTP response status line and headers in the output. " +
+            "(env: ZETA_HTTP_INCLUDE)",
     ).flag(default = false)
 
     private val scopes: List<String> by option(
         "-s", "--scope",
         metavar = "NAME",
-        help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least one is required.",
+        envvar = "ZETA_SCOPE",
+        help = "OAuth2 scope to request from the Zeta-Guard auth server. Repeatable; at least " +
+            "one is required. The env var supplies a single scope. (env: ZETA_SCOPE)",
     ).multiple(required = true)
 
     private val poppToken: String? by option(

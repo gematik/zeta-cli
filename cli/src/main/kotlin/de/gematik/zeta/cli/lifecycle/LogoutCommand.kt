@@ -27,7 +27,8 @@ class LogoutCommand : ZetaSessionCommand(name = "logout") {
 
     private val reveal: Boolean by option(
         "--reveal",
-        help = "Include normally-redacted secrets in the resulting status output.",
+        envvar = "ZETA_REVEAL",
+        help = "Include normally-redacted secrets in the resulting status output. (env: ZETA_REVEAL)",
     ).flag(default = false)
 
     override fun help(context: Context) =

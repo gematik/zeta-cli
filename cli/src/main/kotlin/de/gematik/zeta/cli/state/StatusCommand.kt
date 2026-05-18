@@ -49,9 +49,10 @@ class StatusCommand : ZetaProfileCommand(name = "status") {
 
     private val reveal: Boolean by option(
         "--reveal",
+        envvar = "ZETA_REVEAL",
         help = "Include normally-redacted secrets in the output: the raw access-token JWS, " +
             "the dynamic-client `client_secret`, and the `registration_access_token`. " +
-            "Refresh tokens are never emitted regardless.",
+            "Refresh tokens are never emitted regardless. (env: ZETA_REVEAL)",
     ).flag(default = false)
 
     override fun help(context: Context) =
