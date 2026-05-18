@@ -20,7 +20,7 @@ private val log = KotlinLogging.logger {}
 
 /**
  * `zeta connector get cards` — list every card the Connector sees in its terminals. Useful
- * for picking the right `--connector-card-handle` / `--connector-telematik-id` for the SMC-B
+ * for picking the right `--auth-connector-card-handle` / `--auth-connector-telematik-id` for the SMC-B
  * authentication flow, or the eGK card-handle argument for `zeta popp connector`.
  */
 class ConnectorGetCardsCommand : ZetaCliktCommand(name = "cards") {

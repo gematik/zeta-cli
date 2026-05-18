@@ -157,8 +157,8 @@ in a single `ExternalAuthenticate` round trip.
 
 In Clikt's standard precedence (high → low):
 
-1. **CLI flag** — `--connector-telematik-id=…`
-2. **Environment variable** — most options expose one (e.g. `ZETA_CONNECTOR_TELEMATIK_ID`)
+1. **CLI flag** — `--auth-connector-telematik-id=…`
+2. **Environment variable** — most options expose one (e.g. `ZETA_AUTH_CONNECTOR_TELEMATIK_ID`)
 3. **Config file** — `./zeta.yaml`, then `$XDG_CONFIG_HOME/telematik/zeta/zeta.yaml`
 4. **Option default**
 

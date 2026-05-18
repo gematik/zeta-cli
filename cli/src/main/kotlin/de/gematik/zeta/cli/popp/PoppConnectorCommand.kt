@@ -13,6 +13,7 @@ import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.connector.ConnectorSession
+import de.gematik.zeta.cli.connector.openConnectorSession
 import de.gematik.zeta.sdk.ZetaSdkClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -26,9 +27,11 @@ private const val DEFAULT_SERVICE_URL =
  * `zeta popp connector [EGK_HANDLE]` — drive the PoPP service through the Connector
  * scenario and print the resulting token.
  *
- * The single Connector opened by [ZetaSessionCommand]'s SMC-B auth flow is reused for the
- * `StartCardSession` / `SecureSendAPDU` / `StopCardSession` calls — we don't open a second
- * connection.
+ * The Connector is needed twice: once (optionally) for zeta auth, and once for the eGK
+ * `StartCardSession` / `SecureSendAPDU` / `StopCardSession` calls that drive the PoPP
+ * flow. When zeta auth uses the Connector method, its session is reused here — zero extra
+ * round trips. When zeta auth uses PKCS#12, we open a dedicated Connector session for the
+ * PoPP flow and close it before returning.
  */
 class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
 
@@ -59,17 +62,20 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
         "Retrieve a PoPP token via the Connector / signed-scenario flow."
 
     override fun runCommand() {
-        openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, session ->
-            if (session == null) {
-                throw UsageError(
-                    "popp connector needs Connector authentication (the PKCS#12 fallback " +
-                        "doesn't reach the Connector's CardService). Pass " +
-                        "--connector-telematik-id, --connector-card-iccsn, or " +
-                        "--connector-card-handle.",
-                )
+        openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, authSession ->
+            val poppSession = authSession ?: openConnectorSession(
+                connectorConfigName = cliConfig.connectorConfig,
+                connectTimeout = cliConfig.connectTimeout,
+                requestTimeout = cliConfig.requestTimeout,
+                proxy = cliConfig.proxy,
+            )
+            try {
+                val token = runPoppFlow(sdk, poppSession)
+                emitPoppToken(token, cliConfig.outputFormat, colorize)
+            } finally {
+                // Only close what we opened; the auth session is owned by openSession().
+                if (authSession == null) poppSession.close()
             }
-            val token = runPoppFlow(sdk, session)
-            emitPoppToken(token, cliConfig.outputFormat, colorize)
         }
     }
 

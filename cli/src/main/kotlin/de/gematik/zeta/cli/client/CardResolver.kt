@@ -9,7 +9,8 @@ private val log = KotlinLogging.logger {}
 /**
  * Resolve a Connector SMC-B card handle from one of three identifiers — exactly one of
  * [cardHandle], [iccsn], or [telematikId] must be non-null. Mutual exclusion is enforced
- * upstream by [ZetaSessionCommand]'s auth-selection validation; this function trusts that.
+ * upstream by Clikt's `mutuallyExclusiveOptions` on [ConnectorAuthOptions]; this function
+ * trusts that.
  *
  * The explicit-handle case issues zero Connector requests. For ICCSN / Telematik-ID we
  * enumerate SMC-Bs via [ConnectorClient.listSmcbCards] **exactly once** (which includes
@@ -43,7 +44,7 @@ internal suspend fun resolveSmcbCardHandle(
             matches.maxByOrNull { it.certificate?.notBefore?.time ?: Long.MIN_VALUE }
         }
 
-        else -> error("unreachable: validateAuthSelection ensured one identifier is set")
+        else -> error("unreachable: mutuallyExclusiveOptions ensured one identifier is set")
     }
 
     return match?.cardHandle ?: throw UsageError(buildAvailabilityListing(iccsn, telematikId, cards))

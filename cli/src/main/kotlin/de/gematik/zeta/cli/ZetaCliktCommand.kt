@@ -55,7 +55,7 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
     ).enum<OutputFormat>(ignoreCase = true)
 
     private val connectorConfigOpt: String? by option(
-        "--connector-config",
+        "-c", "--connector-config",
         metavar = "NAME",
         envvar = "ZETA_CONNECTOR_CONFIG",
         help = "Name or path of a .kon (Connector) configuration file. Resolved as: " +

@@ -24,7 +24,7 @@ fun zetaCwdConfigFile(): Path? = Path(ZETA_CONFIG_FILENAME).takeIf { it.exists()
  * wins outright when present — the user-global XDG file is ignored, never merged. This
  * keeps the project file self-contained: dropping one in a directory fully describes the
  * intended config, with no surprise inheritance from `$XDG_CONFIG_HOME` (e.g. a stray
- * `connector-telematik-id` there leaking into a project that wants only `--p12-*`).
+ * `auth-connector-telematik-id` there leaking into a project that wants only `--auth-p12-*`).
  * Falls back to the XDG file when cwd has none.
  */
 fun discoverZetaConfigFile(): Path? =

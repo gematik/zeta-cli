@@ -20,7 +20,8 @@ private val log = KotlinLogging.logger {}
  *
  * ```yaml
  * connector-config: default
- * connector-telematik-id: "${ZETA_CONNECTOR_TELEMATIK_ID}"
+ * auth-method: connector
+ * auth-connector-telematik-id: "${ZETA_AUTH_CONNECTOR_TELEMATIK_ID}"
  *
  * http:
  *   header:
@@ -39,7 +40,7 @@ private val log = KotlinLogging.logger {}
  *   3. Top-level key: `<option-name>`.
  *
  * The two-level lookup means options that live on a base class shared by several
- * subcommands (e.g. `--connector-telematik-id` on [de.gematik.zeta.cli.client.ZetaSessionCommand])
+ * subcommands (e.g. `--auth-connector-telematik-id` on [de.gematik.zeta.cli.client.ZetaSessionCommand])
  * can be set once at the top of the file rather than under both `http:` and `ws:`. The
  * scoped form still wins per-section.
  *
