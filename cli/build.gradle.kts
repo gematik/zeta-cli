@@ -5,9 +5,15 @@ plugins {
     kotlin("plugin.serialization")
 }
 
+// SDK version: -PzetaSdkVersion=… overrides the catalog default. `latest` (or any locally
+// publishToMavenLocal'd tag) resolves from the mavenLocal block in the common conventions
+// plugin; numeric releases resolve from Maven Central.
+val zetaSdkVersion: String =
+    providers.gradleProperty("zetaSdkVersion").orElse(libs.versions.zeta.sdk).get()
+
 dependencies {
     implementation(project(":connector"))
-    implementation(libs.zeta.sdk) {
+    implementation("de.gematik.zeta:zeta-sdk-jvm:$zetaSdkVersion") {
         // zeta-sdk transitively pulls slf4j-simple, which clashes with our Logback binding.
         exclude(group = "org.slf4j", module = "slf4j-simple")
     }
@@ -37,9 +43,9 @@ application {
 val generateBuildConfig by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/sources/buildconfig/kotlin/main")
     val versionStr = providers.provider { project.version.toString() }
-    val zetaSdkVersion = libs.versions.zeta.sdk.get()
+    val resolvedSdkVersion = zetaSdkVersion
     inputs.property("version", versionStr)
-    inputs.property("zetaSdkVersion", zetaSdkVersion)
+    inputs.property("zetaSdkVersion", resolvedSdkVersion)
     outputs.dir(outputDir)
     doLast {
         val pkgDir = outputDir.get().asFile.resolve("de/gematik/zeta/cli")
@@ -50,7 +56,7 @@ val generateBuildConfig by tasks.registering {
 
             internal object BuildConfig {
                 const val VERSION: String = "${versionStr.get()}"
-                const val ZETA_SDK_VERSION: String = "$zetaSdkVersion"
+                const val ZETA_SDK_VERSION: String = "$resolvedSdkVersion"
             }
 
             """.trimIndent()

@@ -313,4 +313,20 @@ just install   # build and brew-install locally from Formula/zeta.rb
 just demo      # render demo.gif from demo.tape (requires vhs)
 ```
 
+### Building against a different `zeta-sdk`
+
+By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.0.1`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
+
+```sh
+# Use whatever you publishToMavenLocal'd as `latest`
+./gradlew :cli:installDist -PzetaSdkVersion=latest
+
+# Or any other tag living in your ~/.m2/repository/de/gematik/zeta/zeta-sdk-jvm/
+./gradlew :cli:installDist -PzetaSdkVersion=1.0.2-local
+```
+
+Set it persistently in `~/.gradle/gradle.properties` (`zetaSdkVersion=latest`) to avoid passing the flag every time — Gradle will still let project- or command-line values override that.
+
+`zeta version` prints the resolved SDK version so you always know which one shipped in the binary.
+
 See [`CLAUDE.md`](CLAUDE.md) for the full architecture and build notes, and [`OVERVIEW.md`](OVERVIEW.md) for the runtime architecture diagram.
