@@ -129,15 +129,17 @@ Available on every command.
 | Option | Env var | Default |
 | --- | --- | --- |
 | `-v, --verbose` (repeatable) | — | `warn` (0). `-v`=info, `-vv`=debug, `-vvv`=trace |
-| `--connect-timeout=<seconds>` | — | `5` |
-| `--request-timeout=<seconds>` | — | `30` |
-| `-k, --insecure` | — | `false` (TLS verified) |
-| `--ca-cert=<file>` (repeatable) | — | JVM default trust store |
-| `-o, --output-format=text\|json\|raw` | — | `text` |
+| `--connect-timeout=<seconds>` | `ZETA_CONNECT_TIMEOUT` | `5` |
+| `--request-timeout=<seconds>` | `ZETA_REQUEST_TIMEOUT` | `30` |
+| `-k, --insecure` | `ZETA_INSECURE` | `false` (TLS verified) |
+| `--ca-cert=<file>` (repeatable) | `ZETA_CA_CERT` | JVM default trust store |
+| `-o, --output-format=text\|json\|raw` | `ZETA_OUTPUT_FORMAT` | `text` |
 | `-c, --connector-config=<name>` | `ZETA_CONNECTOR_CONFIG` | `default` |
 | `--proxy=<url>` | `ZETA_PROXY` | — |
 | `--proxy-user=<user>` | `ZETA_PROXY_USER` | — |
 | `--proxy-password=<password>` | `ZETA_PROXY_PASSWORD` | — |
+
+`-v` is the one exception to the env-var rule: Clikt's repeat-count flag doesn't pair with a single env value. Use `-v`/`-vv`/`-vvv` on the CLI, or set `verbose:` in `zeta.yaml`.
 
 `--proxy` accepts `http[s]://[user:pass@]host[:port]`. Use `--proxy-user` / `--proxy-password` to keep credentials out of the URL.
 
@@ -177,7 +179,7 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--auth-p12-file=<file>` | — | **required** |
+| `--auth-p12-file=<file>` | `ZETA_AUTH_P12_FILE` | **required** |
 | `--auth-p12-alias=<name>` | `ZETA_AUTH_P12_ALIAS` | `alias` |
 | `--auth-p12-password=<password>` | `ZETA_AUTH_P12_PASSWORD` | `00` |
 
@@ -187,33 +189,33 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `-s, --scope=<name>` (repeatable, required) — `authenticate` / `login` only | — | — |
-| `--reveal` — include redacted secrets in status output | — | `false` |
+| `-s, --scope=<name>` (repeatable, required) — `authenticate` / `login` only | `ZETA_SCOPE` | — |
+| `--reveal` — include redacted secrets in status output | `ZETA_REVEAL` | `false` |
 
 #### `forget`
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--all` — wipe entire profile | — | `false` |
-| `--force` — skip interactive confirmation | — | `false` |
+| `--all` — wipe entire profile | `ZETA_FORGET_ALL` | `false` |
+| `--force` — skip interactive confirmation | `ZETA_FORGET_FORCE` | `false` |
 
 #### `http`
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `-X, --request=<method>` | — | `GET` (or `POST` if `-d` set) |
-| `-H, --header=<name: value>` (repeatable) | — | — |
-| `-d, --data=<body>` | — | — |
-| `-i, --include` — print status + headers | — | `false` |
-| `-s, --scope=<name>` (repeatable, **required**) | — | — |
+| `-X, --request=<method>` | `ZETA_HTTP_METHOD` | `GET` (or `POST` if `-d` set) |
+| `-H, --header=<name: value>` (repeatable) | `ZETA_HTTP_HEADER` | — |
+| `-d, --data=<body>` | `ZETA_HTTP_DATA` | — |
+| `-i, --include` — print status + headers | `ZETA_HTTP_INCLUDE` | `false` |
+| `-s, --scope=<name>` (repeatable, **required**) | `ZETA_SCOPE` | — |
 | `-p, --popp-token=<token>` | `ZETA_POPP_TOKEN` | — |
 
 #### `ws`
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `-H, --header=<name: value>` (repeatable) | — | — |
-| `-s, --scope=<name>` (repeatable, **required**) | — | — |
+| `-H, --header=<name: value>` (repeatable) | `ZETA_WS_HEADER` | — |
+| `-s, --scope=<name>` (repeatable, **required**) | `ZETA_SCOPE` | — |
 | `-p, --popp-token=<token>` | `ZETA_POPP_TOKEN` | — |
 
 #### `popp connector [EGK_HANDLE]`
@@ -221,7 +223,7 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 | Option | Env var | Default |
 | --- | --- | --- |
 | `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
-| `--connection=contact\|contactless` | — | `contact` |
+| `--connection=contact\|contactless` | `ZETA_POPP_CONNECTION` | `contact` |
 
 `EGK_HANDLE` is positional and optional — auto-picked when exactly one eGK is visible.
 
@@ -229,9 +231,11 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `-i, --image=<path>` | — | — |
+| `-i, --image=<path>` | `ZETA_POPP_KARTOS_IMAGE` | — |
 | `--kartos-bin=<path>` | `ZETA_KARTOS_BIN` | `kartos` on `PATH` |
 | `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
+
+**Note on repeatable options.** `--ca-cert`, `--header`, and `--scope` accept multiple values on the CLI (repeat the flag) and in `zeta.yaml` (YAML list), but their env var holds only a single value. Use the CLI flag or YAML when you need more than one.
 
 ## Configuration file: `zeta.yaml`
 
