@@ -24,7 +24,15 @@ import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.system.exitProcess
 
+/**
+ * The raw argv from [main], stashed so [ZetaCliktCommand] can echo it once at DEBUG —
+ * `zeta <args…>` — to make "what command actually ran" obvious in `-vv` traces.
+ */
+internal var invocationArgs: Array<String> = emptyArray()
+    private set
+
 fun main(args: Array<String>) {
+    invocationArgs = args
     // Must run before *any* SLF4J access — Logback resolves `${zeta.stderr.pattern:-…}` at
     // config-load time, which is triggered by the first `LoggerFactory.getLogger` call. If
     // we let a top-level `val log = KotlinLogging.logger {}` initialize before this line,

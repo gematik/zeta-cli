@@ -15,6 +15,7 @@ import com.github.ajalt.clikt.parameters.types.path
 import com.github.ajalt.mordant.rendering.AnsiLevel
 import de.gematik.zeta.cli.http.parseProxyConfig
 import de.gematik.zeta.cli.output.OutputFormat
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -134,8 +135,31 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         }
 
         Logging.applyVerbosity(config.verbose)
+        // Once per invocation, fire two startup lines on the leaf command:
+        //   - INFO: zeta-cli + zeta-sdk versions, so -v traces self-identify which build
+        //     produced them
+        //   - DEBUG: echo argv as "zeta …" so -vv shows exactly what was run
+        // Gating on `invokedSubcommand == null` keeps it to the leaf — without that, nested
+        // commands (e.g. `connector get cards`) would each emit it.
+        if (currentContext.invokedSubcommand == null) {
+            invocationLog.info { "zeta-cli ${BuildConfig.VERSION}, zeta-sdk ${BuildConfig.ZETA_SDK_VERSION}" }
+            invocationLog.debug { "zeta " + invocationArgs.joinToString(" ", transform = ::shellQuote) }
+        }
         runCommand()
     }
 
     protected open fun runCommand(): Unit = Unit
+}
+
+private val invocationLog = KotlinLogging.logger("de.gematik.zeta.cli.invocation")
+
+/**
+ * POSIX-safe quoting: bareword if every char is shell-neutral, otherwise single-quoted with
+ * embedded single quotes escaped as `'\''`. Empty string → `''`. Matches how `set -x` /
+ * `xtrace` would render the argv.
+ */
+private fun shellQuote(s: String): String {
+    if (s.isEmpty()) return "''"
+    val safe = s.all { it.isLetterOrDigit() || it in "@%+=:,./-_" }
+    return if (safe) s else "'" + s.replace("'", "'\\''") + "'"
 }
