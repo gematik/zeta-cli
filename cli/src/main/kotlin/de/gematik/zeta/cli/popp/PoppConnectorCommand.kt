@@ -75,12 +75,9 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 proxy = cliConfig.proxy,
             )
             try {
-                // Make the SDK acquire (or refresh) its tokens up-front, before any popp /
-                // Connector work. Keeps SDS load + SMC-B ExternalAuthenticate scoped to a
-                // sibling `sdk.authenticate` span instead of mixing into popp.flow.
-                runBlocking {
-                    Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
-                }
+                // sdk.ws() handles discover/register/authenticate on first call when needed,
+                // so we don't pre-flight an explicit sdk.authenticate() here — that variant
+                // skips discover/register and fails on cold profiles.
                 val token = runPoppFlow(sdk, poppSession)
                 emitPoppToken(token, cliConfig.outputFormat, colorize)
             } finally {

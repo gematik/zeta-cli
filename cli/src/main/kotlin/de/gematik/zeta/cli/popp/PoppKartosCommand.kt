@@ -62,13 +62,7 @@ class PoppKartosCommand : ZetaSessionCommand(name = "kartos") {
         openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, _ ->
             // The Connector session (when present) isn't used in the Standard flow — kartos
             // executes the APDUs locally. ZetaSessionCommand will close it for us.
-            //
-            // Run SDK authenticate up-front so its work (SDS load + ExternalAuthenticate when
-            // tokens are cold) stays scoped to a sibling `sdk.authenticate` span instead of
-            // mixing into popp.flow.
-            runBlocking {
-                Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
-            }
+            // sdk.ws() handles discover/register/authenticate on first call when needed.
             val token = runPoppFlow(sdk)
             emitPoppToken(token, cliConfig.outputFormat, colorize)
         }
