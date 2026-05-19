@@ -39,6 +39,7 @@ import io.ktor.client.HttpClient
 import java.security.cert.X509Certificate
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.measureTimedValue
 import de.gematik.connector.api.gematik.conn.authsignatureservice741.Operations as AuthSignatureOperations
 import de.gematik.connector.api.gematik.conn.certificateservice602.Operations as CertificateServiceOperations
 
@@ -504,13 +505,14 @@ class ConnectorClient(
             dotkon: Dotkon,
         ): ConnectorClient {
             log.debug { "Connecting to Connector at ${dotkon.url} (rewriteServiceEndpoints=${dotkon.rewriteServiceEndpoints})" }
-            val raw = loadConnectorServices(httpClient, dotkon.url)
-            val services =
-                if (dotkon.rewriteServiceEndpoints) {
-                    raw.withRewrittenEndpoints(dotkon.url)
-                } else {
-                    raw
-                }
+            val (raw, loadTime) = measureTimedValue { loadConnectorServices(httpClient, dotkon.url) }
+            log.debug { "loadConnectorServices took $loadTime" }
+            val (services, rewriteTime) = measureTimedValue {
+                if (dotkon.rewriteServiceEndpoints) raw.withRewrittenEndpoints(dotkon.url) else raw
+            }
+            if (dotkon.rewriteServiceEndpoints) {
+                log.debug { "Endpoint rewrite took $rewriteTime" }
+            }
             log.debug {
                 "Connector connected: ${services.serviceInformation.service.size} service(s) " +
                     "advertised (${services.serviceInformation.service.joinToString { it.name }})"

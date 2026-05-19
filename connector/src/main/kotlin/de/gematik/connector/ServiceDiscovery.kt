@@ -9,6 +9,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.isSuccess
+import kotlin.time.measureTimedValue
 import kotlinx.serialization.Serializable
 import nl.adaptivity.xmlutil.serialization.XML
 import nl.adaptivity.xmlutil.serialization.XmlElement
@@ -204,19 +205,27 @@ private fun rewriteLocation(location: String, base: Url): String =
 suspend fun loadConnectorServices(httpClient: HttpClient, baseUrl: String): ConnectorServices {
     val sdsUrl = "${baseUrl.trimEnd('/')}/$SDS_PATH"
     log.debug { "Loading service directory from $sdsUrl" }
-    val response = httpClient.get(sdsUrl) {
-        accept(ContentType.Text.Xml)
-        accept(ContentType.Application.Xml)
+    val (response, fetchTime) = measureTimedValue {
+        httpClient.get(sdsUrl) {
+            accept(ContentType.Text.Xml)
+            accept(ContentType.Application.Xml)
+        }
     }
+    log.debug { "SDS GET $sdsUrl took $fetchTime (status ${response.status.value})" }
     if (!response.status.isSuccess()) {
         // Body is logged at -vv via the wire logger; keep this message single-line.
         throw ConnectorServicesException(
             "Unexpected HTTP ${response.status.value} ${response.status.description} fetching $sdsUrl",
         )
     }
-    val body = response.bodyAsText()
+    val (body, readTime) = measureTimedValue { response.bodyAsText() }
+    log.debug { "SDS body read (${body.length} chars) took $readTime" }
     return try {
-        defaultXml.decodeFromString(ConnectorServices.serializer(), body)
+        val (services, parseTime) = measureTimedValue {
+            defaultXml.decodeFromString(ConnectorServices.serializer(), body)
+        }
+        log.debug { "SDS XML parse took $parseTime (${services.serviceInformation.service.size} services)" }
+        services
     } catch (e: Exception) {
         throw ConnectorServicesException("Could not parse SDS at $sdsUrl: ${e.message}", e)
     }
