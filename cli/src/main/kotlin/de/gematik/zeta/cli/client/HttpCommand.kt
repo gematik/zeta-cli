@@ -45,10 +45,12 @@ class HttpCommand : ZetaSessionCommand("http") {
 
     private val requestHeaders: List<String> by option(
         "-H", "--header",
-        metavar = "HEADER",
+        metavar = "NAME: VALUE",
         envvar = "ZETA_HTTP_HEADER",
-        help = "Extra request header in 'Name: Value' format. Repeat the flag for multiple " +
-            "headers; the env var supplies one. (env: ZETA_HTTP_HEADER)",
+        help = "Extra request header. Format 'Name: Value' — split on the first ':', both " +
+            "sides trimmed. Repeat the flag for multiple headers " +
+            "(e.g. -H 'X-A: 1' -H 'X-B: 2'); in zeta.yaml use a YAML list under " +
+            "http.header; the env var supplies one. (env: ZETA_HTTP_HEADER)",
     ).multiple()
 
     private val requestBody: String? by option(

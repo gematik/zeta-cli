@@ -1,7 +1,10 @@
 package de.gematik.connector
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration
+import kotlin.time.measureTimedValue
 
 class ServiceDiscoveryTest {
 
@@ -102,5 +105,49 @@ class ServiceDiscoveryTest {
             "http://localhost:1234/ws/EventService",
             rewritten.serviceInformation.service[0].versions.version[0].endpointTLS?.location,
         )
+    }
+
+    /**
+     * Parsing performance regression test. Uses a real Konnektor-emitted SDS captured into
+     * `src/test/resources/connector.sds` (12 services across ~20 versions). The first parse
+     * pays xmlutil reflection + class-loading; subsequent parses are steady-state.
+     *
+     * Hard threshold is intentionally generous (5× the typical warm time observed locally)
+     * so this fails only on catastrophic regressions, not on slow CI hardware.
+     */
+    @Test
+    fun `parses real connector sds within budget`() {
+        val xml = javaClass.classLoader.getResource("connector.sds")?.readText()
+            ?: error("connector.sds not on test classpath — missing from src/test/resources/?")
+
+        val (cold, coldTime) = measureTimedValue {
+            defaultXml.decodeFromString(ConnectorServices.serializer(), xml)
+        }
+        println("SDS cold parse: $coldTime (${cold.serviceInformation.service.size} services, ${xml.length} chars)")
+
+        val warmRuns = 20
+        val warmTimes = List(warmRuns) {
+            measureTimedValue {
+                defaultXml.decodeFromString(ConnectorServices.serializer(), xml)
+            }.duration
+        }
+        val warmAvg = warmTimes.fold(Duration.ZERO) { acc, d -> acc + d } / warmRuns
+        val warmMin = warmTimes.min()
+        val warmMax = warmTimes.max()
+        println("SDS warm parse over $warmRuns runs: avg=$warmAvg min=$warmMin max=$warmMax")
+
+        // Sanity — the captured SDS has at least the well-known core services.
+        val names = cold.serviceInformation.service.map { it.name }.toSet()
+        assertTrue(ServiceNames.EventService in names) { "missing EventService: $names" }
+        assertTrue(ServiceNames.CardService in names) { "missing CardService: $names" }
+        assertTrue(cold.serviceInformation.service.size >= 10) {
+            "expected ≥10 services in real SDS, got ${cold.serviceInformation.service.size}"
+        }
+
+        // Regression guard. Real Konnektor SDS parses in <50ms warm locally; 250ms gives
+        // headroom for slow CI without hiding a 5× slowdown.
+        assertTrue(warmAvg.inWholeMilliseconds < 250) {
+            "SDS warm parse averaged ${warmAvg.inWholeMilliseconds}ms — > 250ms suggests a regression"
+        }
     }
 }
