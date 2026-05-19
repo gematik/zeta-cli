@@ -241,9 +241,27 @@ private fun formatBody(
 
         ct.isEmpty() && trimmed.startsWith("<") -> renderXml(body, colorize = color)
 
+        // Binary content-types: Ktor's Logging plugin gives us UTF-8-decoded bytes, which
+        // is gibberish for non-text payloads. Suppress like curlie does.
+        ct.isNotEmpty() && !isTextLike(ct) -> protoStyle.maybe("<binary $contentType body — not shown>")
+
         else -> body
     }
 }
+
+/**
+ * Heuristic for "render this as text in the wire log". Whitelist of text-ish media-type
+ * markers — anything else with a non-empty content-type is treated as binary and replaced
+ * with a placeholder. Mirrors curlie/httpie's body-suppression behaviour.
+ */
+private fun isTextLike(ct: String): Boolean =
+    ct.startsWith("text/") ||
+        "json" in ct ||
+        "xml" in ct ||
+        "javascript" in ct ||
+        "yaml" in ct ||
+        "x-www-form-urlencoded" in ct ||
+        "csv" in ct
 
 private fun tryRenderJson(body: String, colorize: Boolean): String =
     runCatching {
