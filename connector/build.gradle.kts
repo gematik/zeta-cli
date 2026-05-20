@@ -16,8 +16,9 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
 
     // OkHttp is the only supported engine: it routes through JSSE, which sends EC client
-    // certs in mTLS handshakes (gematik KSP / HBA / SMC-B cards use brainpool ECC keys).
-    // Ktor CIO's TLS stack hard-codes RSA / DSS only — see CertificateType.kt in CIO source.
+    // certs in mTLS handshakes. Konnektor self-signed `.kon` client certs are typically
+    // ECDSA (NIST, rarely brainpool); Ktor CIO's TLS stack hard-codes RSA / DSS only and
+    // silently drops ALL EC certs — see CertificateType.kt in CIO source.
     // compileOnly so consumers that bring their own pre-configured HttpClient don't pull
     // OkHttp at runtime; pull `ktor-client-okhttp` explicitly to use the bridge.
     compileOnly(libs.ktor.client.okhttp)

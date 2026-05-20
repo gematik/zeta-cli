@@ -151,7 +151,7 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
     protected open fun runCommand(): Unit = Unit
 }
 
-private val invocationLog = KotlinLogging.logger("de.gematik.zeta.cli.invocation")
+private val invocationLog = KotlinLogging.logger("de.gematik.zeta.cli")
 
 /**
  * POSIX-safe quoting: bareword if every char is shell-neutral, otherwise single-quoted with

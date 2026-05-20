@@ -23,10 +23,15 @@ import javax.net.ssl.SSLContext
  * [HttpClient] (any engine) works. This helper is offered for the common .kon-driven
  * case. Pull `io.ktor:ktor-client-okhttp` to use it.
  *
- * **Why OkHttp specifically:** Ktor CIO's TLS stack hard-codes RSA / DSS only and
- * silently drops EC client certs (see `CertificateType.kt` in CIO sources), which
- * breaks mutual TLS against any Connector that uses brainpool ECC card certs (KSP /
- * HBA / SMC-B). OkHttp routes through JSSE and presents whichever cert is installed.
+ * **Why OkHttp specifically:** Ktor CIO's TLS stack hard-codes a `CertificateType`
+ * allowlist of RSA / DSS (see `CertificateType.kt` in CIO sources) and silently drops
+ * **all EC client certs** during the `CertificateRequest` round — regardless of curve.
+ * Konnektor self-signed `.kon` client certs are ECDSA in most modern setups (typically
+ * NIST P-256, occasionally brainpool), so CIO sends an empty `Certificate` message and
+ * mTLS fails at any nginx with `ssl_verify_client on`. OkHttp routes through JSSE,
+ * which has no such filter and presents whatever is installed. Note: the card-backed
+ * mTLS scenario *is unrelated* — card keys never enter JSSE; they sign indirectly via
+ * the Konnektor's `ExternalAuthenticate` SOAP call.
  *
  * **SNI caveat:** OkHttp derives the SNI server name from the request URL's host. The
  * `expectedHost` field of [Dotkon] is wired into hostname *verification* here, but
