@@ -18,6 +18,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.net.URLDecoder
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 private val wireLog = KotlinLogging.logger("de.gematik.zeta.http.wire")
 
@@ -283,11 +285,31 @@ private fun tryRenderJson(body: String, colorize: Boolean): String =
  */
 private val jwtRegex = Regex("""[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}""")
 
+// Per-process JWT registry: each distinct full-JWT string gets a stable numeric handle
+// (`[jwt#N]`) the first time it's seen, and the same handle on every repeat thereafter.
+// Lets `formatJwtSection` decode each JWT once and reference it cheaply afterwards
+// — a long trace with the same access token on every request stops re-dumping the
+// same 30-line claims block over and over.
+private val jwtRegistry: ConcurrentHashMap<String, Int> = ConcurrentHashMap()
+private val nextJwtId = AtomicInteger(0)
+
 private data class JwtFinding(
     val source: String,
     val joseHeader: JsonElement,
     val payload: JsonElement,
+    val id: Int,
+    val firstSeen: Boolean,
 )
+
+/** Assign or look up the handle for [raw]. `firstSeen` is true on the first sighting only. */
+private fun registerJwt(raw: String): Pair<Int, Boolean> {
+    var firstSeen = false
+    val id = jwtRegistry.computeIfAbsent(raw) {
+        firstSeen = true
+        nextJwtId.incrementAndGet()
+    }
+    return id to firstSeen
+}
 
 private fun collectJwtsFromHeader(headerLine: String, into: MutableList<JwtFinding>) {
     val sep = headerLine.indexOf(':')
@@ -308,7 +330,8 @@ private fun decodeJwt(raw: String, source: String): JwtFinding? {
     val joseHeader = decodeBase64UrlJson(parts[0]) as? JsonObject ?: return null
     if ("alg" !in joseHeader && "typ" !in joseHeader) return null
     val payload = decodeBase64UrlJson(parts[1]) ?: return null
-    return JwtFinding(source, joseHeader, payload)
+    val (id, firstSeen) = registerJwt(raw)
+    return JwtFinding(source, joseHeader, payload, id, firstSeen)
 }
 
 private fun decodeBase64UrlJson(s: String): JsonElement? = runCatching {
@@ -362,11 +385,16 @@ private fun formatJwtSection(findings: List<JwtFinding>): String {
         append(sectionRule.maybe(centeredRule("Decoded JWTs")))
         findings.forEach { jwt ->
             appendLine()
-            appendLine(headerNameStyle.maybe(jwt.source))
-            appendLine("  ${boldStyle.maybe("header")}")
-            appendLine(indent(renderJson(jwt.joseHeader, colorize = color), "    "))
-            appendLine("  ${boldStyle.maybe("payload")}")
-            append(indent(renderJson(jwt.payload, colorize = color), "    "))
+            // Source + numeric handle. Handle is muted so the source name still reads first.
+            appendLine("${headerNameStyle.maybe(jwt.source)}  ${protoStyle.maybe("[jwt#${jwt.id}]")}")
+            if (jwt.firstSeen) {
+                appendLine("  ${boldStyle.maybe("header")}")
+                appendLine(indent(renderJson(jwt.joseHeader, colorize = color), "    "))
+                appendLine("  ${boldStyle.maybe("payload")}")
+                append(indent(renderJson(jwt.payload, colorize = color), "    "))
+            } else {
+                append("  ${protoStyle.maybe("(decoded earlier)")}")
+            }
         }
     }
 }
