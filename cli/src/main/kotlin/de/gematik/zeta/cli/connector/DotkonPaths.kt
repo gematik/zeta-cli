@@ -13,21 +13,33 @@ import kotlin.io.path.listDirectoryEntries
  * or the default `"default"`:
  * 1. `~/...` is tilde-expanded to the user's home directory.
  * 2. **Path-like** (absolute or contains `/`): tried as-is, then with a `.kon` suffix.
- * 3. **Short name**: tried in `.`, then `./<name>.kon`, then `$XDG_CONFIG_HOME/telematik/kon/<name>.kon`,
- *    then `$XDG_CONFIG_HOME/telematik/kon/<name>`.
+ * 3. **Short name**: tried in `.`, then `./<name>.kon`, then `<config-home>/telematik/kon/<name>.kon`,
+ *    then `<config-home>/telematik/kon/<name>`.
  *
  * macOS deliberately follows the Linux convention (`~/.config`) instead of Apple's
- * `~/Library/Application Support`, so the same .kon files work on both platforms without
- * symlinks. Override with `XDG_CONFIG_HOME` if you really want a different location.
+ * `~/Library/Application Support`, so the same .kon files work on Linux and macOS without
+ * symlinks. Windows defaults to `%APPDATA%` (the platform convention for per-user roaming
+ * application state) rather than `~/.config`. Override anywhere with `XDG_CONFIG_HOME`.
  */
 private const val DOTKON_SUBDIR = "telematik/kon"
 
-/** `$XDG_CONFIG_HOME` if set, otherwise `~/.config` — Linux semantics on every OS. */
-fun xdgConfigHome(): Path =
-    System.getenv("XDG_CONFIG_HOME")
-        ?.takeIf { it.isNotBlank() }
-        ?.let { Path(it) }
-        ?: Path(System.getProperty("user.home"), ".config")
+private val isWindows: Boolean =
+    System.getProperty("os.name")?.startsWith("Windows", ignoreCase = true) == true
+
+/**
+ * The base config directory the CLI persists state under. Resolution order:
+ *  1. `$XDG_CONFIG_HOME` — explicit override on any OS.
+ *  2. On Windows: `%APPDATA%` (typically `C:\Users\<you>\AppData\Roaming`).
+ *  3. `~/.config` — Linux/macOS default; also the Windows fallback when `APPDATA` is
+ *     somehow unset (rare).
+ */
+fun xdgConfigHome(): Path {
+    System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }?.let { return Path(it) }
+    if (isWindows) {
+        System.getenv("APPDATA")?.takeIf { it.isNotBlank() }?.let { return Path(it) }
+    }
+    return Path(System.getProperty("user.home"), ".config")
+}
 
 /** `$XDG_CONFIG_HOME/telematik/kon/`. Created on demand by callers; not by this function. */
 fun konConfigDir(): Path = xdgConfigHome().resolve(DOTKON_SUBDIR)
