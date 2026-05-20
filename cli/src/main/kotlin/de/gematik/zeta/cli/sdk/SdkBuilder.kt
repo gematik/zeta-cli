@@ -55,14 +55,41 @@ internal fun buildZetaSdkClient(
                 attestation = AttestationConfig.software(),
                 requiredRoleOid = OID_ZETA_GUARD,
             ),
-            platformProductId = PlatformProductId.AppleProductId(
-                PlatformProductId.PLATFORM_APPLE,
-                "macos",
-                listOf(),
-            ),
+            platformProductId = currentPlatformProductId(),
             httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(cliConfig),
         ),
     )
+}
+
+/**
+ * Pick the [PlatformProductId] variant matching the host OS. Software-attestation flows
+ * don't validate the per-platform fields (storeId, applicationId, etc.) — but the auth
+ * server **does** check that `platform_product_id.platform` matches the top-level
+ * `client_statement.platform` claim (which the SDK derives from `os.name`). Sending
+ * `apple`/`macos` on Windows trips a `"Invalid combination of SOFTWARE and APPLE"` reject
+ * at the token endpoint. Per-platform fields are intentionally left as placeholders here;
+ * fill them in if the auth server starts validating them.
+ */
+private fun currentPlatformProductId(): PlatformProductId {
+    val osName = System.getProperty("os.name").orEmpty().lowercase()
+    return when {
+        "windows" in osName -> PlatformProductId.WindowsProductId(
+            PlatformProductId.PLATFORM_WINDOWS,
+            /* storeId = */ "",
+            /* packageFamilyName = */ "",
+        )
+        "linux" in osName -> PlatformProductId.LinuxProductId(
+            PlatformProductId.PLATFORM_LINUX,
+            /* packagingType = */ "",
+            /* applicationId = */ "de.gematik.zeta.cli",
+            /* version = */ "1.0.0",
+        )
+        else -> PlatformProductId.AppleProductId(
+            PlatformProductId.PLATFORM_APPLE,
+            /* platformType = */ "macos",
+            /* appBundleIds = */ listOf(),
+        )
+    }
 }
 
 /**
