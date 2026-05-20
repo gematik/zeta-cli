@@ -11,6 +11,7 @@ import kotlin.time.Duration.Companion.seconds
 internal class CliConfig {
     var verbose: Int = 0
     var insecure: Boolean = false
+    var aslProdEnvironment: Boolean = false
     var caCertFiles: List<Path> = emptyList()
     var connectTimeout: Duration = 5.seconds
     var requestTimeout: Duration = 30.seconds

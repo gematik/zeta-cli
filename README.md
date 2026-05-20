@@ -132,6 +132,7 @@ Available on every command.
 | `--connect-timeout=<seconds>` | `ZETA_CONNECT_TIMEOUT` | `5` |
 | `--request-timeout=<seconds>` | `ZETA_REQUEST_TIMEOUT` | `30` |
 | `-k, --insecure` | `ZETA_INSECURE` | `false` (TLS verified) |
+| `--asl-prod` | `ZETA_ASL_PROD` | `false` (non-prod) |
 | `--ca-cert=<file>` (repeatable) | `ZETA_CA_CERT` | JVM default trust store |
 | `-o, --output-format=text\|json\|raw` | `ZETA_OUTPUT_FORMAT` | `text` |
 | `-c, --connector-config=<name>` | `ZETA_CONNECTOR_CONFIG` | `default` |

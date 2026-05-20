@@ -50,7 +50,7 @@ internal fun buildZetaSdkClient(
             authConfig = AuthConfig(
                 scopes = scopes,
                 exp = 30,
-                aslProdEnvironment = false,
+                aslProdEnvironment = cliConfig.aslProdEnvironment,
                 subjectTokenProvider = tokenProvider,
                 attestation = AttestationConfig.software(),
                 requiredRoleOid = OID_ZETA_GUARD,

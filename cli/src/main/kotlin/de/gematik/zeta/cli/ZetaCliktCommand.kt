@@ -47,6 +47,13 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
             "(env: ZETA_INSECURE)",
     ).flag(default = false)
 
+    private val aslProd: Boolean by option(
+        "--asl-prod",
+        envvar = "ZETA_ASL_PROD",
+        help = "Use the ASL (Attestation Service Local) production environment instead of " +
+            "the non-prod default. (env: ZETA_ASL_PROD)",
+    ).flag(default = false)
+
     private val caCertFiles: List<Path> by option(
         "--ca-cert",
         metavar = "FILE",
@@ -122,6 +129,7 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         val config = currentContext.findOrSetObject { CliConfig() }
         if (verbose > 0) config.verbose = maxOf(config.verbose, verbose)
         if (insecure) config.insecure = true
+        if (aslProd) config.aslProdEnvironment = true
         if (caCertFiles.isNotEmpty()) config.caCertFiles = config.caCertFiles + caCertFiles
         connectTimeoutOpt?.let { config.connectTimeout = it }
         requestTimeoutOpt?.let { config.requestTimeout = it }
