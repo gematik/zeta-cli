@@ -18,10 +18,26 @@ import com.sun.jna.Platform
 internal object StderrColors {
     val enabled: Boolean by lazy { detect() }
 
+    /**
+     * Whether the stderr console can render non-ASCII Unicode without mojibake.
+     * On Windows we check the console output code page via `GetConsoleOutputCP()` —
+     * 65001 means UTF-8 (Windows Terminal, modern PowerShell), anything else means
+     * a legacy codepage (CP-850/CP-1252) that mangles UTF-8 bytes into garbage like
+     * `ÔöÇÔöÇ` instead of `──`. On POSIX we assume UTF-8 (modern macOS/Linux default).
+     * Used by `CurlieLogging` to choose between box-drawing rule characters and an
+     * ASCII fallback.
+     */
+    val unicode: Boolean by lazy { detectUnicode() }
+
     private fun detect(): Boolean {
         if (!System.getenv("NO_COLOR").isNullOrEmpty()) return false
         if (!System.getenv("FORCE_COLOR").isNullOrEmpty()) return true
         return runCatching { isStderrTty() }.getOrDefault(false)
+    }
+
+    private fun detectUnicode(): Boolean = when {
+        !Platform.isWindows() -> true
+        else -> runCatching { Kernel32.INSTANCE.GetConsoleOutputCP() == CP_UTF8 }.getOrDefault(false)
     }
 
     private fun isStderrTty(): Boolean =
@@ -32,6 +48,7 @@ internal object StderrColors {
         }
 
     private const val STDERR_FD = 2
+    private const val CP_UTF8 = 65001
 
     private interface PosixLibC : Library {
         fun isatty(fd: Int): Int
@@ -46,6 +63,14 @@ internal object StderrColors {
 
         companion object {
             val INSTANCE: Msvcrt = Native.load("msvcrt", Msvcrt::class.java)
+        }
+    }
+
+    private interface Kernel32 : Library {
+        fun GetConsoleOutputCP(): Int
+
+        companion object {
+            val INSTANCE: Kernel32 = Native.load("kernel32", Kernel32::class.java)
         }
     }
 }

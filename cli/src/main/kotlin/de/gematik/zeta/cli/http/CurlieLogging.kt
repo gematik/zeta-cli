@@ -194,13 +194,17 @@ internal fun reformatHttpLog(raw: String): String {
 }
 
 private const val RULE_WIDTH = 60
-private val GROUP_END_RULE = "─".repeat(RULE_WIDTH)
+
+// Box-drawing horizontal on UTF-8-capable consoles; ASCII fallback for legacy Windows
+// code pages (CP-850/CP-1252) where U+2500's UTF-8 bytes show up as mojibake (`ÔöÇ`).
+private val RULE_CHAR = if (StderrColors.unicode) "─" else "-"
+private val GROUP_END_RULE = RULE_CHAR.repeat(RULE_WIDTH)
 
 private fun centeredRule(title: String): String {
     val pad = (RULE_WIDTH - title.length - 2).coerceAtLeast(2)
     val left = pad / 2
     val right = pad - left
-    return "${"─".repeat(left)} $title ${"─".repeat(right)}"
+    return "${RULE_CHAR.repeat(left)} $title ${RULE_CHAR.repeat(right)}"
 }
 
 private fun formatHeader(line: String): String {
