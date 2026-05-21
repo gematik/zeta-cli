@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.output.renderJson
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpResponse
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -14,6 +15,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import io.ktor.http.Url
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 
@@ -118,12 +120,25 @@ class HttpCommand : ZetaSessionCommand("http") {
         method: HttpMethod,
         headers: List<Pair<String, String>>,
         body: String?,
-    ): ZetaHttpResponse =
-        client.request(url) {
-            this.method = method
-            for ((name, value) in headers) header(name, value)
-            body?.let { setBody(it) }
+    ): ZetaHttpResponse {
+        // The SDK's HttpClient doesn't expose a Ktor-plugin hook, so HttpTracingPlugin
+        // never fires for SDK-routed calls. Emit an `http.request` span ourselves so the
+        // trace tree shows the call alongside connector / popp spans. Attributes mirror
+        // the plugin's (method, host, path, status) for consistency.
+        val u = Url(url)
+        return Tracer.spanSuspend(
+            "http.request",
+            attrs = mapOf("method" to method.value, "host" to u.host, "path" to u.encodedPath),
+        ) { span ->
+            val resp = client.request(url) {
+                this.method = method
+                for ((name, value) in headers) header(name, value)
+                body?.let { setBody(it) }
+            }
+            span.attr("status", resp.status.value)
+            resp
         }
+    }
 
     private suspend fun printResponse(response: ZetaHttpResponse) {
         if (include) {

@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.application.CreateStartScripts
 import org.gradle.api.tasks.bundling.Compression
 
 plugins {
@@ -72,4 +73,15 @@ kotlin {
 tasks.named<Tar>("distTar") {
     compression = Compression.GZIP
     archiveExtension.set("tar.gz")
+}
+
+// Prepend `chcp 65001` to the Windows launcher so the console renders UTF-8 correctly.
+// Without this, the JVM writes UTF-8 bytes to stderr but legacy Windows code pages
+// (CP-850 / CP-1252) read them as mojibake — `—` shows as `ÔÇö`, `─` as `ÔöÇ`, etc.
+// macOS / Linux launchers are unaffected.
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        val bat = windowsScript
+        bat.writeText("@chcp 65001 >NUL\r\n" + bat.readText())
+    }
 }

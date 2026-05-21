@@ -5,8 +5,10 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.output.renderJson
+import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
+import io.ktor.http.Url
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
@@ -83,13 +85,22 @@ class WsCommand : ZetaSessionCommand("ws") {
 
         openSession(resource = originOf(url), scopes = scopes) { sdk, _ ->
             runBlocking {
-                sdk.ws(
-                    targetUrl = url,
-                    builder = { applyCliHttpDefaults(cliConfig) },
-                    customHeaders = customHeaders,
+                // The SDK's WebSocket client doesn't expose a Ktor-plugin hook, so a span
+                // here at the call site is the only place to surface the WS upgrade/lifetime
+                // in the trace tree. Attributes mirror http.request for grep-ability.
+                val u = Url(url)
+                Tracer.spanSuspend(
+                    "ws.connect",
+                    attrs = mapOf("host" to u.host, "path" to u.encodedPath),
                 ) {
-                    log.info { "WebSocket connected to $url" }
-                    relayStdinJson()
+                    sdk.ws(
+                        targetUrl = url,
+                        builder = { applyCliHttpDefaults(cliConfig) },
+                        customHeaders = customHeaders,
+                    ) {
+                        log.info { "WebSocket connected to $url" }
+                        relayStdinJson()
+                    }
                 }
             }
         }
