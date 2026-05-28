@@ -20,9 +20,14 @@ import kotlinx.serialization.json.buildJsonObject
  */
 internal fun renderEntryText(entry: Entry, colorize: Boolean, reveal: Boolean): String =
     renderSections(colorize = colorize) {
+        val nowEpoch = System.currentTimeMillis() / 1000
+        val expiredFor = entry.accessToken?.expiresAt
+            ?.takeIf { it in 1..nowEpoch }
+            ?.let { nowEpoch - it }
+        val statusValue = entry.status.name + (expiredFor?.let { " (access token expired ${formatAgo(it)} ago)" } ?: "")
         section("Resource: ${entry.resource}") {
             field("Authorization server", entry.issuer)
-            field("Status", entry.status.name)
+            field("Status", statusValue)
         }
         entry.accessToken?.let { token ->
             section("Access token (resource: ${entry.resource})") {
@@ -34,7 +39,11 @@ internal fun renderEntryText(entry: Entry, colorize: Boolean, reveal: Boolean): 
                 field("Audience", token.claimStrings("aud"))
                 field("Scope", token.claimString("scope"))
                 field("DPoP jkt", token.claimString("cnf", "jkt"))
-                field("Expires at", token.expiresAt.takeIf { it > 0 }?.let(::formatEpoch))
+                field(
+                    "Expires at",
+                    token.expiresAt.takeIf { it > 0 }
+                        ?.let { formatEpoch(it) + if (it <= nowEpoch) " (expired)" else "" },
+                )
                 if (reveal) field("Raw JWS", token.rawJwt)
             }
         }
@@ -123,3 +132,10 @@ private fun JsonPrimitive.contentOrNull(): String? = if (this is JsonNull) null 
 
 private fun formatEpoch(seconds: Long): String =
     java.time.Instant.ofEpochSecond(seconds).toString()
+
+private fun formatAgo(seconds: Long): String = when {
+    seconds < 60 -> "${seconds}s"
+    seconds < 3600 -> "${seconds / 60}m"
+    seconds < 86400 -> "${seconds / 3600}h"
+    else -> "${seconds / 86400}d"
+}

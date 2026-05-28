@@ -90,14 +90,14 @@ internal suspend fun enumerateEntries(stores: ProfileStores): List<Entry> {
 }
 
 /**
- * Resolve one resource (by host FQDN) into a full [Entry]. The status-enum computation
- * intentionally mirrors `ZetaSdkClient.status()`'s logic — including the upstream bug
- * where tokens are keyed by [AuthorizationServerMetadata.issuer] while
- * `AccessTokenProviderImpl` saves them by build-time resource URL. Producing a different
- * answer would silently diverge from what the SDK itself reports.
+ * Resolve one resource (by host FQDN) into a full [Entry]. Mirrors `ZetaSdkClient.status()`
+ * in SDK 1.0.1+: tokens are keyed by the build-time resource URL (what
+ * `AccessTokenProviderImpl` saves under), while registration is keyed by the AS issuer.
  *
  * `getAuthServer` / `getProtectedResource` normalise the input to the host, so a
- * synthesised `https://$fqdn/` is sufficient.
+ * synthesised `https://$fqdn/` is sufficient. Tokens saved with a non-default port at SDK
+ * build time will not be found by this enumeration since the resource index drops the
+ * port — that's an unavoidable side-effect of the FQDN-keyed index.
  */
 internal suspend fun entryFor(fqdn: String, stores: ProfileStores): Entry {
     val fqdnUrl = "https://$fqdn/"
@@ -109,11 +109,11 @@ internal suspend fun entryFor(fqdn: String, stores: ProfileStores): Entry {
     val regResponse = stores.registration.getRegistrationInfo(authServer.issuer)
         ?: return Entry(resourceUrl, authServer.issuer, SdkStatus.NOT_REGISTERED, null, null)
 
-    val expiresAt = stores.authentication.getTokenExpiration(authServer.issuer)?.toLongOrNull() ?: 0L
+    val expiresAt = stores.authentication.getTokenExpiration(fqdnUrl)?.toLongOrNull() ?: 0L
     val nowEpoch = System.currentTimeMillis() / 1000
     val tokensExpired = expiresAt <= nowEpoch
-    val accessJwt = stores.authentication.getAccessToken(authServer.issuer)
-    val refreshPresent = !stores.authentication.getRefreshToken(authServer.issuer).isNullOrBlank()
+    val accessJwt = stores.authentication.getAccessToken(fqdnUrl)
+    val refreshPresent = !stores.authentication.getRefreshToken(fqdnUrl).isNullOrBlank()
 
     val status = when {
         !accessJwt.isNullOrBlank() && refreshPresent && !tokensExpired ->

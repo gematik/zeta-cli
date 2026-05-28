@@ -108,6 +108,10 @@ zeta http https://api.example.org/v1/foo \
 # WebSocket with PoPP header inlined; messages from stdin
 zeta ws wss://service.example.org/stream --scope foo --popp-token "$TOKEN" <<<'{"hello":1}'
 
+# Same in PowerShell — note the $env: prefix; bare $ZETA_POPP_TOKEN won't reach the JVM
+# $env:ZETA_POPP_TOKEN = (zeta popp connector)
+# zeta http https://api.example.org/v1/foo --scope foo
+
 # List .kon files the CLI can resolve by short name
 zeta connector configs
 
@@ -122,6 +126,8 @@ All options below are **sticky** — they're accepted at any depth: `zeta -v htt
 Values resolve in this precedence (high → low):
 **CLI flag → environment variable → `zeta.yaml` → built-in default.**
 
+> **PowerShell users:** `$ZETA_POPP_TOKEN = …` sets a PowerShell variable that child processes never see. Use `$env:ZETA_POPP_TOKEN = …` (same for any other `ZETA_*` env var) so the JVM picks it up.
+
 ### Global options
 
 Available on every command.
@@ -135,10 +141,13 @@ Available on every command.
 | `--asl-prod` | `ZETA_ASL_PROD` | `false` (non-prod) |
 | `--ca-cert=<file>` (repeatable) | `ZETA_CA_CERT` | JVM default trust store |
 | `-o, --output-format=text\|json\|raw` | `ZETA_OUTPUT_FORMAT` | `text` |
+| `-f, --file=<file>` | `ZETA_CONFIG` | auto-discovered `zeta.yaml` |
+| `--no-config` | `ZETA_NO_CONFIG` | `false` (auto-discovery on) |
 | `-c, --connector-config=<name>` | `ZETA_CONNECTOR_CONFIG` | `default` |
 | `--proxy=<url>` | `ZETA_PROXY` | — |
 | `--proxy-user=<user>` | `ZETA_PROXY_USER` | — |
 | `--proxy-password=<password>` | `ZETA_PROXY_PASSWORD` | — |
+| `--trace` — print in-process span tree at end of command | `ZETA_TRACE` | `false` |
 
 `-v` is the one exception to the env-var rule: Clikt's repeat-count flag doesn't pair with a single env value. Use `-v`/`-vv`/`-vvv` on the CLI, or set `verbose:` in `zeta.yaml`.
 
@@ -244,12 +253,54 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 
 ### Lookup
 
-Two paths are checked, in order:
+| `--no-config` / `ZETA_NO_CONFIG` | `-f` / `ZETA_CONFIG` | Loaded |
+| --- | --- | --- |
+| no | no | `./zeta.yaml` if present, else `$XDG_CONFIG_HOME/telematik/zeta/zeta.yaml` if present, else none |
+| no | yes | the named file (must exist; missing → usage error) |
+| **yes** | no | **none — built-in defaults only** |
+| **yes** | **yes** | **error: mutually exclusive** |
 
-1. **Project-local**: `./zeta.yaml` in the current working directory.
-2. **User-global**: `$XDG_CONFIG_HOME/telematik/zeta/zeta.yaml` (macOS uses the same Linux convention).
+First hit wins — files are never merged. When `-f` is passed (or `ZETA_CONFIG` is set) the file **must exist**; a missing path fails fast with a usage error rather than silently falling through. Without `-f`, auto-discovery applies and is happy to find no file at all.
 
-**The project file wins outright** — when `./zeta.yaml` exists, the XDG file is ignored, not merged. This keeps drop-in project configs self-contained (no surprise inheritance).
+### Selecting a config file (`-f`)
+
+`-f` is the docker-compose idiom for switching between scenarios: keep one `zeta.yaml` per environment, point at one with the flag:
+
+```sh
+# ~/.config/telematik/zeta/zeta-popp-ru.yaml
+# profile: popp-ru                  # SDK state lands in popp-ru.storage.json
+# auth-method: connector
+# auth-connector-telematik-id: "${SMCB_TID_RU}"
+# scope: [popp]
+
+zeta -f ~/.config/telematik/zeta/zeta-popp-ru.yaml http https://popp.dev.poppservice.de/some/api
+
+# Or pin per-shell:
+export ZETA_CONFIG=~/.config/telematik/zeta/zeta-popp-ru.yaml
+zeta http  https://popp.dev.poppservice.de/some/api
+zeta popp connector
+```
+
+Pair each scenario file with its own `profile:` so SDK state (registrations, tokens) is also isolated — `popp-ru` writes to `popp-ru.storage.json`, `popp-tu` writes to `popp-tu.storage.json`, no cross-contamination.
+
+Single file only — there is no docker-compose-style multi-`-f` merging today.
+
+> For a totally clean run with no config at all, see `--no-config` below.
+
+### Disabling the config file (`--no-config`)
+
+Use `--no-config` (or `ZETA_NO_CONFIG=1`) when you need built-in defaults only — no project-local `./zeta.yaml`, no XDG fallback, no `-f`. Useful for:
+
+- Reproducing an issue without your `zeta.yaml` interfering.
+- One-off ad-hoc commands from an arbitrary directory.
+- CI runs where output must be predictable regardless of the surrounding environment.
+
+```sh
+zeta --no-config status         # ignores any zeta.yaml on disk
+ZETA_NO_CONFIG=1 zeta status    # env-var equivalent
+```
+
+`--no-config` is **mutually exclusive** with `-f` / `ZETA_CONFIG`. Passing both is treated as a mistake — the CLI exits with `Error: --no-config is mutually exclusive with -f / ZETA_CONFIG` rather than silently picking one. Only `1`, `true`, or `yes` (case-insensitive) activate the env var; `0`/empty leave it off.
 
 ### Structure
 
@@ -257,6 +308,15 @@ Two paths are checked, in order:
 - Subcommand-scoped keys (`<subcommand>: { … }`) only apply when that subcommand runs. Scoped wins over top-level.
 - `${VAR}` placeholders are expanded against the process environment before parse — secrets and per-host overrides stay out of the file.
 - Repeatable options take a YAML list.
+
+#### Reading the schema (TOML-like)
+
+The shape is the same as a TOML file: flat key–value pairs at the top, named sections for scope. Two rules:
+
+- **Top-level kebab keys are flag names verbatim.** `auth-method` ↔ `--auth-method`. The hyphen is part of the option name, not a path separator.
+- **Nested mappings are subcommand scope, not name hierarchy.** `http: { header: [...] }` means "the `--header` flag *when invoked with `zeta http`*". Nesting depth mirrors the command path: `popp.connector.connection` is the `--connection` flag under `zeta popp connector`.
+
+So `auth-method` and `popp.connector.connection` look different on the page because they *are* different things: a flag name vs. a command-scoped flag. The two never mix — a key never means "namespaced option".
 
 ### Example
 

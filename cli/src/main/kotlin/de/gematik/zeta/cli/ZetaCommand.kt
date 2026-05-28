@@ -3,18 +3,18 @@ package de.gematik.zeta.cli
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.context
 import de.gematik.zeta.cli.config.YamlValueSource
-import de.gematik.zeta.cli.config.discoverZetaConfigFile
+import java.nio.file.Path
 
-class ZetaCommand : ZetaCliktCommand(name = "zeta") {
+class ZetaCommand(private val configPath: Path? = null) : ZetaCliktCommand(name = "zeta") {
     init {
-        // Install a YAML-backed value source so options can fall back to ./zeta.yaml
-        // (project-local) or $XDG_CONFIG_HOME/telematik/zeta/zeta.yaml (user-global) —
-        // exactly one of the two, never merged. Cwd wins outright when present. The file
-        // is parsed lazily on first use; absent files are silently ignored. `${VAR}`
-        // placeholders are expanded against the process environment before parsing —
-        // same syntax as `.kon` files.
+        // Install a YAML-backed value source so options can fall back to a config file.
+        // The path was already resolved (and existence-checked when explicit) in Main.kt
+        // via `resolveConfigFile`; here we only need to attach it to the Clikt context.
+        // This block must stay side-effect-free — Clikt's error handler re-builds the
+        // context to format help, so a throw here triggers a re-entrant throw that
+        // bypasses the clean error printer.
         context {
-            valueSource = discoverZetaConfigFile()?.let(::YamlValueSource)
+            valueSource = configPath?.let(::YamlValueSource)
         }
     }
 

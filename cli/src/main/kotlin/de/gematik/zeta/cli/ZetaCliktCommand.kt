@@ -113,6 +113,29 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         help = "Print an in-process span tree at end of command. (env: ZETA_TRACE)",
     ).flag(default = false)
 
+    // Same pattern as --trace: parsed in Main.kt before Clikt runs (so the path can be
+    // wired into the Clikt context's value source). Declared here only so Clikt accepts
+    // it at any depth and lists it in --help. Never read.
+    @Suppress("unused")
+    private val configFile: Path? by option(
+        "-f", "--file",
+        metavar = "FILE",
+        envvar = "ZETA_CONFIG",
+        help = "Path to a zeta.yaml-format config file. Overrides project-local " +
+            "./zeta.yaml and the XDG-global default. (env: ZETA_CONFIG)",
+    ).path(mustExist = false, canBeFile = true, canBeDir = false)
+
+    // Same pre-Clikt detection pattern as --trace / -f. Declared here for help-text and
+    // sticky parse acceptance only; the real activation happens in Main.kt.
+    @Suppress("unused")
+    private val noConfig: Boolean by option(
+        "--no-config",
+        envvar = "ZETA_NO_CONFIG",
+        help = "Ignore zeta.yaml entirely. Skips -f/--file, ZETA_CONFIG, project-local " +
+            "./zeta.yaml, and the XDG default — built-in defaults only. Mutually " +
+            "exclusive with -f/--file. (env: ZETA_NO_CONFIG)",
+    ).flag(default = false)
+
     /** Shared, lazily-built CLI configuration available to subcommands' `runCommand`. */
     internal val cliConfig: CliConfig
         get() = currentContext.findObject<CliConfig>()

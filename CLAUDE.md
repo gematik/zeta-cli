@@ -68,7 +68,7 @@ ZetaCliktCommand            // sticky -v, --output-format, --connect-timeout, --
 
 `state/ProfileEnumeration.kt` walks a profile's `JsonFileStorage` via the public SDK storage interfaces (`ConfigurationStorage`, `ClientRegistrationStorage`, `AuthenticationStorage`) and builds an `Entry` per cached resource. `Entry` carries the linked AS, the [SdkStatus] enum, decoded access-token claims, and a `RegistrationInfo` view of `ClientRegistrationResponse`.
 
-The status enum is computed bug-for-bug with the SDK's own `status()`: tokens are looked up by `authServer.issuer` while `AccessTokenProviderImpl` saves them by build-time resource URL, so the enum under-reports. Mirroring the bug avoids the CLI disagreeing with the SDK. Track the upstream fix.
+The status enum is computed to match the SDK's own `status()` as of zeta-sdk 1.0.1: tokens are looked up by the build-time resource URL (`https://$fqdn/`), matching what `AccessTokenProviderImpl` saves under. (Pre-1.0.1 SDKs had a bug where `status()` keyed by `authServer.issuer` instead, so the enum always under-reported — the CLI used to mirror that bug; both are now fixed.)
 
 `state/EntryRenderer.kt` exposes `renderEntryText` / `renderEntryJson` — `status` uses both directly; lifecycle commands use them via `ZetaProfileCommand.renderEntry`.
 

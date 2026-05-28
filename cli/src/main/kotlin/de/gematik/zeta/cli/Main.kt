@@ -4,6 +4,8 @@ import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import de.gematik.zeta.cli.client.HttpCommand
 import de.gematik.zeta.cli.client.WsCommand
+import de.gematik.zeta.cli.config.ConfigFileMissingException
+import de.gematik.zeta.cli.config.resolveConfigFile
 import de.gematik.zeta.cli.connector.ConnectorCommand
 import de.gematik.zeta.cli.connector.ConnectorConfigsCommand
 import de.gematik.zeta.cli.connector.ConnectorGetCardsCommand
@@ -22,6 +24,8 @@ import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.nio.file.Path
+import kotlin.io.path.Path
 import kotlin.system.exitProcess
 
 /**
@@ -51,6 +55,30 @@ fun main(args: Array<String>) {
         Tracer.init()
     }
 
+    // Pre-detect -f/--file (env: ZETA_CONFIG) and --no-config (env: ZETA_NO_CONFIG) for the
+    // same reason as --trace above: the resolved path drives which YAML file
+    // YamlValueSource reads, wired into the Clikt context at ZetaCommand construction
+    // (before parse). Resolved here once so the existence check doesn't run inside the
+    // Clikt `context { }` lambda, which gets re-invoked by Clikt's own error/help formatter
+    // and would re-throw.
+    val noConfig = args.any { it == "--no-config" } ||
+        System.getenv("ZETA_NO_CONFIG")?.lowercase() in setOf("1", "true", "yes")
+    val configOverride = (sniffOptValue(args, "-f", "--file")
+        ?: System.getenv("ZETA_CONFIG")?.takeIf(String::isNotBlank))
+        ?.let { Path(it) }
+    if (noConfig && configOverride != null) {
+        log.error { "Error: --no-config is mutually exclusive with -f / ZETA_CONFIG" }
+        Tracer.emit()
+        exitProcess(2)
+    }
+    val configPath: Path? = if (noConfig) null else try {
+        resolveConfigFile(configOverride)
+    } catch (e: ConfigFileMissingException) {
+        log.error { "Error: ${e.message}" }
+        Tracer.emit()
+        exitProcess(2)
+    }
+
     // Both the Zeta SDK and the CLI's own clients run on Ktor's OkHttp engine. OkHttp's default
     // Dispatcher uses non-daemon worker threads with a 60-second keepAlive — none of those
     // OkHttpClient instances get closed today (the SDK's `ZetaSdkClient.close()` is a TODO,
@@ -63,7 +91,7 @@ fun main(args: Array<String>) {
     // process hangs for a minute after the failure.
     val exitCode = Tracer.root("cli.run", attrs = mapOf("argv" to args.joinToString(" "))) {
         try {
-            ZetaCommand()
+            ZetaCommand(configPath = configPath)
                 .subcommands(
                     VersionCommand(),
                     DiscoverCommand(),

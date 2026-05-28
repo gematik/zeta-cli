@@ -36,9 +36,9 @@ private val log = KotlinLogging.logger {}
  * `client_secret`, and the `registration_access_token`. Refresh tokens are never emitted
  * (only their presence informs the status enum).
  *
- * The status enum mirrors `ZetaSdkClient.status()` bug-for-bug: tokens are looked up by
- * `authServer.issuer` while `AccessTokenProviderImpl` saves them by build-time resource
- * URL. See [entryFor].
+ * The status enum mirrors `ZetaSdkClient.status()` from SDK 1.0.1+: tokens are looked up
+ * by the build-time resource URL (the same string `AccessTokenProviderImpl` saves under).
+ * See [entryFor].
  */
 class StatusCommand : ZetaProfileCommand(name = "status") {
     private val url: String? by argument(
