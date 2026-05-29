@@ -44,6 +44,62 @@ install:
     echo "Installed: $(brew --prefix)/bin/zeta"
     "$(brew --prefix)/bin/zeta" version
 
+# publish the current release to <owner>/homebrew-tap by bumping Formula/zeta.rb
+# usage: just publish-brew <owner>     (e.g. `just publish-brew spilikin`)
+publish-brew owner:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    OWNER="{{owner}}"
+    [ -n "$OWNER" ] || { echo "owner is required: just publish-brew <owner>" >&2; exit 2; }
+
+    command -v gh >/dev/null 2>&1 || {
+        echo "gh CLI is required: https://cli.github.com" >&2
+        exit 1
+    }
+
+    VERSION=$(grep '^version=' gradle.properties | cut -d= -f2)
+    TAG="v${VERSION}"
+    ASSET="zeta-${VERSION}.tar.gz"
+    SRC_REPO="gematik/zeta-cli"
+    TAP_REPO="${OWNER}/homebrew-tap"
+
+    gh release view "$TAG" --repo "$SRC_REPO" >/dev/null 2>&1 || {
+        echo "Release $TAG not found on $SRC_REPO — push a v* tag first." >&2
+        exit 1
+    }
+
+    WORKDIR=$(mktemp -d)
+    trap 'rm -rf "$WORKDIR"' EXIT
+
+    gh release download "$TAG" --repo "$SRC_REPO" \
+        --pattern "${ASSET}.sha256" --dir "$WORKDIR"
+    SHA=$(awk '{print $1; exit}' "$WORKDIR/${ASSET}.sha256")
+    [ -n "$SHA" ] || { echo "Empty SHA in ${ASSET}.sha256" >&2; exit 1; }
+
+    DOWNLOAD_URL="https://github.com/${SRC_REPO}/releases/download/${TAG}/${ASSET}"
+    REPO_ROOT="$PWD"
+
+    gh repo clone "$TAP_REPO" "$WORKDIR/tap" -- --depth 1
+    cd "$WORKDIR/tap"
+    mkdir -p Formula
+    sed -E \
+        -e "s|^( *)url .*|\\1url \"${DOWNLOAD_URL}\"|" \
+        -e "s|^( *)sha256 .*|\\1sha256 \"${SHA}\"|" \
+        "${REPO_ROOT}/Formula/zeta.rb" > Formula/zeta.rb
+
+    git add Formula/zeta.rb
+    if git diff --cached --quiet; then
+        echo "Already at $VERSION — nothing to publish."
+        exit 0
+    fi
+    git -c user.name="zeta-cli release" -c user.email="noreply@gematik.de" \
+        commit -m "zeta ${VERSION}"
+    git push
+
+    echo
+    echo "Bumped ${TAP_REPO} Formula/zeta.rb to ${VERSION}"
+
 generate-connector:
     #!/usr/bin/env bash
     java -jar ~/Development/gematik/wsdl2openapi/generator-kotlin/app/build/libs/wsdl2openapi2kotlin.jar \

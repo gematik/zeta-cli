@@ -43,7 +43,7 @@ jobs:
             cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz.sha256
           generate_release_notes: true
 
-      # Bumps Formula/zeta.rb in the gematik/homebrew-zeta tap repo.
+      # Bumps Formula/zeta.rb in the gematik/homebrew-tap tap repo.
       # Requires a repo-scoped PAT stored as the HOMEBREW_TAP_TOKEN secret.
       - name: Bump Homebrew formula
         if: ${{ !contains(steps.version.outputs.version, '-') }}
@@ -51,7 +51,7 @@ jobs:
         with:
           formula-name: zeta
           formula-path: Formula/zeta.rb
-          homebrew-tap: gematik/homebrew-zeta
+          homebrew-tap: gematik/homebrew-tap
           download-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/zeta-${{ steps.version.outputs.version }}.tar.gz
           commit-message: |
             zeta ${{ steps.version.outputs.version }}

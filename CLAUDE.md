@@ -140,7 +140,7 @@ To add a new module: create `<module>/build.gradle.kts` applying the right conve
 GitHub Actions workflows in `.github/workflows/`:
 
 - **`ci.yml`** — runs on `push` to `main` and on PRs. Installs Temurin 21, runs `./gradlew build`, then smokes the CLI via `:cli:installDist` + `zeta version`.
-- **`release.yml`** — runs on `v*` tags. Derives version from the tag (`v1.2.3` → `1.2.3`), builds `:cli:distTar` with `-Pversion=…`, attaches the `.tar.gz` + `.sha256` to a GitHub release, then bumps `Formula/zeta.rb` in the `gematik/homebrew-zeta` tap repo via `mislav/bump-homebrew-formula-action`.
+- **`release.yml`** — runs on `v*` tags. Derives version from the tag (`v1.2.3` → `1.2.3`), builds `:cli:distTar` with `-Pversion=…`, attaches the `.tar.gz` + `.sha256` to a GitHub release, then bumps `Formula/zeta.rb` in the `gematik/homebrew-tap` tap repo via `mislav/bump-homebrew-formula-action`.
 
 Cutting a release:
 
@@ -152,14 +152,14 @@ The Homebrew tap-bump step needs a repo-scoped PAT for the tap repo, stored as t
 
 ## Homebrew
 
-`Formula/zeta.rb` is the canonical formula. The release workflow keeps the copy in the `gematik/homebrew-zeta` tap in sync; this file is the source of truth for non-version-bump changes (deps, install logic, tests).
+`Formula/zeta.rb` is the canonical formula. The release workflow keeps the copy in the `gematik/homebrew-tap` tap in sync; this file is the source of truth for non-version-bump changes (deps, install logic, tests). To mirror the bump into a second tap (e.g. a personal one) after a release is cut, run `just publish-brew <owner>` — it pushes the same formula into `<owner>/homebrew-tap`.
 
 The formula installs the gradle distribution into `libexec/`, then writes a wrapper at `bin/zeta` via `write_env_script` that pins `JAVA_HOME` to Homebrew's `openjdk@21` (overridable by the user). The tarball produced by `:cli:distTar` has a single `zeta-<version>/` top-level dir, which Homebrew strips on stage — so the `Dir["*"]` glob in `def install` picks up `bin/` and `lib/` cleanly. Don't change the dist layout without updating the formula.
 
 To install from the tap once the tap repo exists:
 
 ```
-brew tap gematik/zeta
+brew tap gematik/tap
 brew install zeta
 ```
 
