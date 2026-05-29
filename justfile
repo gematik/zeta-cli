@@ -44,7 +44,7 @@ install:
     echo "Installed: $(brew --prefix)/bin/zeta"
     "$(brew --prefix)/bin/zeta" version
 
-# publish the current release to <owner>/homebrew-tap by bumping Formula/zeta.rb
+# build + upload the current release to <owner>/homebrew-tap and bump Formula/zeta.rb
 # usage: just publish-brew <owner>     (e.g. `just publish-brew spilikin`)
 publish-brew owner:
     #!/usr/bin/env bash
@@ -60,25 +60,31 @@ publish-brew owner:
 
     VERSION=$(grep '^version=' gradle.properties | cut -d= -f2)
     TAG="v${VERSION}"
-    ASSET="zeta-${VERSION}.tar.gz"
-    SRC_REPO="gematik/zeta-cli"
+    ASSET_NAME="zeta-${VERSION}.tar.gz"
     TAP_REPO="${OWNER}/homebrew-tap"
+    REPO_ROOT="$PWD"
 
-    gh release view "$TAG" --repo "$SRC_REPO" >/dev/null 2>&1 || {
-        echo "Release $TAG not found on $SRC_REPO — push a v* tag first." >&2
-        exit 1
-    }
+    ./gradlew :cli:distTar
+    TARBALL="${REPO_ROOT}/cli/build/distributions/${ASSET_NAME}"
+    [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
+
+    SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
+    SHA_FILE="${TARBALL}.sha256"
+    echo "$SHA  ${ASSET_NAME}" > "$SHA_FILE"
+
+    if gh release view "$TAG" --repo "$TAP_REPO" >/dev/null 2>&1; then
+        echo "Release $TAG already exists on $TAP_REPO — replacing assets."
+        gh release upload "$TAG" --repo "$TAP_REPO" --clobber "$TARBALL" "$SHA_FILE"
+    else
+        gh release create "$TAG" --repo "$TAP_REPO" \
+            --title "zeta ${VERSION}" --notes "zeta ${VERSION}" --target main \
+            "$TARBALL" "$SHA_FILE"
+    fi
+
+    DOWNLOAD_URL="https://github.com/${TAP_REPO}/releases/download/${TAG}/${ASSET_NAME}"
 
     WORKDIR=$(mktemp -d)
     trap 'rm -rf "$WORKDIR"' EXIT
-
-    gh release download "$TAG" --repo "$SRC_REPO" \
-        --pattern "${ASSET}.sha256" --dir "$WORKDIR"
-    SHA=$(awk '{print $1; exit}' "$WORKDIR/${ASSET}.sha256")
-    [ -n "$SHA" ] || { echo "Empty SHA in ${ASSET}.sha256" >&2; exit 1; }
-
-    DOWNLOAD_URL="https://github.com/${SRC_REPO}/releases/download/${TAG}/${ASSET}"
-    REPO_ROOT="$PWD"
 
     gh repo clone "$TAP_REPO" "$WORKDIR/tap" -- --depth 1
     cd "$WORKDIR/tap"
@@ -90,15 +96,15 @@ publish-brew owner:
 
     git add Formula/zeta.rb
     if git diff --cached --quiet; then
-        echo "Already at $VERSION — nothing to publish."
-        exit 0
+        echo "Formula already at $VERSION on $TAP_REPO."
+    else
+        git commit -m "zeta ${VERSION}"
+        git push
     fi
-    git -c user.name="zeta-cli release" -c user.email="noreply@gematik.de" \
-        commit -m "zeta ${VERSION}"
-    git push
 
     echo
-    echo "Bumped ${TAP_REPO} Formula/zeta.rb to ${VERSION}"
+    echo "Published zeta ${VERSION} to ${TAP_REPO}"
+    echo "Install: brew tap ${OWNER}/tap && brew install zeta"
 
 generate-connector:
     #!/usr/bin/env bash
