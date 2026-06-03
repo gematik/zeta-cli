@@ -37,9 +37,6 @@ private val urlStyle: TextStyle = TextColors.green
 private val protoStyle: TextStyle = TextColors.gray
 private val headerNameStyle: TextStyle = TextColors.cyan
 
-// Header values are intentionally unstyled — using the terminal's default foreground
-// (rather than gray) keeps them at full readability while the coloured name carries the
-// visual distinction. Matches what curlie/httpie do.
 private val sectionRule: TextStyle = TextColors.gray
 private val boldStyle: TextStyle = TextStyles.bold.style
 private val statusOkStyle: TextStyle = TextStyles.bold + TextColors.green
@@ -217,8 +214,7 @@ private fun formatHeader(line: String): String {
     return "${headerNameStyle.maybe(name)}: $value"
 }
 
-private fun styleStatus(status: String): String =
-    pickStatusStyle(status.split(" ").firstOrNull()?.toIntOrNull()).maybe(status)
+private fun styleStatus(status: String): String = pickStatusStyle(status.split(" ").firstOrNull()?.toIntOrNull()).maybe(status)
 
 private fun pickStatusStyle(code: Int?): TextStyle =
     when {
@@ -269,7 +265,10 @@ private fun isTextLike(ct: String): Boolean =
         "x-www-form-urlencoded" in ct ||
         "csv" in ct
 
-private fun tryRenderJson(body: String, colorize: Boolean): String =
+private fun tryRenderJson(
+    body: String,
+    colorize: Boolean,
+): String =
     runCatching {
         renderJson(Json.parseToJsonElement(body), colorize = colorize)
     }.getOrDefault(body)
@@ -304,14 +303,18 @@ private data class JwtFinding(
 /** Assign or look up the handle for [raw]. `firstSeen` is true on the first sighting only. */
 private fun registerJwt(raw: String): Pair<Int, Boolean> {
     var firstSeen = false
-    val id = jwtRegistry.computeIfAbsent(raw) {
-        firstSeen = true
-        nextJwtId.incrementAndGet()
-    }
+    val id =
+        jwtRegistry.computeIfAbsent(raw) {
+            firstSeen = true
+            nextJwtId.incrementAndGet()
+        }
     return id to firstSeen
 }
 
-private fun collectJwtsFromHeader(headerLine: String, into: MutableList<JwtFinding>) {
+private fun collectJwtsFromHeader(
+    headerLine: String,
+    into: MutableList<JwtFinding>,
+) {
     val sep = headerLine.indexOf(':')
     if (sep < 0) return
     val name = headerLine.substring(0, sep).trim()
@@ -319,12 +322,17 @@ private fun collectJwtsFromHeader(headerLine: String, into: MutableList<JwtFindi
     into += findJwts(value, "header[$name]")
 }
 
-private fun findJwts(text: String, source: String): List<JwtFinding> =
-    jwtRegex.findAll(text).mapNotNull { decodeJwt(it.value, source) }.toList()
+private fun findJwts(
+    text: String,
+    source: String,
+): List<JwtFinding> = jwtRegex.findAll(text).mapNotNull { decodeJwt(it.value, source) }.toList()
 
 /** Decode a candidate match. `null` if either of the first two parts isn't base64url-JSON, or if
  *  the JOSE header doesn't look JWT-shaped (no `alg` or `typ`) — keeps random three-dot strings out. */
-private fun decodeJwt(raw: String, source: String): JwtFinding? {
+private fun decodeJwt(
+    raw: String,
+    source: String,
+): JwtFinding? {
     val parts = raw.split('.')
     if (parts.size != 3) return null
     val joseHeader = decodeBase64UrlJson(parts[0]) as? JsonObject ?: return null
@@ -334,18 +342,24 @@ private fun decodeJwt(raw: String, source: String): JwtFinding? {
     return JwtFinding(source, joseHeader, payload, id, firstSeen)
 }
 
-private fun decodeBase64UrlJson(s: String): JsonElement? = runCatching {
-    val pad = "=".repeat((4 - s.length % 4) % 4)
-    val bytes = Base64.getUrlDecoder().decode(s + pad)
-    Json.parseToJsonElement(bytes.decodeToString())
-}.getOrNull()
+private fun decodeBase64UrlJson(s: String): JsonElement? =
+    runCatching {
+        val pad = "=".repeat((4 - s.length % 4) % 4)
+        val bytes = Base64.getUrlDecoder().decode(s + pad)
+        Json.parseToJsonElement(bytes.decodeToString())
+    }.getOrNull()
 
 /** Walk a body for JWTs in a content-type-aware way. */
-private fun findJwtsInBody(body: String, contentType: String?): List<JwtFinding> {
+private fun findJwtsInBody(
+    body: String,
+    contentType: String?,
+): List<JwtFinding> {
     val ct = contentType?.lowercase().orEmpty()
     val trimmed = body.trimStart()
     return when {
-        "x-www-form-urlencoded" in ct -> findJwtsInForm(body)
+        "x-www-form-urlencoded" in ct -> {
+            findJwtsInForm(body)
+        }
 
         "json" in ct || trimmed.startsWith("{") || trimmed.startsWith("[") -> {
             val element = runCatching { Json.parseToJsonElement(body) }.getOrNull()
@@ -353,7 +367,9 @@ private fun findJwtsInBody(body: String, contentType: String?): List<JwtFinding>
                 ?: findJwts(body, "body")
         }
 
-        else -> findJwts(body, "body")
+        else -> {
+            findJwts(body, "body")
+        }
     }
 }
 
@@ -367,17 +383,29 @@ private fun findJwtsInForm(body: String): List<JwtFinding> =
     }
 
 /** Yield every string-leaf with its dotted JSON path, e.g. `claims.access_token`, `tokens[0]`. */
-private fun walkJsonStrings(element: JsonElement, path: String): Sequence<Pair<String, String>> = sequence {
-    when (element) {
-        is JsonObject -> element.entries.forEach { (k, v) ->
-            yieldAll(walkJsonStrings(v, if (path.isEmpty()) k else "$path.$k"))
+private fun walkJsonStrings(
+    element: JsonElement,
+    path: String,
+): Sequence<Pair<String, String>> =
+    sequence {
+        when (element) {
+            is JsonObject -> {
+                element.entries.forEach { (k, v) ->
+                    yieldAll(walkJsonStrings(v, if (path.isEmpty()) k else "$path.$k"))
+                }
+            }
+
+            is JsonArray -> {
+                element.forEachIndexed { i, v ->
+                    yieldAll(walkJsonStrings(v, "$path[$i]"))
+                }
+            }
+
+            is JsonPrimitive -> {
+                if (element.isString) yield(path.ifEmpty { "$" } to element.content)
+            }
         }
-        is JsonArray -> element.forEachIndexed { i, v ->
-            yieldAll(walkJsonStrings(v, "$path[$i]"))
-        }
-        is JsonPrimitive -> if (element.isString) yield(path.ifEmpty { "$" } to element.content)
     }
-}
 
 private fun formatJwtSection(findings: List<JwtFinding>): String {
     val color = StderrColors.enabled
@@ -399,5 +427,7 @@ private fun formatJwtSection(findings: List<JwtFinding>): String {
     }
 }
 
-private fun indent(s: String, prefix: String): String =
-    s.lineSequence().joinToString("\n") { "$prefix$it" }
+private fun indent(
+    s: String,
+    prefix: String,
+): String = s.lineSequence().joinToString("\n") { "$prefix$it" }

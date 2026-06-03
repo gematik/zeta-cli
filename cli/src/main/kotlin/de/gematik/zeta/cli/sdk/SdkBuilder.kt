@@ -17,7 +17,7 @@ import de.gematik.zeta.sdk.storage.StorageConfig
 import de.gematik.zeta.sdk.tpm.TpmProvider
 import java.nio.file.Path
 
-const val OID_ZETA_GUARD = "1.2.276.0.76.4.324"
+const val OID_ZETA_GUARD = "1.2.276.0.76.4.328"
 
 /**
  * Build a [ZetaSdkClient] with the common CLI-wide defaults: product id, in-process
@@ -35,31 +35,33 @@ internal fun buildZetaSdkClient(
     storagePath: Path,
     tokenProvider: SubjectTokenProvider,
     cliConfig: CliConfig,
-): ZetaSdkClient = Tracer.span(
-    "sdk.init",
-    attrs = mapOf("resource" to resource, "scopes" to scopes.joinToString(",")),
-) {
-    ZetaSdk.build(
-        resource,
-        BuildConfig(
-            productId = "ZETA-Test-Client",
-            productVersion = "1.0.0",
-            clientName = "zeta-cli",
-            storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
-            tpmConfig = object : TpmConfig {},
-            authConfig = AuthConfig(
-                scopes = scopes,
-                exp = 30,
-                aslProdEnvironment = cliConfig.aslProdEnvironment,
-                subjectTokenProvider = tokenProvider,
-                attestation = AttestationConfig.software(),
-                requiredRoleOid = OID_ZETA_GUARD,
+): ZetaSdkClient =
+    Tracer.span(
+        "sdk.init",
+        attrs = mapOf("resource" to resource, "scopes" to scopes.joinToString(",")),
+    ) {
+        ZetaSdk.build(
+            resource,
+            BuildConfig(
+                productId = "ZETA-Test-Client",
+                productVersion = "1.0.0",
+                clientName = "zeta-cli",
+                storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
+                tpmConfig = object : TpmConfig {},
+                authConfig =
+                    AuthConfig(
+                        scopes = scopes,
+                        exp = 30,
+                        aslProdEnvironment = cliConfig.aslProdEnvironment,
+                        subjectTokenProvider = tokenProvider,
+                        attestation = AttestationConfig.software(),
+                        requiredRoleOid = OID_ZETA_GUARD,
+                    ),
+                platformProductId = currentPlatformProductId(),
+                httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(cliConfig),
             ),
-            platformProductId = currentPlatformProductId(),
-            httpClientBuilder = ZetaHttpClientBuilder().applyCliHttpDefaults(cliConfig),
-        ),
-    )
-}
+        )
+    }
 
 /**
  * Pick the [PlatformProductId] variant matching the host OS. Software-attestation flows
@@ -73,22 +75,37 @@ internal fun buildZetaSdkClient(
 private fun currentPlatformProductId(): PlatformProductId {
     val osName = System.getProperty("os.name").orEmpty().lowercase()
     return when {
-        "windows" in osName -> PlatformProductId.WindowsProductId(
-            PlatformProductId.PLATFORM_WINDOWS,
-            /* storeId = */ "",
-            /* packageFamilyName = */ "",
-        )
-        "linux" in osName -> PlatformProductId.LinuxProductId(
-            PlatformProductId.PLATFORM_LINUX,
-            /* packagingType = */ "",
-            /* applicationId = */ "de.gematik.zeta.cli",
-            /* version = */ "1.0.0",
-        )
-        else -> PlatformProductId.AppleProductId(
-            PlatformProductId.PLATFORM_APPLE,
-            /* platformType = */ "macos",
-            /* appBundleIds = */ listOf(),
-        )
+        "windows" in osName -> {
+            PlatformProductId.WindowsProductId(
+                PlatformProductId.PLATFORM_WINDOWS,
+                // storeId =
+                "",
+                // packageFamilyName =
+                "",
+            )
+        }
+
+        "linux" in osName -> {
+            PlatformProductId.LinuxProductId(
+                PlatformProductId.PLATFORM_LINUX,
+                // packagingType =
+                "",
+                // applicationId =
+                "de.gematik.zeta.cli",
+                // version =
+                "1.0.0",
+            )
+        }
+
+        else -> {
+            PlatformProductId.AppleProductId(
+                PlatformProductId.PLATFORM_APPLE,
+                // platformType =
+                "macos",
+                // appBundleIds =
+                listOf(),
+            )
+        }
     }
 }
 
@@ -111,8 +128,9 @@ internal object NoopSubjectTokenProvider : SubjectTokenProvider {
         now: Long,
         expiration: Long,
         tpmProvider: TpmProvider,
-    ): String = error(
-        "Subject token requested by a read-only SDK operation — this command was built with " +
-            "NoopSubjectTokenProvider on the assumption no token would be needed. Likely a bug.",
-    )
+    ): String =
+        error(
+            "Subject token requested by a read-only SDK operation — this command was built with " +
+                "NoopSubjectTokenProvider on the assumption no token would be needed. Likely a bug.",
+        )
 }
