@@ -1,46 +1,16 @@
-# zeta
+# ZETA command line client
 
 ![zeta CLI demo](demo.gif)
 
-Swiss-army-knife CLI for [ZETA](https://github.com/gematik/zeta-guard) — inspect Zeta-Guard-protected resources, register clients, drive a gematik Konnektor, and obtain Proof-of-Patient-Presence (PoPP) tokens.
+Command-line client for resources protected by [ZETA Guard](https://github.com/gematik/zeta). Handles the full OAuth2 client lifecycle — dynamic client registration, SMC-B authentication via a gematik Konnektor or local PKCS#12 keystore, token refresh and revocation — and ships a curl-like HTTP client and a JSON-over-WebSocket client that transparently attach the bearer token to every request. Also obtains Proof-of-Patient-Presence (PoPP) tokens via Konnektor-driven eGK flows.
 
-- [Install](#install)
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [Options reference](#options-reference)
 - [Configuration file: `zeta.yaml`](#configuration-file-zetayaml)
 - [Logging & output](#logging--output)
+- [Install](#install)
 - [Development](#development)
-
-## Install
-
-Requires JDK 21. The Gradle wrapper auto-provisions one if needed.
-
-### Dev mode (no install)
-
-Run straight from sources via `:cli:run` — the `./zeta-dev` wrapper forwards args verbatim:
-
-```sh
-./zeta-dev version
-./zeta-dev discover https://popp.dev.poppservice.de
-```
-
-### Local install via Gradle (no Homebrew)
-
-```sh
-./gradlew :cli:installDist
-./cli/build/install/zeta/bin/zeta version
-export PATH="$PWD/cli/build/install/zeta/bin:$PATH"   # optional
-```
-
-### Local install via Homebrew
-
-```sh
-just install      # builds tarball, materialises a private tap, brew install
-zeta version
-```
-
-Installs into `$(brew --prefix)/bin` and pins `JAVA_HOME` to Homebrew's `openjdk@21`.
 
 ## Quick start
 
@@ -73,7 +43,7 @@ zeta login https://popp.dev.poppservice.de \
   --auth-p12-file ./smcb.p12
 ```
 
-(`--auth-p12-alias` defaults to `alias`, `--auth-p12-password` to `00` — see the [PKCS#12 method table](#pkcs12-method-).)
+(`--auth-p12-alias` defaults to `alias`, `--auth-p12-password` to `00` — see the [PKCS#12 method table](#pkcs12-method---auth-method-p12).)
 
 ## Commands
 
@@ -195,21 +165,21 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 
 ### Command-specific options
 
-#### `authenticate` / `login` / `register` / `logout` / `status`
+#### `zeta authenticate` / `zeta login` / `zeta register` / `zeta logout` / `zeta status`
 
 | Option | Env var | Default |
 | --- | --- | --- |
 | `-s, --scope=<name>` (repeatable, required) — `authenticate` / `login` only | `ZETA_SCOPE` | — |
 | `--reveal` — include redacted secrets in status output | `ZETA_REVEAL` | `false` |
 
-#### `forget`
+#### `zeta forget`
 
 | Option | Env var | Default |
 | --- | --- | --- |
 | `--all` — wipe entire profile | `ZETA_FORGET_ALL` | `false` |
 | `--force` — skip interactive confirmation | `ZETA_FORGET_FORCE` | `false` |
 
-#### `http`
+#### `zeta http`
 
 | Option | Env var | Default |
 | --- | --- | --- |
@@ -220,7 +190,7 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 | `-s, --scope=<name>` (repeatable, **required**) | `ZETA_SCOPE` | — |
 | `-p, --popp-token=<token>` | `ZETA_POPP_TOKEN` | — |
 
-#### `ws`
+#### `zeta ws`
 
 | Option | Env var | Default |
 | --- | --- | --- |
@@ -228,7 +198,7 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 | `-s, --scope=<name>` (repeatable, **required**) | `ZETA_SCOPE` | — |
 | `-p, --popp-token=<token>` | `ZETA_POPP_TOKEN` | — |
 
-#### `popp connector [EGK_HANDLE]`
+#### `zeta popp connector [EGK_HANDLE]`
 
 | Option | Env var | Default |
 | --- | --- | --- |
@@ -237,7 +207,7 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 
 `EGK_HANDLE` is positional and optional — auto-picked when exactly one eGK is visible.
 
-#### `popp kartos`
+#### `zeta popp kartos`
 
 | Option | Env var | Default |
 | --- | --- | --- |
@@ -264,20 +234,22 @@ First hit wins — files are never merged. When `-f` is passed (or `ZETA_CONFIG`
 
 ### Selecting a config file (`-f`)
 
-`-f` is the docker-compose idiom for switching between scenarios: keep one `zeta.yaml` per environment, point at one with the flag:
+`-f` is the docker-compose idiom for switching between scenarios: keep one `zeta.yaml` per environment, point at one with the flag.
+
+```yaml
+# ~/.config/telematik/zeta/zeta-popp-ru.yaml
+profile: popp-ru                  # SDK state lands in popp-ru.storage.json
+auth-method: connector
+auth-connector-telematik-id: "${SMCB_TID_RU}"
+scope: [popp]
+```
 
 ```sh
-# ~/.config/telematik/zeta/zeta-popp-ru.yaml
-# profile: popp-ru                  # SDK state lands in popp-ru.storage.json
-# auth-method: connector
-# auth-connector-telematik-id: "${SMCB_TID_RU}"
-# scope: [popp]
-
 zeta -f ~/.config/telematik/zeta/zeta-popp-ru.yaml http https://popp.dev.poppservice.de/some/api
 
 # Or pin per-shell:
 export ZETA_CONFIG=~/.config/telematik/zeta/zeta-popp-ru.yaml
-zeta http  https://popp.dev.poppservice.de/some/api
+zeta http https://popp.dev.poppservice.de/some/api
 zeta popp connector
 ```
 
@@ -365,6 +337,36 @@ A sticky option (e.g. `--connector-config`) declared at a parent depth (`zeta --
 - `-o json` emits parseable JSON without colour when stdout is piped. `-o raw` (for `http`) prints the body verbatim with no framing.
 - Colour follows TTY detection and respects `NO_COLOR` / `FORCE_COLOR`.
 
+## Install
+
+Requires JDK 21. The Gradle wrapper auto-provisions one if needed.
+
+### Dev mode (no install)
+
+Run straight from sources via `:cli:run` — the `./zeta-dev` wrapper forwards args verbatim:
+
+```sh
+./zeta-dev version
+./zeta-dev discover https://popp.dev.poppservice.de
+```
+
+### Local install via Gradle (no Homebrew)
+
+```sh
+./gradlew :cli:installDist
+./cli/build/install/zeta/bin/zeta version
+export PATH="$PWD/cli/build/install/zeta/bin:$PATH"   # optional
+```
+
+### Local install via Homebrew
+
+```sh
+just install      # builds tarball, materialises a private tap, brew install
+zeta version
+```
+
+Installs into `$(brew --prefix)/bin` and pins `JAVA_HOME` to Homebrew's `openjdk@21`.
+
 ## Development
 
 Common tasks are wired up in the `justfile`:
@@ -389,5 +391,3 @@ By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` 
 Set it persistently in `~/.gradle/gradle.properties` (`zetaSdkVersion=latest`) to avoid passing the flag every time — Gradle will still let project- or command-line values override that.
 
 `zeta version` prints the resolved SDK version so you always know which one shipped in the binary.
-
-See [`CLAUDE.md`](CLAUDE.md) for the full architecture and build notes, and [`OVERVIEW.md`](OVERVIEW.md) for the runtime architecture diagram.

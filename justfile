@@ -102,6 +102,14 @@ publish-brew owner:
         git push
     fi
 
+    cd "$REPO_ROOT"
+    if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+        echo "Local tag ${TAG} already exists."
+    else
+        git tag "$TAG"
+        echo "Created local tag ${TAG}."
+    fi
+
     echo
     echo "Published zeta ${VERSION} to ${TAP_REPO}"
     echo "Install: brew tap ${OWNER}/tap && brew install zeta"
@@ -128,3 +136,52 @@ demo:
 
     echo
     echo "Generated: $(pwd)/demo.gif"
+
+# build README.pdf from README.md via pandoc + typst, with gematik logo header
+readme-pdf:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    command -v pandoc >/dev/null 2>&1 || { echo "pandoc is required: brew install pandoc" >&2; exit 1; }
+    command -v typst  >/dev/null 2>&1 || { echo "typst is required: brew install typst"   >&2; exit 1; }
+
+    [ -f images/gematik-logo.png ] || { echo "images/gematik-logo.png missing" >&2; exit 1; }
+
+    SRC=$(mktemp ./zeta-readme.XXXXXX.md)
+    TYP=$(mktemp ./zeta-readme.XXXXXX.typ)
+    trap 'rm -f "$SRC" "$TYP" "$TYP.bak"' EXIT
+
+    {
+        printf '![](images/gematik-logo.png){width=4cm}\n\n'
+        cat README.md
+    } > "$SRC"
+
+    pandoc "$SRC" -o "$TYP" \
+        --from=markdown+gfm_auto_identifiers-implicit_figures \
+        --to=typst \
+        --lua-filter=tools/pdf-strip-gif.lua \
+        --include-in-header=tools/pdf-style.typ \
+        -V geometry=margin=2.5cm
+
+    # Force every table to span the full text column. Pandoc emits each
+    # table as `figure(align(center)[#table(columns: (50%, 50%), …)])`
+    # — fr-flex columns won't expand because `align(center)` provides no
+    # width constraint, and the percent columns just split the table's
+    # natural content width. Two rewrites fix both:
+    #   1. Swap `align(center)[#table(` → `block(width: 100%)[#table(`
+    #      so the table's parent has a concrete width.
+    #   2. Convert column specs to `1fr` units so the columns share that
+    #      width equally (covers both `columns: (N%, N%)` and bare
+    #      `columns: N` forms emitted by pandoc).
+    sed -i.bak -E \
+        -e 's/align\(center\)\[#table\(/block(width: 100%)[#table(/g' \
+        -e '/columns: \(/ s/[0-9]+(\.[0-9]+)?%/1fr/g' \
+        -e 's/columns: 2,/columns: (1fr, 1fr),/g' \
+        -e 's/columns: 3,/columns: (1fr, 1fr, 1fr),/g' \
+        -e 's/columns: 4,/columns: (1fr, 1fr, 1fr, 1fr),/g' \
+        "$TYP"
+
+    typst compile "$TYP" README.pdf
+
+    echo
+    echo "Generated: $(pwd)/README.pdf"

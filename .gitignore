@@ -3,3 +3,5 @@
 build
 .kotlin
 *.kon
+README.pdf
+.DS_Store
