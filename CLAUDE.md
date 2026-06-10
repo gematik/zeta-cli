@@ -45,7 +45,7 @@ Wired in `Main.kt` via Clikt's `subcommands(...)`. Each top-level command lives 
 | `zeta logout URL` | `lifecycle` | SDK `logout()` — revoke + clear tokens locally, keep registration. |
 | `zeta forget [URL]` / `--all` | `lifecycle` | Per-URL: drive `ZetaSdk.forget(client)` via [NoopSubjectTokenProvider] (auth options not required). `--all`: delete profile storage file. Interactive confirmation, suppressed by `--force`; non-TTY without `--force` refuses. |
 | `zeta http URL` / `zeta ws URL` | `client` | Bearer-bound HTTP / WebSocket via the SDK's authenticated client. |
-| `zeta connector …` | `connector` | Talk to a Konnektor described by a `.kon` file. |
+| `zeta connector …` | `connector` | Talk to a Konnektor described by a `.kon` file. `zeta connector use <name>` writes `$XDG_CONFIG_HOME/telematik/connectors/active` so subsequent commands without `-c`/`ZETA_CONNECTOR_CONFIG` pick it up. |
 | `zeta popp …` | `popp` | Retrieve a Proof-of-Patient-Presence token. |
 
 Command-base hierarchy:

@@ -15,14 +15,20 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.put
 
+private const val ACTIVE_MARKER = "*"
+private const val INACTIVE_MARKER = " "
+
 private val log = KotlinLogging.logger {}
 
 class ConnectorConfigsCommand : ZetaCliktCommand(name = "configs") {
     override fun help(context: Context) =
-        "List available .kon configuration files in the current directory and \$XDG_CONFIG_HOME/telematik/kon/."
+        "List available .kon configuration files in the current directory and " +
+            "\$XDG_CONFIG_HOME/telematik/connectors/. Marks the active config (set with " +
+            "`zeta connector use`)."
 
     override fun runCommand() {
-        val configs = listKonConfigs().mapNotNull { path -> readConfig(path) }
+        val active = readActiveConnector()
+        val configs = listKonConfigs().mapNotNull { path -> readConfig(path, active) }
 
         when (cliConfig.outputFormat) {
             OutputFormat.JSON -> echo(renderJson(jsonReport(configs), colorize = colorize))
@@ -36,9 +42,10 @@ private data class KonConfigInfo(
     val url: String,
     val context: String,
     val path: Path,
+    val active: Boolean,
 )
 
-private fun readConfig(path: Path): KonConfigInfo? {
+private fun readConfig(path: Path, activeName: String?): KonConfigInfo? {
     val text = runCatching { path.readText() }.getOrElse {
         log.warn { "could not read $path: ${it.message}" }
         return null
@@ -47,11 +54,13 @@ private fun readConfig(path: Path): KonConfigInfo? {
         log.warn { "could not parse $path: ${it.message}" }
         return null
     }
+    val name = path.nameWithoutExtension
     return KonConfigInfo(
-        name = path.nameWithoutExtension,
+        name = name,
         url = dk.url,
         context = listOf(dk.mandantId, dk.workplaceId, dk.clientSystemId).joinToString("/"),
         path = path,
+        active = activeName != null && activeName == name,
     )
 }
 
@@ -62,21 +71,23 @@ private fun jsonReport(configs: List<KonConfigInfo>): JsonArray = buildJsonArray
             put("url", c.url)
             put("context", c.context)
             put("path", c.path.toString())
+            put("active", c.active)
         }
     }
 }
 
 private fun textReport(configs: List<KonConfigInfo>): String {
     if (configs.isEmpty()) {
-        return "No .kon configurations found in the current directory or ${konConfigDir()}/."
+        return "No .kon configurations found in the current directory or ${connectorsConfigDir()}/."
     }
     val nameW = maxOf("NAME".length, configs.maxOf { it.name.length })
     val urlW = maxOf("URL".length, configs.maxOf { it.url.length })
-    val header = TextStyles.bold("${"NAME".padEnd(nameW)}  ${"URL".padEnd(urlW)}  CONTEXT")
+    val header = TextStyles.bold("  ${"NAME".padEnd(nameW)}  ${"URL".padEnd(urlW)}  CONTEXT")
     return buildString {
         appendLine(header)
         configs.forEach { c ->
-            appendLine("${c.name.padEnd(nameW)}  ${c.url.padEnd(urlW)}  ${c.context}")
+            val marker = if (c.active) ACTIVE_MARKER else INACTIVE_MARKER
+            appendLine("$marker ${c.name.padEnd(nameW)}  ${c.url.padEnd(urlW)}  ${c.context}")
         }
     }.trimEnd()
 }

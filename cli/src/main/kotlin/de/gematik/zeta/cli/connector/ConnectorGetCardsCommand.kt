@@ -29,7 +29,7 @@ class ConnectorGetCardsCommand : ZetaCliktCommand(name = "cards") {
 
     override fun runCommand() {
         val session = openConnectorSession(
-            connectorConfigName = cliConfig.connectorConfig,
+            konPath = cliConfig.resolveSelectedKonFile(),
             connectTimeout = cliConfig.connectTimeout,
             requestTimeout = cliConfig.requestTimeout,
             proxy = cliConfig.proxy,

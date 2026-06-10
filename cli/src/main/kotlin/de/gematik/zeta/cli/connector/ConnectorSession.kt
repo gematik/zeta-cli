@@ -1,6 +1,5 @@
 package de.gematik.zeta.cli.connector
 
-import com.github.ajalt.clikt.core.UsageError
 import de.gematik.connector.Dotkon
 import de.gematik.connector.ConnectorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
@@ -18,6 +17,7 @@ import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
+import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.time.Duration
 
@@ -93,25 +93,21 @@ internal suspend fun <T> ConnectorSession.tracedUnder(
     else Tracer.spanSuspend("connector.$op", attrs) { block() }
 
 /**
- * Resolve a `.kon` by name and build the OkHttp client with the .kon's TLS + curlie
+ * Parse the .kon at [konPath] and build the OkHttp client with the .kon's TLS + curlie
  * logging. Does **not** connect to the Connector — that happens lazily on the first
- * [ConnectorSession.connector] call. Throws a clean [UsageError] when the .kon can't be
- * found.
+ * [ConnectorSession.connector] call. Callers resolve [konPath] via
+ * `cliConfig.resolveSelectedKonFile()` so the `active`-file fallback (and its stale-pointer
+ * error hint) is applied uniformly across commands.
  *
  * @param proxy when non-null, the same proxy used by the CLI's other HTTP clients is
  *   applied to the OkHttp engine, so SOAP traffic to the Connector traverses it as well.
  */
 internal fun openConnectorSession(
-    connectorConfigName: String,
+    konPath: Path,
     connectTimeout: Duration,
     requestTimeout: Duration,
     proxy: ProxyConfig? = null,
 ): ConnectorSession {
-    val konPath = try {
-        resolveKonFile(connectorConfigName)
-    } catch (e: Exception) {
-        throw UsageError(e.message ?: "could not resolve connector config")
-    }
     log.info { "Reading .kon from $konPath" }
     val dotkon = parseDotkon(konPath.readText())
     log.info { "Connector: ${dotkon.url}" }

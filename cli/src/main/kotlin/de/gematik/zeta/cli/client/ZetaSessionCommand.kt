@@ -12,6 +12,7 @@ import com.github.ajalt.clikt.parameters.types.path
 import de.gematik.zeta.cli.ZetaProfileCommand
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.openConnectorSession
+import de.gematik.zeta.cli.connector.resolveSelectedKonFile
 import de.gematik.zeta.cli.sdk.buildZetaSdkClient
 import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.cli.trace.Tracer
@@ -230,7 +231,7 @@ abstract class ZetaSessionCommand(
                 // .kon parsing + HttpClient construction (cheap); SDS load + SMC-B enumeration
                 // are deferred to the first SDK `createSubjectToken` call via [LazySubjectTokenProvider].
                 val session = openConnectorSession(
-                    connectorConfigName = cliConfig.connectorConfig,
+                    konPath = cliConfig.resolveSelectedKonFile(),
                     connectTimeout = cliConfig.connectTimeout,
                     requestTimeout = cliConfig.requestTimeout,
                     proxy = cliConfig.proxy,

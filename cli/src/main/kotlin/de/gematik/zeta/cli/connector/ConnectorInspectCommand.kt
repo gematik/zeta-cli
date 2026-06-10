@@ -2,7 +2,6 @@ package de.gematik.zeta.cli.connector
 
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.Context
-import com.github.ajalt.clikt.core.UsageError
 import de.gematik.connector.ConnectorException
 import de.gematik.connector.ConnectorServices
 import de.gematik.connector.Credentials
@@ -37,11 +36,7 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
         "Connect to a Connector described by a .kon file and display product / service information."
 
     override fun runCommand() {
-        val configFile = try {
-            resolveKonFile(cliConfig.connectorConfig)
-        } catch (e: KonFileNotFoundException) {
-            throw UsageError(e.message ?: "kon file not found")
-        }
+        val configFile = cliConfig.resolveSelectedKonFile()
         try {
             doRun(configFile)
         } catch (e: CliktError) {

@@ -173,8 +173,10 @@ behaviour** that `.kon` parsing uses (single implementation in
   `$XDG_CONFIG_HOME/telematik/zeta/<profile>.storage.json`. Atomic writes, mode 0600 on
   POSIX. The Zeta SDK keys entries by `<resource>` hash so different services / profiles
   don't collide.
-- **`.kon` configs**: hand-edited at `$XDG_CONFIG_HOME/telematik/kon/<name>.kon`. Cwd takes
-  precedence; `--connector-config` selects by short name.
+- **`.kon` configs**: hand-edited at `$XDG_CONFIG_HOME/telematik/connectors/<name>.kon`. Cwd
+  takes precedence; `--connector-config` (or `ZETA_CONNECTOR_CONFIG`) selects by short name.
+  `zeta connector use <name>` records a sticky default in
+  `$XDG_CONFIG_HOME/telematik/connectors/active`, consulted when neither flag nor env is set.
 - **CLI config**: `zeta.yaml` (cwd or XDG; same path layout as `.kon`).
 
 XDG paths follow Linux conventions on every OS, including macOS — the same files work

@@ -11,6 +11,7 @@ import de.gematik.zeta.cli.connector.ConnectorConfigsCommand
 import de.gematik.zeta.cli.connector.ConnectorGetCardsCommand
 import de.gematik.zeta.cli.connector.ConnectorGetCommand
 import de.gematik.zeta.cli.connector.ConnectorInspectCommand
+import de.gematik.zeta.cli.connector.ConnectorUseCommand
 import de.gematik.zeta.cli.lifecycle.AuthenticateCommand
 import de.gematik.zeta.cli.lifecycle.DiscoverCommand
 import de.gematik.zeta.cli.lifecycle.ForgetCommand
@@ -106,6 +107,7 @@ fun main(args: Array<String>) {
                     ConnectorCommand().subcommands(
                         ConnectorInspectCommand(),
                         ConnectorConfigsCommand(),
+                        ConnectorUseCommand(),
                         ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
                     ),
                     PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),

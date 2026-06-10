@@ -16,8 +16,12 @@ internal class CliConfig {
     var connectTimeout: Duration = 5.seconds
     var requestTimeout: Duration = 30.seconds
     var outputFormat: OutputFormat = OutputFormat.TEXT
-    /** `.kon` file selector for the `connector` subcommand tree. Resolution rules in `DotkonPaths.kt`. */
-    var connectorConfig: String = "default"
+    /**
+     * Explicit `.kon` selector from `-c/--connector-config` or `ZETA_CONNECTOR_CONFIG`. `null`
+     * means nothing was specified — callers fall back to the `active` file, then `"default"`
+     * via `selectConnectorConfig()`. Resolution rules in `DotkonPaths.kt`.
+     */
+    var connectorConfig: String? = null
 
     /**
      * HTTP/SOCKS proxy applied uniformly to every outbound HTTP/WebSocket connection — the

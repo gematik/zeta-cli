@@ -14,6 +14,7 @@ import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.openConnectorSession
+import de.gematik.zeta.cli.connector.resolveSelectedKonFile
 import de.gematik.zeta.cli.connector.traced
 import de.gematik.zeta.cli.connector.tracedUnder
 import de.gematik.zeta.cli.trace.Tracer
@@ -69,7 +70,7 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
     override fun runCommand() {
         openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, authSession ->
             val poppSession = authSession ?: openConnectorSession(
-                connectorConfigName = cliConfig.connectorConfig,
+                konPath = cliConfig.resolveSelectedKonFile(),
                 connectTimeout = cliConfig.connectTimeout,
                 requestTimeout = cliConfig.requestTimeout,
                 proxy = cliConfig.proxy,
