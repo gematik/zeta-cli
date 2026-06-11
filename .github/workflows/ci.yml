@@ -17,7 +17,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build & test
         run: ./gradlew build --stacktrace
-      - name: Smoke-test the CLI
+      # Compile the cli against each bundled SDK version so a CLI source change that uses
+      # an API present in one but not the other fails CI here rather than at runtime
+      # under the launcher's classloader chain.
+      - name: Compile cli against each bundled SDK
         run: |
-          ./gradlew :cli:installDist
-          ./cli/build/install/zeta/bin/zeta version
+          set -e
+          for v in $(awk -F'"' '/^zeta-sdk-bundled/ {print $2}' gradle/libs.versions.toml | tr ',' ' '); do
+            echo "--- compileKotlin -PzetaSdkVersion=$v ---"
+            ./gradlew :cli:compileKotlin -PzetaSdkVersion="$v" --stacktrace
+          done
+      - name: Build the multi-SDK distribution
+        run: ./gradlew assembleDist
+      - name: Smoke-test the launcher
+        run: |
+          set -e
+          DIST=$(find build/dist -mindepth 1 -maxdepth 1 -type d | head -n1)
+          "$DIST/bin/zeta" version
+          "$DIST/bin/zeta" sdk list

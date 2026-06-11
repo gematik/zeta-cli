@@ -10,7 +10,7 @@ plugins {
 // publishToMavenLocal'd tag) resolves from the mavenLocal block in the common conventions
 // plugin; numeric releases resolve from Maven Central.
 val zetaSdkVersion: String =
-    providers.gradleProperty("zetaSdkVersion").orElse(libs.versions.zeta.sdk).get()
+    providers.gradleProperty("zetaSdkVersion").orElse(libs.versions.zeta.sdk.asProvider()).get()
 
 dependencies {
     implementation(project(":connector"))

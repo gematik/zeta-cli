@@ -12,10 +12,10 @@ install:
         exit 1
     }
 
-    ./gradlew :cli:distTar
+    ./gradlew distTar
 
     VERSION=$(grep '^version=' gradle.properties | cut -d= -f2)
-    TARBALL="$(pwd)/cli/build/distributions/zeta-${VERSION}.tar.gz"
+    TARBALL="$(pwd)/build/distributions/zeta-${VERSION}.tar.gz"
     [ -f "$TARBALL" ] || {
         echo "Tarball not found: $TARBALL" >&2
         exit 1
@@ -64,8 +64,8 @@ publish-brew owner:
     TAP_REPO="${OWNER}/homebrew-tap"
     REPO_ROOT="$PWD"
 
-    ./gradlew :cli:distTar
-    TARBALL="${REPO_ROOT}/cli/build/distributions/${ASSET_NAME}"
+    ./gradlew distTar
+    TARBALL="${REPO_ROOT}/build/distributions/${ASSET_NAME}"
     [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
 
     SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')

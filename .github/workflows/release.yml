@@ -25,12 +25,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build distribution
-        run: ./gradlew :cli:distTar -Pversion=${{ steps.version.outputs.version }}
+        run: ./gradlew distTar -Pversion=${{ steps.version.outputs.version }}
 
       - name: Compute SHA-256
         id: sha
         run: |
-          ARCHIVE="cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz"
+          ARCHIVE="build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz"
           SHA=$(sha256sum "$ARCHIVE" | awk '{print $1}')
           echo "$SHA  $(basename "$ARCHIVE")" > "$ARCHIVE.sha256"
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
@@ -39,8 +39,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz
-            cli/build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz.sha256
+            build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz
+            build/distributions/zeta-${{ steps.version.outputs.version }}.tar.gz.sha256
           generate_release_notes: true
 
       # Bumps Formula/zeta.rb in the gematik/homebrew-tap tap repo.

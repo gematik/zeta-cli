@@ -9,8 +9,9 @@ Gradle multi-project build using the wrapper. All commands run from the repo roo
 - Build everything: `./gradlew build`
 - Run the CLI: `./gradlew :cli:run --args="version"` (forward args via `--args`)
 - Faster dev wrapper: `./zeta-dev <args>` — forwards args verbatim through `:cli:run`, preserving spaces and quotes (e.g. `./zeta-dev describe endpoint https://example.com`)
-- Build a runnable distribution: `./gradlew :cli:installDist` (script at `cli/build/install/zeta/bin/zeta`)
-- Build the release tarball: `./gradlew :cli:distTar` → `cli/build/distributions/zeta-<version>.tar.gz`
+- Build a single-SDK dev distribution: `./gradlew :cli:installDist` (script at `cli/build/install/zeta/bin/zeta`, compiled against the catalog default SDK only)
+- Build the multi-SDK production distribution: `./gradlew assembleDist` (tree at `build/dist/zeta-<version>/`) — launcher + shared `lib-cli/` + one `lib-sdk-<v>/` per bundled SDK version
+- Build the release tarball: `./gradlew distTar` → `build/distributions/zeta-<version>.tar.gz` (the multi-SDK layout above, gzip-tarred with a single top-level dir)
 - Run all tests: `./gradlew test`
 - Single module: `./gradlew :connector:test`
 - Single test class: `./gradlew :cli:test --tests "de.gematik.zeta.cli.SomeTest"`
@@ -23,12 +24,34 @@ The version is set via `gradle.properties` (`version=…`) and propagated to sub
 ## Architecture
 
 ```
-cli (application, de.gematik.zeta.cli)  ──►  connector (library, de.gematik.connector)
-                                        ──►  de.gematik.zeta:zeta-sdk-jvm
+launcher (application, de.gematik.zeta.launcher)  ──►  cli (library, de.gematik.zeta.cli)
+                                                              │
+                                                              ├──►  connector (library, de.gematik.connector)
+                                                              └──►  de.gematik.zeta:zeta-sdk-jvm  (chosen at runtime)
 ```
 
+- **`launcher`** — tiny stdlib-only entry point. Parses `--sdk` from argv (also reads `ZETA_SDK`, the sticky pointer at `$XDG_CONFIG_HOME/telematik/zeta/sdk`, and the bundled default), builds a two-level `URLClassLoader` chain (`lib-cli/*` as parent, `lib-sdk-<chosen>/*` as child), then reflectively invokes `de.gematik.zeta.cli.MainKt#main`. The launcher is the binary published as `bin/zeta`.
 - **`cli`** — `de.gematik.zeta.cli`. Clikt-based CLI. Entry point is `de.gematik.zeta.cli.MainKt#main` (see `cli/build.gradle.kts`, `applicationName = "zeta"`). Owns the Ktor engine (`ktor-client-okhttp` — single engine for the whole CLI; CIO is not on the classpath) and `HttpClient` lifecycle. Depends directly on `de.gematik.zeta:zeta-sdk-jvm`; the SDK transitively pulls `slf4j-simple`, which is excluded in `cli/build.gradle.kts` so it doesn't clash with our Logback binding.
 - **`connector`** — see `connector/CLAUDE.md`. Hand-written facade over the generated Konnektor SOAP API.
+
+### Multi-SDK distribution & launcher
+
+The released `zeta` distribution bundles **multiple** `zeta-sdk` versions and lets the user pick at runtime. The list is declared in `gradle/libs.versions.toml` as `zeta-sdk-bundled = "1.0.1,latest"` (ordered oldest → newest; the last entry becomes the default written to `lib-sdk/default`). `assembleDist` (root `build.gradle.kts`) lays out the tarball as:
+
+```
+zeta-<v>/
+├── bin/zeta            # launcher start-script (Gradle CreateStartScripts, classpath patched to lib-launcher/)
+├── lib-launcher/       # launcher jars (~50 KB) — no SDK refs
+├── lib-cli/            # cli + connector + shared deps (Ktor, kotlinx-serialization, slf4j, Logback, …)
+├── lib-sdk-<v>/        # one per bundled SDK version: SDK jars unique to that version (basename-subtracted from lib-cli/)
+└── lib-sdk/default     # single-line text file with the default version
+```
+
+The launcher sets system properties before invoking the cli: `zeta.sdk.active`, `zeta.sdk.source` (`flag`/`env`/`sticky`/`default`), `zeta.sdk.default`, `zeta.sdk.available`, `zeta.app.home`. The `zeta sdk list / use / current` subcommands and `VersionCommand` read these. When the cli runs outside the launcher (e.g. `./zeta-dev`, `:cli:run`), the properties are absent and the cli falls back to `BuildConfig.ZETA_SDK_VERSION` (the compile-time pin).
+
+CI's `Compile cli against each bundled SDK` step gates against API drift — any cli source using an API present in only one bundled version fails CI before the launcher ever loads it at runtime.
+
+`./zeta-dev` and `./gradlew :cli:run` are unchanged — they target the catalog-default SDK (`zeta-sdk = "latest"` in the catalog), bypassing the launcher entirely. Use `--sdk` only from the assembled distribution.
 
 ### CLI commands
 
@@ -46,6 +69,7 @@ Wired in `Main.kt` via Clikt's `subcommands(...)`. Each top-level command lives 
 | `zeta forget [URL]` / `--all` | `lifecycle` | Per-URL: drive `ZetaSdk.forget(client)` via [NoopSubjectTokenProvider] (auth options not required). `--all`: delete profile storage file. Interactive confirmation, suppressed by `--force`; non-TTY without `--force` refuses. |
 | `zeta http URL` / `zeta ws URL` | `client` | Bearer-bound HTTP / WebSocket via the SDK's authenticated client. |
 | `zeta connector …` | `connector` | Talk to a Konnektor described by a `.kon` file. `zeta connector use <name>` writes `$XDG_CONFIG_HOME/telematik/connectors/active` so subsequent commands without `-c`/`ZETA_CONNECTOR_CONFIG` pick it up. |
+| `zeta sdk list / use / current` | `sdk` | Inspect or change the active zeta-sdk version when running under the launcher. `zeta sdk use <ver>` writes `$XDG_CONFIG_HOME/telematik/zeta/sdk`; consulted by the launcher when `--sdk` / `ZETA_SDK` are unset. |
 | `zeta popp …` | `popp` | Retrieve a Proof-of-Patient-Presence token. |
 
 Command-base hierarchy:

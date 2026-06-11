@@ -126,6 +126,19 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
             "./zeta.yaml and the XDG-global default. (env: ZETA_CONFIG)",
     ).path(mustExist = false, canBeFile = true, canBeDir = false)
 
+    // Consumed by the launcher before the JVM enters Clikt — declared here only so it
+    // shows in --help and so Clikt accepts it at any depth.
+    @Suppress("unused")
+    private val sdk: String? by option(
+        "--sdk",
+        metavar = "VERSION",
+        envvar = "ZETA_SDK",
+        help = "Bundled zeta-sdk version to load (e.g. 1.0, 1.2). Resolution: flag, then " +
+            "env, then \$XDG_CONFIG_HOME/telematik/zeta/sdk (written by `zeta sdk use`), " +
+            "then the newest bundled version. Use `zeta sdk list` to see what's available. " +
+            "(env: ZETA_SDK)",
+    )
+
     // Same pre-Clikt detection pattern as --trace / -f. Declared here for help-text and
     // sticky parse acceptance only; the real activation happens in Main.kt.
     @Suppress("unused")
@@ -174,7 +187,9 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         // Gating on `invokedSubcommand == null` keeps it to the leaf — without that, nested
         // commands (e.g. `connector get cards`) would each emit it.
         if (currentContext.invokedSubcommand == null) {
-            invocationLog.info { "zeta-cli ${BuildConfig.VERSION}, zeta-sdk ${BuildConfig.ZETA_SDK_VERSION}" }
+            val sdkVersion = System.getProperty("zeta.sdk.active")?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.ZETA_SDK_VERSION
+            invocationLog.info { "zeta-cli ${BuildConfig.VERSION}, zeta-sdk $sdkVersion" }
             invocationLog.debug { "zeta " + invocationArgs.joinToString(" ", transform = ::shellQuote) }
         }
         runCommand()

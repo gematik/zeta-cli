@@ -187,8 +187,15 @@ across platforms without symlinks or platform-specific code.
 - **Hand-written / generated split ≈ 1 : 3.6**. Connector is small in spirit (1.4k
   hand-written) but the generated SOAP surface dominates total bytes.
 - **No circular deps**: `connector` ← `cli`. SDK depends on nothing from us.
-- **Single application module** — `cli` is the only one that produces a distribution
-  (`./gradlew :cli:installDist`).
+- **Two application modules** — `cli` produces a single-SDK dev distribution via
+  `:cli:installDist`. `launcher` is the production entrypoint: a stdlib-only binary that
+  parses `--sdk` / `ZETA_SDK` / the `$XDG_CONFIG_HOME/telematik/zeta/sdk` sticky pointer,
+  builds a per-SDK `URLClassLoader` chain over `lib-cli/` (shared deps) and
+  `lib-sdk-<v>/` (per-version SDK jars), and reflectively boots `MainKt#main`. Released
+  artifact comes from `assembleDist` / `distTar` at the root, bundling every version
+  listed in `zeta-sdk-bundled` (`libs.versions.toml`). Tarball layout:
+  `bin/zeta`, `lib-launcher/`, `lib-cli/`, `lib-sdk-<v>/` (one per bundled SDK),
+  `lib-sdk/default`.
 - **Testing density**: connector ≈ 57%, cli ≈ 7%. The cli's coverage focuses on
   `JsonFileStorage` and `PoppMessages` round-trip — areas where regression risk
   outweighs the tooling cost.

@@ -3,7 +3,7 @@ plugins {
 }
 
 rootProject.name = "zeta-cli"
-include("connector", "cli")
+include("connector", "cli", "launcher")
 /*
 includeBuild("../zeta-sdk") {
     dependencySubstitution {

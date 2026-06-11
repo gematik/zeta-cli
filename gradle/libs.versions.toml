@@ -9,6 +9,12 @@ logback = "1.5.16"
 #   ./gradlew build -PzetaSdkVersion=1.0.0-local # any other tag in your local m2
 # zeta-sdk = "1.0.1"
 zeta-sdk = "latest"
+# Comma-separated list of SDK versions the `assembleDist` task bundles into the released
+# tarball. The launcher discovers these at runtime by enumerating `lib-sdk-*` subdirs;
+# the entry here drives which versions Gradle resolves. The **last** entry is written to
+# `lib-sdk/default` and used when --sdk / ZETA_SDK / the sticky pointer file leave the
+# choice open.
+zeta-sdk-bundled = "latest,1.0.1"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.8.0"
 ktor = "3.4.3"
