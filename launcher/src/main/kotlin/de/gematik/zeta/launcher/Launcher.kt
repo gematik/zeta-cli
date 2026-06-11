@@ -13,8 +13,8 @@ import kotlin.system.exitProcess
 
 /**
  * The `zeta` binary's actual entry point. Resolves which bundled SDK version the user
- * wants, builds a parent-first classloader chain over the matching `lib-sdk-<v>/` jars,
- * and reflectively invokes `de.gematik.zeta.cli.MainKt#main` inside that chain.
+ * wants, builds a `URLClassLoader` over the jars in `lib-cli/` plus the matching
+ * `lib-sdk-<v>/`, and reflectively invokes `de.gematik.zeta.cli.MainKt#main` inside it.
  *
  * Strictly Kotlin stdlib + JDK — no JSON or Clikt — so the launcher jar stays tiny and
  * has zero version-compat surface of its own.
@@ -54,13 +54,8 @@ fun main(args: Array<String>) {
     System.setProperty("zeta.sdk.default", default)
     System.setProperty("zeta.sdk.available", available.joinToString(","))
 
-    // Cli + chosen SDK share one URLClassLoader. A two-tier hierarchy doesn't work here:
-    // Java resolves cli's references to `de.gematik.zeta.sdk.*` through cli's *defining*
-    // loader, so a child SDK loader is invisible to cli classes. Per-version isolation
-    // is still preserved — each invocation builds a fresh loader pointing at exactly
-    // one `lib-sdk-<v>/`. Order matters: lib-cli URLs come first, so if a transitive
-    // appears in both (e.g. a different Ktor patch in the SDK closure), lib-cli wins —
-    // the cli was compiled against those versions.
+    // lib-cli URLs first so on basename collisions (e.g. an SDK pinning a different Ktor
+    // patch) the cli's compiled-against version wins.
     val urls = classpathOf(appHome.resolve(CLI_DIR)) +
         classpathOf(appHome.resolve("$SDK_DIR_PREFIX$sdk"))
     val zetaLoader = URLClassLoader(urls, Launcher::class.java.classLoader)
