@@ -76,6 +76,7 @@ val assembleDist by tasks.registering {
 
     inputs.files(cliJarFile, connectorJarFile)
     inputs.files(nonSdkRuntimeJars)
+    inputs.dir(project(":launcher").layout.buildDirectory.dir("install/zeta"))
     sdkResolved.values.forEach { inputs.files(it) }
     outputs.dir(distRoot)
 

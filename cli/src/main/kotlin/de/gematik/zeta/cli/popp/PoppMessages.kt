@@ -83,8 +83,20 @@ internal data class ErrorMessage(
     val errorDetail: String? = null,
 ) : PoppMessage
 
-/** Thrown by [PoppClient] when the server sends an `ErrorMessage` or the protocol diverges. */
+/**
+ * Thrown by [PoppClient] when the server sends an `ErrorMessage` or the protocol diverges.
+ *
+ * The popp server intentionally returns an empty [errorDetail] as a security measure, so we
+ * collapse `null`/blank details to no suffix at all — otherwise the exception message
+ * surfaces as `ErrorEgkHandling:` with a dangling colon and zero diagnostic value.
+ */
 internal class PoppProtocolException(
     val errorCode: String,
     val errorDetail: String?,
-) : RuntimeException("$errorCode${errorDetail?.let { ": $it" }.orEmpty()}")
+) : RuntimeException(
+    buildString {
+        append(errorCode)
+        val detail = errorDetail?.takeIf { it.isNotBlank() }
+        if (detail != null) append(": ").append(detail)
+    },
+)

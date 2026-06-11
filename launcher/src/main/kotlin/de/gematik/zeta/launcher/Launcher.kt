@@ -54,18 +54,20 @@ fun main(args: Array<String>) {
     System.setProperty("zeta.sdk.default", default)
     System.setProperty("zeta.sdk.available", available.joinToString(","))
 
-    val cliLoader = URLClassLoader(
-        classpathOf(appHome.resolve(CLI_DIR)),
-        Launcher::class.java.classLoader,
-    )
-    val sdkLoader = URLClassLoader(
-        classpathOf(appHome.resolve("$SDK_DIR_PREFIX$sdk")),
-        cliLoader,
-    )
+    // Cli + chosen SDK share one URLClassLoader. A two-tier hierarchy doesn't work here:
+    // Java resolves cli's references to `de.gematik.zeta.sdk.*` through cli's *defining*
+    // loader, so a child SDK loader is invisible to cli classes. Per-version isolation
+    // is still preserved — each invocation builds a fresh loader pointing at exactly
+    // one `lib-sdk-<v>/`. Order matters: lib-cli URLs come first, so if a transitive
+    // appears in both (e.g. a different Ktor patch in the SDK closure), lib-cli wins —
+    // the cli was compiled against those versions.
+    val urls = classpathOf(appHome.resolve(CLI_DIR)) +
+        classpathOf(appHome.resolve("$SDK_DIR_PREFIX$sdk"))
+    val zetaLoader = URLClassLoader(urls, Launcher::class.java.classLoader)
 
-    val mainClass = Class.forName(CLI_MAIN_CLASS, true, sdkLoader)
+    val mainClass = Class.forName(CLI_MAIN_CLASS, true, zetaLoader)
     val mainMethod = mainClass.getDeclaredMethod("main", Array<String>::class.java)
-    Thread.currentThread().contextClassLoader = sdkLoader
+    Thread.currentThread().contextClassLoader = zetaLoader
     @Suppress("UNCHECKED_CAST")
     mainMethod.invoke(null, cliArgs as Any)
 }
