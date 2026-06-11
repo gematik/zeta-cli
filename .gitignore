@@ -5,3 +5,5 @@ build
 *.kon
 README.pdf
 .DS_Store
+CLAUDE.md
+CLAUDE.local.md

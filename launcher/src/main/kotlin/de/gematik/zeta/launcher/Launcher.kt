@@ -13,8 +13,9 @@ import kotlin.system.exitProcess
 
 /**
  * The `zeta` binary's actual entry point. Resolves which bundled SDK version the user
- * wants, builds a `URLClassLoader` over the jars in `lib-cli/` plus the matching
- * `lib-sdk-<v>/`, and reflectively invokes `de.gematik.zeta.cli.MainKt#main` inside it.
+ * wants, builds a `URLClassLoader` over `lib-cli-shared/`, the matching `lib-cli-<v>/`,
+ * and the matching `lib-sdk-<v>/`, then reflectively invokes
+ * `de.gematik.zeta.cli.MainKt#main` inside it.
  *
  * Strictly Kotlin stdlib + JDK — no JSON or Clikt — so the launcher jar stays tiny and
  * has zero version-compat surface of its own.
@@ -25,7 +26,8 @@ private const val SDK_ENV = "ZETA_SDK"
 private const val ACTIVE_FILENAME = "sdk"
 private const val DEFAULT_FILENAME = "default"
 private const val LAUNCHER_DIR = "lib-launcher"
-private const val CLI_DIR = "lib-cli"
+private const val CLI_SHARED_DIR = "lib-cli-shared"
+private const val CLI_DIR_PREFIX = "lib-cli-"
 private const val SDK_PARENT_DIR = "lib-sdk"
 private const val SDK_DIR_PREFIX = "lib-sdk-"
 private const val CLI_MAIN_CLASS = "de.gematik.zeta.cli.MainKt"
@@ -54,9 +56,10 @@ fun main(args: Array<String>) {
     System.setProperty("zeta.sdk.default", default)
     System.setProperty("zeta.sdk.available", available.joinToString(","))
 
-    // lib-cli URLs first so on basename collisions (e.g. an SDK pinning a different Ktor
-    // patch) the cli's compiled-against version wins.
-    val urls = classpathOf(appHome.resolve(CLI_DIR)) +
+    // Shared deps first, then the per-SDK cli jar, then the per-SDK SDK closure. URL order
+    // resolves basename collisions in favor of `lib-cli-shared/`'s pinned versions.
+    val urls = classpathOf(appHome.resolve(CLI_SHARED_DIR)) +
+        classpathOf(appHome.resolve("$CLI_DIR_PREFIX$sdk")) +
         classpathOf(appHome.resolve("$SDK_DIR_PREFIX$sdk"))
     val zetaLoader = URLClassLoader(urls, Launcher::class.java.classLoader)
 

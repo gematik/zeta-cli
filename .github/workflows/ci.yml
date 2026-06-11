@@ -15,18 +15,12 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      # Builds + tests every module, including `:cli-sdk1_0` whose source mirrors `:cli`
+      # but compiles + tests against the legacy SDK pin (`libs.versions.zeta-sdk-legacy`).
+      # Any CLI source change that uses an API not present in the legacy SDK fails on
+      # `:cli-sdk1_0` here rather than at launcher-load time.
       - name: Build & test
         run: ./gradlew build --stacktrace
-      # Compile the cli against each bundled SDK version so a CLI source change that uses
-      # an API present in one but not the other fails CI here rather than at runtime
-      # under the launcher's classloader chain.
-      - name: Compile cli against each bundled SDK
-        run: |
-          set -e
-          for v in $(awk -F'"' '/^zeta-sdk-bundled/ {print $2}' gradle/libs.versions.toml | tr ',' ' '); do
-            echo "--- compileKotlin -PzetaSdkVersion=$v ---"
-            ./gradlew :cli:compileKotlin -PzetaSdkVersion="$v" --stacktrace
-          done
       - name: Build the multi-SDK distribution
         run: ./gradlew assembleDist
       - name: Smoke-test the launcher

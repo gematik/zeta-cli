@@ -9,9 +9,14 @@ logback = "1.5.16"
 #   ./gradlew build -PzetaSdkVersion=1.0.0-local # any other tag in your local m2
 # zeta-sdk = "1.0.1"
 zeta-sdk = "latest"
+# Legacy SDK pin used by `:cli-sdk1_0`. The cli source compiles against either, but the
+# bytecode each module emits targets a specific SDK's binary shape (e.g. Kotlin's
+# default-arg synthetic constructors change when an SDK adds a primary-ctor param).
+zeta-sdk-legacy = "1.0.1"
 # Comma-separated list of SDK versions the `assembleDist` task bundles into the released
 # tarball. The launcher discovers these at runtime by enumerating `lib-sdk-*` subdirs;
-# the entry here drives which versions Gradle resolves. The **last** entry is written to
+# each entry must have a matching `:cli` / `:cli-sdk1_0` build that targets it (see the
+# version→module map in root build.gradle.kts). The **last** entry is written to
 # `lib-sdk/default` and used when --sdk / ZETA_SDK / the sticky pointer file leave the
 # choice open.
 zeta-sdk-bundled = "latest,1.0.1"

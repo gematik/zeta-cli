@@ -22,21 +22,48 @@ repositories {
     mavenCentral()
 }
 
-// Bundled SDK versions for the multi-SDK `assembleDist`. The cli compiles against a
-// single SDK (catalog default); at runtime the launcher picks from these.
+// Each bundled SDK version is paired with a cli build that targets it. Maps an SDK
+// version to the cli Gradle project whose bytecode was compiled against that SDK.
+// Adding a new SDK version means: catalog entry + new `:cli-sdkX_Y` module + entry here.
+val cliModuleBySdkVersion: Map<String, String> = mapOf(
+    "latest" to ":cli",
+    "1.0.1"  to ":cli-sdk1_0",
+)
+
 val bundledSdkVersions: List<String> =
     libs.versions.zeta.sdk.bundled.get().split(',').map { it.trim() }.filter { it.isNotEmpty() }
 val defaultSdkVersion: String =
     bundledSdkVersions.lastOrNull() ?: error("zeta-sdk-bundled is empty in libs.versions.toml")
 
+bundledSdkVersions.forEach { v ->
+    require(v in cliModuleBySdkVersion) {
+        "bundled SDK version \"$v\" has no matching cli module in cliModuleBySdkVersion " +
+            "(see root build.gradle.kts)"
+    }
+}
+
 val distDirName = "zeta-${project.version}"
 val distRoot = layout.buildDirectory.dir("dist/$distDirName")
 
 /**
- * Layout the multi-SDK distribution: launcher bin + jar, shared cli/connector + deps,
- * one `lib-sdk-<v>/` per bundled SDK version, and a single-line `lib-sdk/default` text
- * file the launcher reads. Shared deps live in `lib-cli/` exactly once; `lib-sdk-<v>/`
- * dirs only carry jars unique to that SDK version (matched by basename subtraction).
+ * Multi-SDK distribution layout. Two SDK versions can't share a single cli jar because
+ * the Kotlin compiler bakes synthetic-default-arg signatures into bytecode at compile
+ * time, and those signatures move between SDK releases. Each bundled SDK pairs with a
+ * cli jar compiled against it.
+ *
+ * ```
+ * zeta-<v>/
+ * ├── bin/zeta
+ * ├── lib-launcher/      # launcher jars (no SDK refs)
+ * ├── lib-cli-shared/    # connector + every non-SDK runtime dep (clikt, ktor, …)
+ * ├── lib-cli-<v>/       # per-SDK cli jar (one per bundled SDK)
+ * ├── lib-sdk-<v>/       # SDK jars unique to that version (basename-subtracted)
+ * └── lib-sdk/default    # single-line text file with the default SDK version
+ * ```
+ *
+ * The launcher merges lib-cli-shared, lib-cli-<chosen>, lib-sdk-<chosen> onto one
+ * URLClassLoader. SDK transitives present in `lib-cli-shared/` get subtracted from
+ * the per-SDK dirs by basename so we ship them only once.
  *
  * All dependency resolution and Task→File extraction happens at configuration time so
  * the doLast block holds nothing but plain File references — required by the Gradle
@@ -46,24 +73,37 @@ val assembleDist by tasks.registering {
     group = "distribution"
     description = "Assemble the multi-SDK zeta distribution layout."
 
-    dependsOn(
-        project(":launcher").tasks.named("installDist"),
-        project(":cli").tasks.named("jar"),
-        project(":connector").tasks.named("jar"),
-    )
+    val launcherProj = project(":launcher")
+    val connectorProj = project(":connector")
+    val cliProjects: Map<String, Project> = cliModuleBySdkVersion.mapValues { (_, path) -> project(path) }
 
-    // Eagerly resolve everything we need so doLast holds only File / String / Map values.
-    val launcherInstallDir = project(":launcher").layout.buildDirectory.dir("install/zeta").get().asFile
-    val cliJarFile = (project(":cli").tasks.named("jar").get() as org.gradle.jvm.tasks.Jar)
+    dependsOn(
+        launcherProj.tasks.named("installDist"),
+        connectorProj.tasks.named("jar"),
+    )
+    cliProjects.values.forEach { dependsOn(it.tasks.named("jar")) }
+
+    val launcherInstallDir = launcherProj.layout.buildDirectory.dir("install/zeta").get().asFile
+    val connectorJarFile = (connectorProj.tasks.named("jar").get() as org.gradle.jvm.tasks.Jar)
         .archiveFile.get().asFile
-    val connectorJarFile = (project(":connector").tasks.named("jar").get() as org.gradle.jvm.tasks.Jar)
-        .archiveFile.get().asFile
+
+    // Per-SDK cli jar. Each :cli-* module emits its own archive; we keep them in separate
+    // lib-cli-<v>/ dirs so the same class name (de.gematik.zeta.cli.MainKt) with different
+    // bytecode never collides.
+    val cliJarBySdk: Map<String, File> = cliProjects.mapValues { (_, proj) ->
+        (proj.tasks.named("jar").get() as org.gradle.jvm.tasks.Jar).archiveFile.get().asFile
+    }
+
+    // Shared deps = the cli's runtime classpath minus anything SDK-related. Anything from
+    // group `de.gematik.zeta` is filtered out — those live in lib-sdk-<v>/ (and the cli jar
+    // itself lives in lib-cli-<v>/).
     val cliRuntime = project(":cli").configurations.getByName("runtimeClasspath")
-    val nonSdkRuntimeJars: List<File> = cliRuntime.incoming.artifacts.artifacts.mapNotNull { artifact ->
+    val sharedRuntimeJars: List<File> = cliRuntime.incoming.artifacts.artifacts.mapNotNull { artifact ->
         val id = artifact.id.componentIdentifier
         if (id is ModuleComponentIdentifier && id.group == "de.gematik.zeta") null
         else artifact.file
     }
+
     val sdkResolved: Map<String, Set<File>> = bundledSdkVersions.associateWith { version ->
         val conf = configurations.detachedConfiguration(
             dependencies.create("de.gematik.zeta:zeta-sdk-jvm:$version").apply {
@@ -74,9 +114,10 @@ val assembleDist by tasks.registering {
         conf.resolve()
     }
 
-    inputs.files(cliJarFile, connectorJarFile)
-    inputs.files(nonSdkRuntimeJars)
-    inputs.dir(project(":launcher").layout.buildDirectory.dir("install/zeta"))
+    inputs.files(connectorJarFile)
+    inputs.files(sharedRuntimeJars)
+    inputs.files(cliJarBySdk.values)
+    inputs.dir(launcherProj.layout.buildDirectory.dir("install/zeta"))
     sdkResolved.values.forEach { inputs.files(it) }
     outputs.dir(distRoot)
 
@@ -91,14 +132,12 @@ val assembleDist by tasks.registering {
 
         val binDir = File(outDir, "bin")
         File(launcherInstallDir, "bin").copyRecursively(binDir)
-        // copyRecursively drops POSIX permissions — restore exec bit on the start-script.
         File(binDir, "zeta").setExecutable(true, false)
         File(launcherInstallDir, "lib").copyRecursively(File(outDir, "lib-launcher"))
 
-        // Gradle's CreateStartScripts hardcodes the lib dir name. We moved the launcher
-        // jars into `lib-launcher/` to keep the dist root tidy, so the script needs to
-        // be rewritten to find them. POSIX script uses `APP_HOME/lib/`, Windows uses
-        // `%APP_HOME%\lib\`.
+        // Gradle's CreateStartScripts hardcodes `$APP_HOME/lib/` as the classpath dir.
+        // We moved the launcher jars to `lib-launcher/` to keep the dist root tidy, so the
+        // script needs the path rewritten.
         File(binDir, "zeta").let { f ->
             f.writeText(f.readText().replace("\$APP_HOME/lib/", "\$APP_HOME/lib-launcher/"))
         }
@@ -106,17 +145,21 @@ val assembleDist by tasks.registering {
             f.writeText(f.readText().replace("%APP_HOME%\\lib\\", "%APP_HOME%\\lib-launcher\\"))
         }
 
-        val libCli = File(outDir, "lib-cli").apply { mkdirs() }
-        sequenceOf(cliJarFile, connectorJarFile).plus(nonSdkRuntimeJars)
+        val libCliShared = File(outDir, "lib-cli-shared").apply { mkdirs() }
+        sequenceOf(connectorJarFile).plus(sharedRuntimeJars)
             .filter { it.isFile }
-            .forEach { it.copyTo(File(libCli, it.name), overwrite = true) }
+            .forEach { it.copyTo(File(libCliShared, it.name), overwrite = true) }
 
-        val libCliFileNames = libCli.listFiles().orEmpty().map { it.name }.toSet()
+        val sharedFileNames = libCliShared.listFiles().orEmpty().map { it.name }.toSet()
+
         versions.forEach { version ->
+            val libCli = File(outDir, "lib-cli-$version").apply { mkdirs() }
+            cliJarBySdk[version]!!.copyTo(File(libCli, "cli.jar"), overwrite = true)
+
             val libSdk = File(outDir, "lib-sdk-$version").apply { mkdirs() }
             sdkResolved[version]!!
                 .asSequence()
-                .filter { it.isFile && it.name !in libCliFileNames }
+                .filter { it.isFile && it.name !in sharedFileNames }
                 .forEach { it.copyTo(File(libSdk, it.name), overwrite = true) }
         }
 
