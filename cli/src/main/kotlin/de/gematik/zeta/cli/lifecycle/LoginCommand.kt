@@ -62,8 +62,12 @@ class LoginCommand : ZetaSessionCommand(name = "login") {
 
             val ranRegister = initial == SdkStatus.NOT_REGISTERED
             if (ranRegister) {
-                log.debug { "Status was NOT_REGISTERED — running register()" }
-                runBlocking { sdk.register().getOrThrow() }
+                log.debug { "Status was NOT_REGISTERED — running discover() + register()" }
+                runBlocking {
+                    // sdk.register() requires discover()-populated AS metadata; discover() short-circuits if cached.
+                    sdk.discover().getOrThrow()
+                    sdk.register().getOrThrow()
+                }
             }
 
             val ranAuthenticate = initial != SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN
