@@ -14,6 +14,10 @@ import kotlinx.serialization.json.buildJsonObject
  * `authenticate`, `login`, `logout`). All four print the same shape of "what's in storage
  * now" — only the side effect of getting there differs.
  *
+ * Sections are ordered general → specific: identity (resource + auth server), then the
+ * static client registration with that AS, then the current access-token, and finally the
+ * derived SdkStatus as the bottom-line summary.
+ *
  * `reveal` toggles secret exposure: the raw access-token JWS, the dynamic-client
  * `client_secret`, and the `registration_access_token`. Refresh tokens are never emitted
  * regardless — their presence informs the status enum and that's all.
@@ -27,25 +31,6 @@ internal fun renderEntryText(entry: Entry, colorize: Boolean, reveal: Boolean): 
         val statusValue = entry.status.name + (expiredFor?.let { " (access token expired ${formatAgo(it)} ago)" } ?: "")
         section("Resource: ${entry.resource}") {
             field("Authorization server", entry.issuer)
-            field("Status", statusValue)
-        }
-        entry.accessToken?.let { token ->
-            section("Access token (resource: ${entry.resource})") {
-                field("Algorithm", token.headerString("alg"))
-                field("Type", token.headerString("typ"))
-                field("Key ID", token.headerString("kid"))
-                field("Issuer", token.claimString("iss"))
-                field("Subject", token.claimString("sub"))
-                field("Audience", token.claimStrings("aud"))
-                field("Scope", token.claimString("scope"))
-                field("DPoP jkt", token.claimString("cnf", "jkt"))
-                field(
-                    "Expires at",
-                    token.expiresAt.takeIf { it > 0 }
-                        ?.let { formatEpoch(it) + if (it <= nowEpoch) " (expired)" else "" },
-                )
-                if (reveal) field("Raw JWS", token.rawJwt)
-            }
         }
         entry.registration?.let { reg ->
             section("Registration (auth server: ${entry.issuer ?: "?"})") {
@@ -65,23 +50,32 @@ internal fun renderEntryText(entry: Entry, colorize: Boolean, reveal: Boolean): 
                 }
             }
         }
+        entry.accessToken?.let { token ->
+            section("Access token (resource: ${entry.resource})") {
+                field("Algorithm", token.headerString("alg"))
+                field("Type", token.headerString("typ"))
+                field("Key ID", token.headerString("kid"))
+                field("Issuer", token.claimString("iss"))
+                field("Subject", token.claimString("sub"))
+                field("Audience", token.claimStrings("aud"))
+                field("Scope", token.claimString("scope"))
+                field("DPoP jkt", token.claimString("cnf", "jkt"))
+                field(
+                    "Expires at",
+                    token.expiresAt.takeIf { it > 0 }
+                        ?.let { formatEpoch(it) + if (it <= nowEpoch) " (expired)" else "" },
+                )
+                if (reveal) field("Raw JWS", token.rawJwt)
+            }
+        }
+        section("Status") {
+            field("Status", statusValue)
+        }
     }
 
 internal fun renderEntryJson(entry: Entry, reveal: Boolean): JsonElement = buildJsonObject {
     put("resource", JsonPrimitive(entry.resource))
     put("authorization_server", entry.issuer?.let(::JsonPrimitive) ?: JsonNull)
-    put("status", JsonPrimitive(entry.status.name))
-    put(
-        "access_token",
-        entry.accessToken?.let { token ->
-            buildJsonObject {
-                put("header", token.header)
-                put("claims", token.claims)
-                put("expires_at", JsonPrimitive(token.expiresAt))
-                if (reveal) put("raw", JsonPrimitive(token.rawJwt))
-            }
-        } ?: JsonNull,
-    )
     put(
         "registration",
         entry.registration?.let { reg ->
@@ -109,6 +103,18 @@ internal fun renderEntryJson(entry: Entry, reveal: Boolean): JsonElement = build
             }
         } ?: JsonNull,
     )
+    put(
+        "access_token",
+        entry.accessToken?.let { token ->
+            buildJsonObject {
+                put("header", token.header)
+                put("claims", token.claims)
+                put("expires_at", JsonPrimitive(token.expiresAt))
+                if (reveal) put("raw", JsonPrimitive(token.rawJwt))
+            }
+        } ?: JsonNull,
+    )
+    put("status", JsonPrimitive(entry.status.name))
 }
 
 private fun TokenInfo.headerString(name: String): String? =

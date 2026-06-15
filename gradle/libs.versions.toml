@@ -19,7 +19,7 @@ zeta-sdk-legacy = "1.0.1"
 # version→module map in root build.gradle.kts). The **last** entry is written to
 # `lib-sdk/default` and used when --sdk / ZETA_SDK / the sticky pointer file leave the
 # choice open.
-zeta-sdk-bundled = "latest,1.0.1"
+zeta-sdk-bundled = "1.0.1,latest"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.8.0"
 ktor = "3.4.3"
