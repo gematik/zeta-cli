@@ -9,6 +9,7 @@ Command-line client for resources protected by [ZETA Guard](https://github.com/g
 - [Options reference](#options-reference)
 - [Configuration file: `zeta.yaml`](#configuration-file-zetayaml)
 - [Logging & output](#logging--output)
+- [SDK versions](#sdk-versions)
 - [Install](#install)
 - [Development](#development)
 
@@ -47,23 +48,34 @@ zeta login https://popp.dev.poppservice.de \
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `zeta version` | Print build version. |
-| `zeta discover URL` | Fetch + cache protected-resource and AS metadata (RFC 9728). No auth. |
-| `zeta status [URL]` | Show cached SDK state (registration + token validity). Read-only. |
-| `zeta register URL` | Dynamic client registration with the AS. |
-| `zeta authenticate URL --scope …` | Exchange SMC-B subject token → access + refresh token. |
-| `zeta login URL --scope …` | Idempotent `register` + `authenticate`. |
-| `zeta logout URL` | Revoke tokens; keep client registration. |
-| `zeta forget URL` / `zeta forget --all` | Wipe local state for one resource, or the whole profile. |
-| `zeta http URL` | HTTP request to a Zeta-protected resource (curl-like). |
-| `zeta ws URL` | WebSocket to a Zeta-protected resource, round-tripping JSON from stdin. |
-| `zeta connector inspect` | SDS / product info from the Konnektor. |
-| `zeta connector get cards` | List cards visible in the Konnektor's terminals. |
-| `zeta connector configs` | List discoverable `.kon` files. |
-| `zeta popp connector` | Get a PoPP token via the Konnektor's eGK flow. |
-| `zeta popp kartos` | Get a PoPP token via a kartos smartcard simulator. |
+**Lifecycle & state**
+
+- `zeta discover URL` — fetch + cache protected-resource and AS metadata (RFC 9728). No auth.
+- `zeta status [URL]` — show cached SDK state (registration + token validity). Read-only.
+- `zeta register URL` — dynamic client registration with the AS.
+- `zeta authenticate URL --scope …` — exchange SMC-B subject token → access + refresh token.
+- `zeta login URL --scope …` — idempotent `register` + `authenticate`.
+- `zeta logout URL` — revoke tokens; keep client registration.
+- `zeta forget URL` / `--all` — wipe local state for one resource, or the whole profile.
+
+**Calling protected resources**
+
+- `zeta http URL` — HTTP request to a Zeta-protected resource (curl-like).
+- `zeta ws URL` — WebSocket to a Zeta-protected resource, round-tripping JSON from stdin.
+
+**Konnektor & PoPP**
+
+- `zeta connector inspect` — SDS / product info from the Konnektor.
+- `zeta connector get cards` — list cards visible in the Konnektor's terminals.
+- `zeta connector configs` — list discoverable `.kon` files.
+- `zeta connector use <name>` — set the default `.kon` config for later commands.
+- `zeta popp connector` — get a PoPP token via the Konnektor's eGK flow.
+- `zeta popp kartos` — get a PoPP token via a kartos smartcard simulator.
+
+**Tooling**
+
+- `zeta version` — print CLI + active `zeta-sdk` version; lists other bundled SDKs.
+- `zeta sdk list` / `current` / `use <ver>` — inspect or pin the bundled `zeta-sdk` (see [SDK versions](#sdk-versions)).
 
 Examples for the less obvious ones:
 
@@ -337,6 +349,49 @@ A sticky option (e.g. `--connector-config`) declared at a parent depth (`zeta --
 - `-o json` emits parseable JSON without colour when stdout is piped. `-o raw` (for `http`) prints the body verbatim with no framing.
 - Colour follows TTY detection and respects `NO_COLOR` / `FORCE_COLOR`.
 
+## SDK versions
+
+The released `zeta` distribution bundles **multiple `zeta-sdk` versions** and chooses one at
+runtime, so a single install can talk to services built against different SDK generations.
+The current tarball bundles `1.0.1` and `1.2.0`, defaulting to `1.2.0`.
+
+`zeta version` shows the active SDK and everything bundled:
+
+```sh
+$ zeta version
+zeta-cli 0.6.3
+zeta-sdk 1.2.0
+
+bundled zeta-sdk:
+  VERSION  TAGS
+  1.0.1
+* 1.2.0    active, default
+```
+
+### Choosing a version
+
+The launcher resolves the SDK on each run, highest precedence first:
+
+| Source | How |
+| --- | --- |
+| `--sdk <ver>` | Per-invocation flag, e.g. `zeta --sdk 1.0.1 status`. |
+| `ZETA_SDK` | Environment variable. |
+| sticky pointer | `$XDG_CONFIG_HOME/telematik/zeta/sdk`, written by `zeta sdk use`. |
+| bundled default | Newest bundled version (`1.2.0`). |
+
+### `zeta sdk` commands
+
+```sh
+zeta sdk list            # all bundled versions; * marks the active one
+zeta sdk current         # active version + where the choice came from
+zeta sdk use 1.0.1       # pin 1.0.1 via the sticky pointer for later runs
+```
+
+`--sdk` / `ZETA_SDK` / `zeta sdk use` only take effect in the bundled distribution (Homebrew
+or the release tarball). Run from sources (`./zeta-dev`, `:cli:run`, `:cli:installDist`) and
+the CLI always uses the single SDK it was compiled against — `zeta version` then prints just
+that one line.
+
 ## Install
 
 Requires JDK 21. The Gradle wrapper auto-provisions one if needed.
@@ -378,7 +433,7 @@ just demo      # render demo.gif from demo.tape (requires vhs)
 
 ### Building against a different `zeta-sdk`
 
-By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.0.1`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
+By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.2.0`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
 
 ```sh
 # Use whatever you publishToMavenLocal'd as `latest`
@@ -391,3 +446,5 @@ By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` 
 Set it persistently in `~/.gradle/gradle.properties` (`zetaSdkVersion=latest`) to avoid passing the flag every time — Gradle will still let project- or command-line values override that.
 
 `zeta version` prints the resolved SDK version so you always know which one shipped in the binary.
+
+The released distribution instead bundles **every** SDK pin from the catalog — `zeta-sdk` (the default) and `zeta-sdk-legacy` — into one tarball via `./gradlew assembleDist`. Each pin is compiled by its own cli module (`:cli` / `:cli-sdk1_0`), and the launcher picks one at runtime as described under [SDK versions](#sdk-versions). To bundle another version, add its catalog pin plus a matching cli module and map entry in the root `build.gradle.kts`.

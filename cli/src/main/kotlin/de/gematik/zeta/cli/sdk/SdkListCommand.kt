@@ -24,13 +24,13 @@ class SdkListCommand : ZetaCliktCommand(name = "list") {
         val default = defaultSdk()
 
         when (cliConfig.outputFormat) {
-            OutputFormat.JSON -> echo(renderJson(jsonReport(available, active, default), colorize = colorize))
-            OutputFormat.TEXT, OutputFormat.RAW -> echo(textReport(available, active, default))
+            OutputFormat.JSON -> echo(renderJson(sdkListJson(available, active, default), colorize = colorize))
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(sdkListText(available, active, default))
         }
     }
 }
 
-private fun jsonReport(available: List<String>, active: String?, default: String?): JsonArray =
+internal fun sdkListJson(available: List<String>, active: String?, default: String?): JsonArray =
     buildJsonArray {
         available.forEach { v ->
             addJsonObject {
@@ -41,7 +41,7 @@ private fun jsonReport(available: List<String>, active: String?, default: String
         }
     }
 
-private fun textReport(available: List<String>, active: String?, default: String?): String {
+internal fun sdkListText(available: List<String>, active: String?, default: String?): String {
     if (available.isEmpty()) {
         return "No bundled SDK versions detected. Are you running the launcher distribution?"
     }

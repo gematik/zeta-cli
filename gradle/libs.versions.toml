@@ -3,23 +3,13 @@ kotlin-gradle-plugin = "2.3.0"
 clikt = "5.1.0"
 kotlin-logging = "7.0.7"
 logback = "1.5.16"
-# Default ships against the latest published zeta-sdk on Maven Central.
-# Override at build time without editing this file:
-#   ./gradlew build -PzetaSdkVersion=latest      # uses mavenLocal (zeta-sdk publishToMavenLocal)
-#   ./gradlew build -PzetaSdkVersion=1.0.0-local # any other tag in your local m2
-# zeta-sdk = "1.0.1"
-zeta-sdk = "latest"
-# Legacy SDK pin used by `:cli-sdk1_0`. The cli source compiles against either, but the
-# bytecode each module emits targets a specific SDK's binary shape (e.g. Kotlin's
-# default-arg synthetic constructors change when an SDK adds a primary-ctor param).
+# Default SDK for :cli. Override with -PzetaSdkVersion=<tag> (e.g. `latest` from mavenLocal).
+zeta-sdk = "1.2.0"
+# Legacy SDK pinned by :cli-sdk1_0 — each module's bytecode targets one SDK binary shape
+# (Kotlin default-arg synthetic ctors shift between SDK releases), so a separate build is needed.
+# assembleDist bundles both this and zeta-sdk; the cliModuleBySdkVersion map in root
+# build.gradle.kts derives the bundled set and launcher default from these two pins.
 zeta-sdk-legacy = "1.0.1"
-# Comma-separated list of SDK versions the `assembleDist` task bundles into the released
-# tarball. The launcher discovers these at runtime by enumerating `lib-sdk-*` subdirs;
-# each entry must have a matching `:cli` / `:cli-sdk1_0` build that targets it (see the
-# version→module map in root build.gradle.kts). The **last** entry is written to
-# `lib-sdk/default` and used when --sdk / ZETA_SDK / the sticky pointer file leave the
-# choice open.
-zeta-sdk-bundled = "1.0.1,latest"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.8.0"
 ktor = "3.4.3"
@@ -34,7 +24,6 @@ kotlin-serialization-plugin = { module = "org.jetbrains.kotlin:kotlin-serializat
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
-zeta-sdk = { module = "de.gematik.zeta:zeta-sdk-jvm", version.ref = "zeta-sdk" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }

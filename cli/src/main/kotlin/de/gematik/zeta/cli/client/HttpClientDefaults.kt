@@ -23,6 +23,7 @@ import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
  *
  * Plumbed through:
  *   - `-k/--insecure` → disable server validation;
+ *   - `--connect-timeout`/`--request-timeout` → forward to `ZetaHttpClientBuilder.timeouts(...)`;
  *   - `--proxy` (and `--proxy-user`/`--proxy-password`) → forward to `ZetaHttpClientBuilder.proxy(...)`;
  *   - the curlie-style wire logger (via [SdkLogBridge]).
  *
@@ -43,6 +44,10 @@ internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(cliConfig: CliConfig): Z
     // the SDK fires any logging. `Log.setLogger` is global, so re-installing is harmless.
     installSdkLogBridge()
     disableServerValidation(cliConfig.insecure)
+    timeouts(
+        connectMs = cliConfig.connectTimeout.inWholeMilliseconds,
+        requestMs = cliConfig.requestTimeout.inWholeMilliseconds,
+    )
     logging(wireLogLevel)
     cliConfig.proxy?.let { proxy(it) }
     return this

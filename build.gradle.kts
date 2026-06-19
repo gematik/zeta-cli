@@ -22,25 +22,17 @@ repositories {
     mavenCentral()
 }
 
-// Each bundled SDK version is paired with a cli build that targets it. Maps an SDK
-// version to the cli Gradle project whose bytecode was compiled against that SDK.
-// Adding a new SDK version means: catalog entry + new `:cli-sdkX_Y` module + entry here.
-val cliModuleBySdkVersion: Map<String, String> = mapOf(
-    "latest" to ":cli",
-    "1.0.1"  to ":cli-sdk1_0",
+// Each bundled SDK version is paired with the cli build that compiles against it. Versions
+// come from the catalog pins the modules themselves build with, so there's one source of
+// truth. The last entry is the launcher default. Adding an SDK means: new catalog pin +
+// new `:cli-sdkX_Y` module + entry here.
+val cliModuleBySdkVersion: Map<String, String> = linkedMapOf(
+    libs.versions.zeta.sdk.legacy.get() to ":cli-sdk1_0",
+    libs.versions.zeta.sdk.asProvider().get() to ":cli",
 )
 
-val bundledSdkVersions: List<String> =
-    libs.versions.zeta.sdk.bundled.get().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-val defaultSdkVersion: String =
-    bundledSdkVersions.lastOrNull() ?: error("zeta-sdk-bundled is empty in libs.versions.toml")
-
-bundledSdkVersions.forEach { v ->
-    require(v in cliModuleBySdkVersion) {
-        "bundled SDK version \"$v\" has no matching cli module in cliModuleBySdkVersion " +
-            "(see root build.gradle.kts)"
-    }
-}
+val bundledSdkVersions: List<String> = cliModuleBySdkVersion.keys.toList()
+val defaultSdkVersion: String = bundledSdkVersions.last()
 
 val distDirName = "zeta-${project.version}"
 val distRoot = layout.buildDirectory.dir("dist/$distDirName")
