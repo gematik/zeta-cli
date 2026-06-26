@@ -114,6 +114,43 @@ publish-brew owner:
     echo "Published zeta ${VERSION} to ${TAP_REPO}"
     echo "Install: brew tap ${OWNER}/tap && brew install zeta"
 
+# build the dist tarball and publish it as a GitHub release on origin (gematik/zeta-cli)
+# usage: just release            (tag/title derived from gradle.properties version)
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    command -v gh >/dev/null 2>&1 || {
+        echo "gh CLI is required: https://cli.github.com" >&2
+        exit 1
+    }
+
+    VERSION=$(grep '^version=' gradle.properties | cut -d= -f2)
+    TAG="v${VERSION}"
+    ASSET_NAME="zeta-${VERSION}.tar.gz"
+    REPO_ROOT="$PWD"
+
+    ./gradlew distTar
+    TARBALL="${REPO_ROOT}/build/distributions/${ASSET_NAME}"
+    [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
+
+    SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
+    SHA_FILE="${TARBALL}.sha256"
+    echo "$SHA  ${ASSET_NAME}" > "$SHA_FILE"
+
+    # gh resolves the repo from origin; no --repo needed.
+    if gh release view "$TAG" >/dev/null 2>&1; then
+        echo "Release $TAG already exists — replacing assets."
+        gh release upload "$TAG" --clobber "$TARBALL" "$SHA_FILE"
+    else
+        gh release create "$TAG" \
+            --title "zeta ${VERSION}" --notes "zeta ${VERSION}" --target main \
+            "$TARBALL" "$SHA_FILE"
+    fi
+
+    echo
+    echo "Released zeta ${VERSION}: $(gh release view "$TAG" --json url -q .url)"
+
 generate-connector:
     #!/usr/bin/env bash
     java -jar ~/Development/gematik/wsdl2openapi/generator-kotlin/app/build/libs/wsdl2openapi2kotlin.jar \
