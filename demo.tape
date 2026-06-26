@@ -30,7 +30,10 @@ Sleep 300ms
 
 # 2) Version — quickest proof it's wired up.
 Type "zeta version"
-Sleep 400ms
+Sleep 200ms
+Enter
+Type "zeta sdk list"
+Sleep 200ms
 Enter
 Sleep 1500ms
 

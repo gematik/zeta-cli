@@ -165,6 +165,56 @@ Signs the SMC-B token via a Konnektor described by `--connector-config`. Pick **
 | `--auth-connector-card-iccsn=<iccsn>` | `ZETA_AUTH_CONNECTOR_CARD_ICCSN` | — |
 | `--auth-connector-card-handle=<handle>` | `ZETA_AUTH_CONNECTOR_CARD_HANDLE` | — |
 
+##### `.kon` connector files
+
+The Konnektor itself is described by a `.kon` file (JSON). The CLI resolves
+`--connector-config=<name>` (env `ZETA_CONNECTOR_CONFIG`) to `<name>.kon`, looking in the
+current directory first, then `$XDG_CONFIG_HOME/telematik/connectors/`. `zeta connector use
+<name>` records a sticky default so later commands can omit the flag, and `zeta connector
+configs` lists the files it can resolve by short name.
+
+`${VAR}` placeholders are substituted from the environment before the file is parsed, so
+secrets stay out of the file. See [`docs/kon-format.md`](docs/kon-format.md) for the full
+format specification.
+
+mTLS via a PKCS#12 client certificate, with a pinned trust anchor (RU):
+
+```json
+{
+  "url": "https://konnektor.example.com:8443",
+  "mandantId": "M1",
+  "workplaceId": "W1",
+  "clientSystemId": "C1",
+  "userId": "U1",
+  "credentials": {
+    "type": "pkcs12",
+    "data": "<base64-encoded PKCS#12 container>",
+    "password": "00"
+  },
+  "env": "ru",
+  "expectedHost": "konnektor.example.com",
+  "trustStore": ["${KONNEKTOR_CA_DER_BASE64}"]
+}
+```
+
+Dev Konnektor over basic auth (RU), TLS verification off for self-signed setups:
+
+```json
+{
+  "url": "https://10.10.10.5:443",
+  "mandantId": "M1",
+  "workplaceId": "W1",
+  "clientSystemId": "C1",
+  "credentials": {
+    "type": "basic",
+    "username": "konnektor",
+    "password": "${KONNEKTOR_PASSWORD}"
+  },
+  "env": "ru",
+  "insecureSkipVerify": true
+}
+```
+
 #### PKCS#12 method (`--auth-method p12`)
 
 For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
