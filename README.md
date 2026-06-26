@@ -15,6 +15,9 @@ Command-line client for resources protected by [ZETA Guard](https://github.com/g
 
 ## Quick start
 
+For a full end-to-end walkthrough (configure the `.kon`, read the SMC-B ICCSN, log in, get a
+PoPP token), see [docs/quickstart.md](docs/quickstart.md).
+
 ```sh
 # 1. See what a Zeta-Guard-protected resource advertises (no auth needed)
 zeta discover https://popp.dev.poppservice.de

@@ -50,16 +50,15 @@ private val log = KotlinLogging.logger {}
  * [ValueSource.Invocation]. Booleans/numbers are stringified to "true"/"false"/"123" so
  * they slot into Clikt's string-based per-option converter (`.int()`, `.flag()`, …).
  *
- * ## Caveat: sticky options + value source
+ * ## Sticky options + value source
  *
  * Options declared on [de.gematik.zeta.cli.ZetaCliktCommand] are inherited by every command
- * in the chain (`-v`, `--connector-config`, …). When the file provides a value AND the user
- * passes the CLI flag at a parent depth (`zeta --connector-config=X connector inspect`),
- * the child re-reads the same key into its own option and overwrites the value the parent
- * already merged into [de.gematik.zeta.cli.CliConfig]. Workaround: pass the CLI flag at the
- * subcommand depth (`zeta connector inspect --connector-config=X`), where it wins as
- * expected. Pre-existing limitation of the chain-merge pattern, exposed (not caused) by
- * the value source.
+ * in the chain (`-v`, `--connector-config`, …). To stop the bare top-level key from being
+ * read into each command — where the leaf would clobber a CLI flag passed at a parent depth
+ * after [de.gematik.zeta.cli.ZetaCliktCommand.run] merged it into
+ * [de.gematik.zeta.cli.CliConfig] — the unscoped key is contributed by only the shallowest
+ * command that declares the option (see [anAncestorDeclares]). A CLI flag at any depth still
+ * wins, and subcommand-scoped keys (`http.connector-config`) still apply per-section.
  */
 class YamlValueSource(private val path: Path) : ValueSource {
 
@@ -88,7 +87,27 @@ class YamlValueSource(private val path: Path) : ValueSource {
         if (scopedPath.size > 1) {
             lookup(scopedPath.joinToString("."))?.let { return it }
         }
+        // The bare (unscoped) top-level key is contributed only by the shallowest command in
+        // the chain that declares this option. An inherited base-class option (e.g.
+        // --connector-config) is registered on *every* command, so without this guard each
+        // command reads the same top-level value and the leaf silently clobbers a CLI flag
+        // the user passed at a parent depth: the value source feeds the option, then
+        // ZetaCliktCommand.run merges it into CliConfig last-writer-wins. Deferring to the
+        // shallowest owner means the value source contributes the key once; a real CLI flag
+        // at any depth still wins, since Clikt prefers command-line invocations per option.
+        if (anAncestorDeclares(context, option)) return emptyList()
         return lookup(name).orEmpty()
+    }
+
+    private fun anAncestorDeclares(context: Context, option: Option): Boolean {
+        var parent = context.parent
+        while (parent != null) {
+            if (parent.command.registeredOptions().any { it.names.intersect(option.names).isNotEmpty() }) {
+                return true
+            }
+            parent = parent.parent
+        }
+        return false
     }
 
     /** `null` if the key is absent or refers to a sub-mapping; otherwise one or more invocations. */
