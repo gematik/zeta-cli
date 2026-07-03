@@ -9,7 +9,7 @@ Command-line client for resources protected by [ZETA Guard](https://github.com/g
 - [Options reference](#options-reference)
 - [Configuration file: `zeta.yaml`](#configuration-file-zetayaml)
 - [Logging & output](#logging--output)
-- [SDK versions](#sdk-versions)
+- [SDK version](#sdk-version)
 - [Install](#install)
 - [Development](#development)
 
@@ -77,8 +77,7 @@ zeta login https://popp.dev.poppservice.de \
 
 **Tooling**
 
-- `zeta version` — print CLI + active `zeta-sdk` version; lists other bundled SDKs.
-- `zeta sdk list` / `current` / `use <ver>` — inspect or pin the bundled `zeta-sdk` (see [SDK versions](#sdk-versions)).
+- `zeta version` — print the CLI and `zeta-sdk` version.
 
 Examples for the less obvious ones:
 
@@ -402,48 +401,18 @@ A sticky option (e.g. `--connector-config`) declared at a parent depth (`zeta --
 - `-o json` emits parseable JSON without colour when stdout is piped. `-o raw` (for `http`) prints the body verbatim with no framing.
 - Colour follows TTY detection and respects `NO_COLOR` / `FORCE_COLOR`.
 
-## SDK versions
+## SDK version
 
-The released `zeta` distribution bundles **multiple `zeta-sdk` versions** and chooses one at
-runtime, so a single install can talk to services built against different SDK generations.
-The current tarball bundles `1.0.1` and `1.2.0`, defaulting to `1.2.0`.
-
-`zeta version` shows the active SDK and everything bundled:
+The CLI is built against a single `zeta-sdk` version (`1.2.0`), pinned in
+`gradle/libs.versions.toml`. `zeta version` prints it:
 
 ```sh
 $ zeta version
-zeta-cli 0.6.3
+zeta-cli 0.7.1
 zeta-sdk 1.2.0
-
-bundled zeta-sdk:
-  VERSION  TAGS
-  1.0.1
-* 1.2.0    active, default
 ```
 
-### Choosing a version
-
-The launcher resolves the SDK on each run, highest precedence first:
-
-| Source | How |
-| --- | --- |
-| `--sdk <ver>` | Per-invocation flag, e.g. `zeta --sdk 1.0.1 status`. |
-| `ZETA_SDK` | Environment variable. |
-| sticky pointer | `$XDG_CONFIG_HOME/telematik/zeta/sdk`, written by `zeta sdk use`. |
-| bundled default | Newest bundled version (`1.2.0`). |
-
-### `zeta sdk` commands
-
-```sh
-zeta sdk list            # all bundled versions; * marks the active one
-zeta sdk current         # active version + where the choice came from
-zeta sdk use 1.0.1       # pin 1.0.1 via the sticky pointer for later runs
-```
-
-`--sdk` / `ZETA_SDK` / `zeta sdk use` only take effect in the bundled distribution (Homebrew
-or the release tarball). Run from sources (`./zeta-dev`, `:cli:run`, `:cli:installDist`) and
-the CLI always uses the single SDK it was compiled against — `zeta version` then prints just
-that one line.
+Override the pin at build time with `-PzetaSdkVersion=<tag>` (e.g. `latest` from mavenLocal).
 
 ## Install
 
@@ -500,4 +469,4 @@ Set it persistently in `~/.gradle/gradle.properties` (`zetaSdkVersion=latest`) t
 
 `zeta version` prints the resolved SDK version so you always know which one shipped in the binary.
 
-The released distribution instead bundles **every** SDK pin from the catalog — `zeta-sdk` (the default) and `zeta-sdk-legacy` — into one tarball via `./gradlew assembleDist`. Each pin is compiled by its own cli module (`:cli` / `:cli-sdk1_0`), and the launcher picks one at runtime as described under [SDK versions](#sdk-versions). To bundle another version, add its catalog pin plus a matching cli module and map entry in the root `build.gradle.kts`.
+The release tarball (`./gradlew :distTar`) ships two entry points from one archive — `bin/zeta` (the CLI) and `bin/zeta-stress` (the load-test tool) — over a shared `lib/`.

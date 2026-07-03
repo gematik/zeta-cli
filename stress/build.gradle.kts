@@ -6,7 +6,7 @@ plugins {
 // Mirrors :cli — `-PzetaSdkVersion=…` overrides the catalog default; `latest` resolves from
 // mavenLocal, numeric releases from Maven Central.
 val zetaSdkVersion: String =
-    providers.gradleProperty("zetaSdkVersion").orElse(libs.versions.zeta.sdk.asProvider()).get()
+    providers.gradleProperty("zetaSdkVersion").orElse(libs.versions.zeta.sdk).get()
 
 dependencies {
     implementation("de.gematik.zeta:zeta-sdk-jvm:$zetaSdkVersion") {

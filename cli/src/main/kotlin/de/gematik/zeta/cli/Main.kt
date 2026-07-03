@@ -21,10 +21,6 @@ import de.gematik.zeta.cli.lifecycle.RegisterCommand
 import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
-import de.gematik.zeta.cli.sdk.SdkCommand
-import de.gematik.zeta.cli.sdk.SdkCurrentCommand
-import de.gematik.zeta.cli.sdk.SdkListCommand
-import de.gematik.zeta.cli.sdk.SdkUseCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import de.gematik.zeta.cli.trace.Tracer
@@ -113,11 +109,6 @@ fun main(args: Array<String>) {
                         ConnectorConfigsCommand(),
                         ConnectorUseCommand(),
                         ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
-                    ),
-                    SdkCommand().subcommands(
-                        SdkListCommand(),
-                        SdkUseCommand(),
-                        SdkCurrentCommand(),
                     ),
                     PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),
                 )

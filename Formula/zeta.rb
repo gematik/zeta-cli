@@ -9,8 +9,10 @@ class Zeta < Formula
 
   def install
     libexec.install Dir["*"]
-    (bin/"zeta").write_env_script libexec/"bin/zeta",
-      Language::Java.overridable_java_home_env("21")
+    %w[zeta zeta-stress].each do |exe|
+      (bin/exe).write_env_script libexec/"bin/#{exe}",
+        Language::Java.overridable_java_home_env("21")
+    end
   end
 
   test do
