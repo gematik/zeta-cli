@@ -55,8 +55,8 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
         .default("")
     protected val scopes: List<String> by option("-s", "--scope", metavar = "NAME", help = "OAuth scope (repeatable).")
         .multiple()
-    protected val connectTimeout: Long? by option("--connect-timeout", metavar = "MS").long()
-    protected val requestTimeout: Long? by option("--request-timeout", metavar = "MS").long()
+    protected val connectTimeout: Long? by option("--connect-timeout", metavar = "SECONDS").long()
+    protected val requestTimeout: Long? by option("--request-timeout", metavar = "SECONDS").long()
     protected val insecure: Boolean by option("-k", "--insecure", help = "Disable TLS verification.").flag()
     protected val caCerts: List<String> by option("--ca-cert", metavar = "FILE", help = "Extra PEM CA (repeatable).")
         .multiple()
@@ -66,8 +66,8 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
     protected fun openDb(): Db = Db(Path.of(dbPath))
 
     protected fun httpSettings() = HttpSettings(
-        connectTimeoutMs = connectTimeout,
-        requestTimeoutMs = requestTimeout,
+        connectTimeoutMs = connectTimeout?.let { it * 1000 },
+        requestTimeoutMs = requestTimeout?.let { it * 1000 },
         insecure = insecure,
         caCertFiles = caCerts,
         aslProdEnvironment = aslProd,
