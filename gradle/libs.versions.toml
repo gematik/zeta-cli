@@ -17,6 +17,8 @@ xmlutil = "0.91.1"
 bouncycastle = "1.83"
 jna = "5.14.0"
 snakeyaml = "2.5"
+sqlite-jdbc = "3.47.1.0"
+commons-compress = "1.27.1"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin-gradle-plugin" }
@@ -34,3 +36,5 @@ xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization-jvm
 bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
