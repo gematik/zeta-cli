@@ -1,19 +1,36 @@
 package de.gematik.zeta.stress.runner
 
-/** Contract the driver's tick callback binds to; either the live panel or the plain printer. */
+/** Contract progress callbacks bind to; either the live panel or the plain printer. */
 interface Progress {
+    /** Rate-driven work (soak/ramp): current vs target admission rate. */
     fun tick(elapsedMs: Long, targetPerMin: Int, w: Snapshot)
+
+    /** Finite work (preflight): [done] of [total] units complete. */
+    fun tickCount(elapsedMs: Long, done: Int, total: Int, w: Snapshot)
+
     fun close()
 }
 
 /** One line per second on stderr — used when output isn't a TTY, so pipes/CI stay readable. */
 class PlainProgress(private val out: Appendable = System.err) : Progress {
     override fun tick(elapsedMs: Long, targetPerMin: Int, w: Snapshot) {
-        out.append(
-            "[t=%4ds] target %5d/min  did %5.0f/min  ok %d fail %d  p50 %dms p95 %dms p99 %dms%n".format(
+        emit(
+            "[t=%4ds] target %5d/min  did %5.0f/min  ok %d fail %d  p50 %dms p95 %dms p99 %dms".format(
                 elapsedMs / 1000, targetPerMin, w.throughputPerSec * 60, w.ok, w.fail, w.p50, w.p95, w.p99,
             ),
         )
+    }
+
+    override fun tickCount(elapsedMs: Long, done: Int, total: Int, w: Snapshot) {
+        emit(
+            "[t=%4ds] %d/%d done  ok %d fail %d  %5.0f/min  p50 %dms p95 %dms p99 %dms".format(
+                elapsedMs / 1000, done, total, w.ok, w.fail, w.throughputPerSec * 60, w.p50, w.p95, w.p99,
+            ),
+        )
+    }
+
+    private fun emit(line: String) {
+        out.append(line).append('\n')
         (out as? java.io.Flushable)?.flush()
     }
 
@@ -41,6 +58,23 @@ class LiveView(
     private val lines = 7
 
     override fun tick(elapsedMs: Long, targetPerMin: Int, w: Snapshot) {
+        val achieved = w.throughputPerSec * 60
+        val frac = if (targetPerMin > 0) achieved / targetPerMin else 0.0
+        val headline = label("RATE") + " " + bar(frac, 16, CYAN) + "  " +
+            color(pad("${achieved.toInt()}/min", 10), BOLD) +
+            color("/ ${targetPerMin}/min target", DIM)
+        render(elapsedMs, headline, w)
+    }
+
+    override fun tickCount(elapsedMs: Long, done: Int, total: Int, w: Snapshot) {
+        val frac = if (total > 0) done.toDouble() / total else 0.0
+        val headline = label("DONE") + " " + bar(frac, 16, CYAN) + "  " +
+            color(pad("$done / $total", 12), BOLD) +
+            color("(${(frac * 100).toInt()}%)", DIM)
+        render(elapsedMs, headline, w)
+    }
+
+    private fun render(elapsedMs: Long, headline: String, w: Snapshot) {
         history.addLast(w.throughputPerSec)
         while (history.size > sparkCells) history.removeFirst()
 
@@ -49,19 +83,10 @@ class LiveView(
 
         fun emit(s: String) = sb.append("$ESC[2K").append(s).append('\n')
 
-        val achieved = w.throughputPerSec * 60
-        val rateFrac = if (targetPerMin > 0) (achieved / targetPerMin) else 0.0
-
         emit(topBorder())
         emit(box(field("target", truncate(target, 34)) + gap() + field("elapsed", clock(elapsedMs))))
         emit(box(""))
-        emit(
-            box(
-                label("RATE") + " " + bar(rateFrac, 16, CYAN) + "  " +
-                    color(pad("${achieved.toInt()}/min", 10), BOLD) +
-                    color("/ ${targetPerMin}/min target", DIM),
-            ),
-        )
+        emit(box(headline))
         emit(
             box(
                 label("REQ ") + " " +

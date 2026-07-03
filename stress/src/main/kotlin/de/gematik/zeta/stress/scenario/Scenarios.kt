@@ -8,6 +8,7 @@ import de.gematik.zeta.stress.db.ClientStore
 import de.gematik.zeta.stress.runner.Attempt
 import de.gematik.zeta.stress.runner.DriverResult
 import de.gematik.zeta.stress.runner.LoadShape
+import de.gematik.zeta.stress.runner.Progress
 import de.gematik.zeta.stress.runner.Rates
 import de.gematik.zeta.stress.runner.Reporter
 import de.gematik.zeta.stress.runner.Snapshot
@@ -21,6 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
@@ -52,6 +57,7 @@ fun preflight(
     scopes: List<String>,
     concurrency: Int,
     seed: Long?,
+    progress: Progress? = null,
 ) {
     val rng = seed?.let { Random(it) } ?: Random.Default
     data class Work(val cardId: String, val clientRef: String)
@@ -63,7 +69,16 @@ fun preflight(
     }
     log.info { "Preflight: ${work.size} new clients across $identities identities" }
 
+    val runStart = deps.clockMs()
     runBlocking {
+        val ticker = progress?.let { p ->
+            launch {
+                while (isActive) {
+                    delay(1000)
+                    p.tickCount(deps.clockMs() - runStart, deps.reporter.completed, work.size, deps.reporter.window(3000))
+                }
+            }
+        }
         runLoad(work, concurrency, LoadShape.Burst, deps.clockMs) { w ->
             val card = deps.cardStore.get(w.cardId) ?: return@runLoad
             val sdk = deps.factory.build(w.clientRef, card, resource, scopes)
@@ -88,7 +103,10 @@ fun preflight(
                 sdk.closeQuietly()
             }
         }
+        ticker?.cancelAndJoin()
+        progress?.tickCount(deps.clockMs() - runStart, deps.reporter.completed, work.size, deps.reporter.window(3000))
     }
+    progress?.close()
 }
 
 /**

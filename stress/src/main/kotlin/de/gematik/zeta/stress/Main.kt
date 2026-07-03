@@ -89,6 +89,10 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
 
     protected fun openDb(poolSize: Int = 8): Db = Db(Path.of(dbPath), poolSize.coerceIn(4, 128))
 
+    /** k9s-style live panel on a TTY; a plain per-second line when piped, so logs/CSV stay clean. */
+    protected fun progress(scenario: String): Progress =
+        if (System.console() != null) LiveView("zeta-stress", scenario, resource, colorize = true) else PlainProgress()
+
     protected fun httpSettings() = HttpSettings(
         connectTimeoutMs = connectTimeout?.let { it * 1000 },
         requestTimeoutMs = requestTimeout?.let { it * 1000 },
@@ -149,7 +153,7 @@ class PreflightCommand : StressBaseCommand(name = "preflight") {
         openDb(concurrency).use { db ->
             val d = deps(db)
             val start = d.clockMs()
-            preflight(d, identities, clientsMin, clientsMax, resource, scopes, concurrency, seed)
+            preflight(d, identities, clientsMin, clientsMax, resource, scopes, concurrency, seed, progress("preflight"))
             echo(d.reporter.summary(d.clockMs() - start))
             echo("Registered clients in DB: ${ClientStore(db).count()}")
         }
@@ -188,12 +192,7 @@ class RunCommand : StressBaseCommand(name = "run") {
         applyVerbosity()
         if (resource.isBlank()) throw UsageError("--resource is required")
         val expire = if (scenario == Scenario.REFRESH_CHURN) Expire.ACCESS_ONLY else Expire.ALL
-        val interactive = System.console() != null
-        val progress: Progress = if (interactive) {
-            LiveView("zeta-stress", scenario.name.lowercase().replace('_', '-'), resource, colorize = true)
-        } else {
-            PlainProgress()
-        }
+        val progress = progress(scenario.name.lowercase().replace('_', '-'))
         val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w -> progress.tick(elapsedMs, target, w) }
 
         openDb(concurrency).use { db ->
