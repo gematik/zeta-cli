@@ -4,10 +4,13 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
+import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.counted
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
@@ -29,8 +32,13 @@ import de.gematik.zeta.stress.runner.Reporter
 import de.gematik.zeta.stress.runner.Snapshot
 import de.gematik.zeta.stress.scenario.Expire
 import de.gematik.zeta.stress.scenario.ScenarioDeps
+import de.gematik.zeta.stress.report.PhaseMarker
+import de.gematik.zeta.stress.report.ReportWriter
+import de.gematik.zeta.stress.report.RunMeta
+import de.gematik.zeta.stress.scenario.ProfileYaml
 import de.gematik.zeta.stress.scenario.loginStorm
 import de.gematik.zeta.stress.scenario.preflight
+import de.gematik.zeta.stress.scenario.profile
 import de.gematik.zeta.stress.scenario.ramp
 import de.gematik.zeta.stress.scenario.refreshChurn
 import de.gematik.zeta.stress.scenario.soak
@@ -40,6 +48,9 @@ import java.nio.file.Path
 import org.slf4j.LoggerFactory
 
 fun main(args: Array<String>) {
+    // Deterministic, locale-independent output everywhere (dot decimals, ASCII) regardless of the
+    // host's locale — so summaries, the panel, and the HTML/SVG report render identically for all users.
+    java.util.Locale.setDefault(java.util.Locale.ROOT)
     try {
         StressCommand()
             .subcommands(ImportCardsCommand(), PreflightCommand(), RunCommand(), ReportCommand())
@@ -59,7 +70,10 @@ fun main(args: Array<String>) {
 /** Root command — holds the options shared by every subcommand. */
 class StressCommand : CliktCommand(name = "zeta-stress") {
     init {
-        // Options declared here are inherited by subcommands via the shared context.
+        // Render each option's default value in --help (inherited by subcommands via the context).
+        context {
+            helpFormatter = { ctx -> MordantHelpFormatter(ctx, showDefaultValues = true) }
+        }
     }
 
     override fun help(context: Context) = "Load-test ZETA Guard with a fleet of SMC-B-backed clients."
@@ -90,10 +104,10 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
     protected fun openDb(poolSize: Int = 8): Db = Db(Path.of(dbPath), poolSize.coerceIn(4, 128))
 
     /** k9s-style live panel on a TTY; a plain per-second line when piped, so logs/CSV stay clean. */
-    protected fun progress(scenario: String): Progress =
-        if (System.console() != null) LiveView("zeta-stress", scenario, resource, colorize = true) else PlainProgress()
+    protected fun progress(scenario: String, target: String = resource): Progress =
+        if (System.console() != null) LiveView("zeta-stress", scenario, target, colorize = true) else PlainProgress()
 
-    protected fun httpSettings() = HttpSettings(
+    protected fun httpSettings(insecure: Boolean = this.insecure) = HttpSettings(
         connectTimeoutMs = connectTimeout?.let { it * 1000 },
         requestTimeoutMs = requestTimeout?.let { it * 1000 },
         insecure = insecure,
@@ -101,11 +115,11 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
         aslProdEnvironment = aslProd,
     )
 
-    protected fun deps(db: Db) = ScenarioDeps(
+    protected fun deps(db: Db, insecure: Boolean = this.insecure) = ScenarioDeps(
         cardStore = CardStore(db),
         clientStore = ClientStore(db),
         stateExpiry = de.gematik.zeta.stress.storage.StateExpiry(db),
-        factory = StressSdkClientFactory(db, httpSettings()),
+        factory = StressSdkClientFactory(db, httpSettings(insecure)),
         reporter = Reporter(),
         attemptTimeoutMs = attemptTimeout * 1000,
     )
@@ -176,6 +190,8 @@ class RunCommand : StressBaseCommand(name = "run") {
     private val duration: Long by option("--duration", metavar = "SECONDS", help = "Sustain the load for this long (soak).")
         .long().default(0)
 
+    private val profileFile: String? by argument("PROFILE", help = "YAML run profile: settings + a warm-up and repeating cycle of rate phases.").optional()
+
     private val doRamp: Boolean by option("--ramp", help = "Ramp the rate up until the AS breaks; report the peak healthy rate.").flag()
     private val rampStart: Int by option("--ramp-start", metavar = "PER_MIN").int().default(500)
     private val rampStep: Int by option("--ramp-step", metavar = "PER_MIN").int().default(500)
@@ -190,26 +206,49 @@ class RunCommand : StressBaseCommand(name = "run") {
 
     override fun run() {
         applyVerbosity()
-        if (resource.isBlank()) throw UsageError("--resource is required")
-        val expire = if (scenario == Scenario.REFRESH_CHURN) Expire.ACCESS_ONLY else Expire.ALL
-        val progress = progress(scenario.name.lowercase().replace('_', '-'))
-        val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w -> progress.tick(elapsedMs, target, w) }
+        val prof = profileFile?.let { ProfileYaml.load(Path.of(it)) }
 
-        openDb(concurrency).use { db ->
-            val d = deps(db)
+        // Profile values win where set; anything omitted falls back to the CLI flag / its default.
+        val resourceEff = prof?.resource?.takeIf { it.isNotBlank() } ?: resource
+        if (resourceEff.isBlank()) throw UsageError("--resource is required (or set 'resource:' in the profile)")
+        val scopesEff = prof?.scopes?.takeIf { it.isNotEmpty() } ?: scopes
+        val cohortEff = prof?.cohort ?: cohort
+        val concurrencyEff = prof?.concurrency ?: concurrency
+        val insecureEff = prof?.insecure ?: insecure
+
+        val startedAt = java.time.LocalDateTime.now()
+        val expire = if (scenario == Scenario.REFRESH_CHURN) Expire.ACCESS_ONLY else Expire.ALL
+        var reportPhases: List<PhaseMarker> = emptyList()
+        val progress = progress(scenario.name.lowercase().replace('_', '-'), resourceEff)
+        val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w ->
+            prof?.phaseAt(elapsedMs)?.let { progress.phase(it.current, it.next, it.remainingSec) }
+            progress.tick(elapsedMs, target, w)
+        }
+
+        openDb(concurrencyEff).use { db ->
+            val d = deps(db, insecureEff)
             val start = d.clockMs()
             when {
+                prof != null -> {
+                    val totalMs = prof.durationMs
+                        ?: if (duration > 0) duration * 1000 else prof.warmupMs + prof.cycleMs
+                    reportPhases = prof.timeline(totalMs).map { PhaseMarker(it.second / 1000.0, it.first) }
+                    profile(d, resourceEff, cohortEff, concurrencyEff, prof.schedule(), totalMs, expire, scopesEff, tick)
+                    progress.close()
+                    echo(d.reporter.summary(d.clockMs() - start))
+                }
+
                 doRamp -> {
                     // Default the cap to enough time to climb from start to the ceiling (plus a
                     // little tail); an explicit --duration overrides it.
                     val stepsToCeiling = ((rate - rampStart).coerceAtLeast(0) / rampStep.coerceAtLeast(1)) + 2
                     val rampDurationSec = if (duration > 0) duration else stepsToCeiling * rampStepInterval
                     val result = ramp(
-                        d, resource, cohort, concurrency,
+                        d, resourceEff, cohortEff, concurrencyEff,
                         startPerMin = rampStart, stepPerMin = rampStep, stepEverySec = rampStepInterval,
                         maxPerMin = rate, durationMs = rampDurationSec * 1000,
                         maxFailFraction = maxFailPct / 100.0, maxP99Ms = maxP99,
-                        expire = expire, scopes = scopes, onTick = tick,
+                        expire = expire, scopes = scopesEff, onTick = tick,
                     )
                     progress.close()
                     echo(d.reporter.summary(d.clockMs() - start))
@@ -220,7 +259,7 @@ class RunCommand : StressBaseCommand(name = "run") {
                 }
 
                 duration > 0 -> {
-                    soak(d, resource, cohort, concurrency, rate, duration * 1000, expire, scopes, tick)
+                    soak(d, resourceEff, cohortEff, concurrencyEff, rate, duration * 1000, expire, scopesEff, tick)
                     progress.close()
                     echo(d.reporter.summary(d.clockMs() - start))
                 }
@@ -228,15 +267,29 @@ class RunCommand : StressBaseCommand(name = "run") {
                 else -> {
                     val shape = if (burst) LoadShape.Burst else LoadShape.Steady(rate)
                     when (scenario) {
-                        Scenario.LOGIN_STORM -> loginStorm(d, resource, cohort, concurrency, shape, expire = true, scopes)
-                        Scenario.REFRESH_CHURN -> refreshChurn(d, resource, cohort, concurrency, shape, scopes)
+                        Scenario.LOGIN_STORM -> loginStorm(d, resourceEff, cohortEff, concurrencyEff, shape, expire = true, scopesEff)
+                        Scenario.REFRESH_CHURN -> refreshChurn(d, resourceEff, cohortEff, concurrencyEff, shape, scopesEff)
                     }
                     echo(d.reporter.summary(d.clockMs() - start))
                 }
             }
 
+            val rows = d.reporter.rows()
+            val reportDir = ReportWriter.write(
+                RunMeta(
+                    resource = resourceEff,
+                    scenario = scenario.name.lowercase().replace('_', '-'),
+                    cohort = cohortEff,
+                    concurrency = concurrencyEff,
+                    startedAt = startedAt,
+                    wallMs = d.clockMs() - start,
+                    phases = reportPhases,
+                ),
+                rows,
+            )
+            echo("Report: ${reportDir.toAbsolutePath()}/report.html")
+
             if (csvOut != null || jsonOut != null) {
-                val rows = d.reporter.rows()
                 ResultStore(db).insertAll(rows)
                 csvOut?.let { ResultStore.exportCsv(rows, Path.of(it)); echo("Wrote ${rows.size} results to $it") }
                 jsonOut?.let { ResultStore.exportJson(rows, Path.of(it)); echo("Wrote ${rows.size} results to $it") }

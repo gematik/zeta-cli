@@ -16,6 +16,9 @@ data class Snapshot(
     val p95: Long,
     val p99: Long,
     val throughputPerSec: Double,
+    // Cumulative run totals, independent of the window — for progress display.
+    val totalOk: Int = 0,
+    val totalFail: Int = 0,
 ) {
     val failFraction: Double get() = if (count == 0) 0.0 else fail.toDouble() / count
 }
@@ -30,9 +33,12 @@ class Reporter(private val clockMs: () -> Long = { System.nanoTime() / 1_000_000
     private class Rec(val atMs: Long, val op: String, val latencyMs: Long, val ok: Boolean, val error: String?)
 
     private val recs = ConcurrentLinkedQueue<Rec>()
+    private val okTotal = java.util.concurrent.atomic.AtomicInteger()
+    private val failTotal = java.util.concurrent.atomic.AtomicInteger()
 
     fun record(attempt: Attempt) {
         recs += Rec(clockMs(), attempt.op, attempt.latencyMs, attempt.ok, attempt.error)
+        if (attempt.ok) okTotal.incrementAndGet() else failTotal.incrementAndGet()
     }
 
     val completed: Int get() = recs.size
@@ -85,6 +91,8 @@ class Reporter(private val clockMs: () -> Long = { System.nanoTime() / 1_000_000
             p95 = pct(okLatencies, 95),
             p99 = pct(okLatencies, 99),
             throughputPerSec = throughput,
+            totalOk = okTotal.get(),
+            totalFail = failTotal.get(),
         )
     }
 

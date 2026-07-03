@@ -23,6 +23,56 @@ object Rates {
     fun ramp(startPerMin: Int, stepPerMin: Int, stepEveryMs: Long, maxPerMin: Int) = RateSchedule { elapsed ->
         (startPerMin + stepPerMin * (elapsed / stepEveryMs)).toInt().coerceIn(1, maxPerMin)
     }
+
+    /**
+     * A repeating rate waveform: an optional [warmup] phase, then the [cycle] phases run
+     * back-to-back and looped until the run ends — modelling warm-up → burst → slow-down → spikes →
+     * repeat. Server throughput still caps the achieved rate, so bursts above the ceiling surface as
+     * saturation (rising latency / in-flight), not higher req/s.
+     */
+    fun profile(warmup: Phase?, cycle: List<Phase>): RateSchedule {
+        require(cycle.isNotEmpty()) { "profile needs at least one cycle phase" }
+        val cycleMs = cycle.sumOf { it.durationMs }
+        require(cycleMs > 0) { "profile cycle must have positive total duration" }
+        val warmupMs = warmup?.durationMs ?: 0L
+        return RateSchedule { elapsed ->
+            if (warmup != null && elapsed < warmupMs) return@RateSchedule warmup.rateAt(elapsed)
+            var pos = (elapsed - warmupMs) % cycleMs
+            var i = 0
+            while (pos >= cycle[i].durationMs) { pos -= cycle[i].durationMs; i++ }
+            cycle[i].rateAt(pos)
+        }
+    }
+}
+
+/**
+ * One segment of a [Rates.profile] waveform: a wall-clock [durationMs] plus the target rate as a
+ * function of time-within-the-phase. Build via [hold], [ramp], or [spikes].
+ */
+class Phase private constructor(val name: String, val durationMs: Long, private val rate: (Long) -> Int) {
+    fun rateAt(inPhaseMs: Long): Int = rate(inPhaseMs).coerceAtLeast(1)
+
+    companion object {
+        /** Constant [perMin] for the whole phase. */
+        fun hold(name: String, perMin: Int, durationMs: Long) = Phase(name, durationMs) { perMin }
+
+        /** Linear glide from [fromPerMin] to [toPerMin] across the phase. */
+        fun ramp(name: String, fromPerMin: Int, toPerMin: Int, durationMs: Long) = Phase(name, durationMs) { t ->
+            (fromPerMin + (toPerMin - fromPerMin) * t / durationMs.coerceAtLeast(1)).toInt()
+        }
+
+        /**
+         * Baseline [basePerMin] that jumps to [peakPerMin] in random [bucketMs]-wide slots, each
+         * spiking with probability [prob]. The choice is a deterministic hash of the slot index, so
+         * the same profile replays identically rather than differing run to run.
+         */
+        fun spikes(name: String, basePerMin: Int, peakPerMin: Int, prob: Double, durationMs: Long, bucketMs: Long = 2000) =
+            Phase(name, durationMs) { t ->
+                val slot = t / bucketMs.coerceAtLeast(1)
+                val h = (slot * 2654435761L) and 0x7fffffffL
+                if ((h % 1000) / 1000.0 < prob) peakPerMin else basePerMin
+            }
+    }
 }
 
 data class DriverResult(val stoppedEarly: Boolean, val peakHealthyPerMin: Int)

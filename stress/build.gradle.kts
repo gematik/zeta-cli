@@ -24,6 +24,8 @@ dependencies {
     implementation(libs.sqlite.jdbc)
     // Read the gzip+tar SMC-B bundles during `import-cards`.
     implementation(libs.commons.compress)
+    // Parse YAML rate-waveform profiles for `run --profile`.
+    implementation(libs.snakeyaml)
 }
 
 application {

@@ -8,6 +8,9 @@ interface Progress {
     /** Finite work (preflight): [done] of [total] units complete. */
     fun tickCount(elapsedMs: Long, done: Int, total: Int, w: Snapshot)
 
+    /** Current waveform phase (profile runs only); no-op for other shapes. */
+    fun phase(current: String, next: String?, remainingSec: Long) {}
+
     fun close()
 }
 
@@ -16,7 +19,7 @@ class PlainProgress(private val out: Appendable = System.err) : Progress {
     override fun tick(elapsedMs: Long, targetPerMin: Int, w: Snapshot) {
         emit(
             "[t=%4ds] target %5d/min  did %5.0f/min  ok %d fail %d  p50 %dms p95 %dms p99 %dms".format(
-                elapsedMs / 1000, targetPerMin, w.throughputPerSec * 60, w.ok, w.fail, w.p50, w.p95, w.p99,
+                elapsedMs / 1000, targetPerMin, w.throughputPerSec * 60, w.totalOk, w.totalFail, w.p50, w.p95, w.p99,
             ),
         )
     }
@@ -24,7 +27,7 @@ class PlainProgress(private val out: Appendable = System.err) : Progress {
     override fun tickCount(elapsedMs: Long, done: Int, total: Int, w: Snapshot) {
         emit(
             "[t=%4ds] %d/%d done  ok %d fail %d  %5.0f/min  p50 %dms p95 %dms p99 %dms".format(
-                elapsedMs / 1000, done, total, w.ok, w.fail, w.throughputPerSec * 60, w.p50, w.p95, w.p99,
+                elapsedMs / 1000, done, total, w.totalOk, w.totalFail, w.throughputPerSec * 60, w.p50, w.p95, w.p99,
             ),
         )
     }
@@ -55,7 +58,15 @@ class LiveView(
     private val history = ArrayDeque<Double>()
     private val sparkCells = 44
     private var started = false
-    private val lines = 7
+    private val lines = 8
+
+    private var pCur: String? = null
+    private var pNext: String? = null
+    private var pRem: Long = 0
+
+    override fun phase(current: String, next: String?, remainingSec: Long) {
+        pCur = current; pNext = next; pRem = remainingSec
+    }
 
     override fun tick(elapsedMs: Long, targetPerMin: Int, w: Snapshot) {
         val achieved = w.throughputPerSec * 60
@@ -87,11 +98,12 @@ class LiveView(
         emit(box(field("target", truncate(target, 34)) + gap() + field("elapsed", clock(elapsedMs))))
         emit(box(""))
         emit(box(headline))
+        emit(box(phaseRow()))
         emit(
             box(
                 label("REQ ") + " " +
-                    color("ok ", DIM) + color(pad(w.ok.toString(), 8), GREEN) +
-                    color("fail ", DIM) + color(pad(w.fail.toString(), 7), if (w.fail > 0) RED else DIM) +
+                    color("ok ", DIM) + color(pad(w.totalOk.toString(), 8), GREEN) +
+                    color("fail ", DIM) + color(pad(w.totalFail.toString(), 7), if (w.totalFail > 0) RED else DIM) +
                     color("thrpt ", DIM) + color("${"%.1f".format(w.throughputPerSec)}/s", BOLD),
             ),
         )
@@ -120,6 +132,12 @@ class LiveView(
             blocks[idx].toString()
         }
         return color(s, CYAN) + color(" thrpt", DIM)
+    }
+
+    private fun phaseRow(): String {
+        val cur = pCur ?: return label("PHASE") + " " + color(scenario, DIM)
+        val tail = pNext?.let { color(" → ", DIM) + color(it, DIM) + color("  in ${pRem}s", DIM) } ?: ""
+        return label("PHASE") + " " + color(cur, CYAN) + tail
     }
 
     private fun lat(name: String, ms: Long): String {

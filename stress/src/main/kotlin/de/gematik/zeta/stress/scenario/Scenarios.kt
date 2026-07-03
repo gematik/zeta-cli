@@ -9,6 +9,7 @@ import de.gematik.zeta.stress.runner.Attempt
 import de.gematik.zeta.stress.runner.DriverResult
 import de.gematik.zeta.stress.runner.LoadShape
 import de.gematik.zeta.stress.runner.Progress
+import de.gematik.zeta.stress.runner.RateSchedule
 import de.gematik.zeta.stress.runner.Rates
 import de.gematik.zeta.stress.runner.Reporter
 import de.gematik.zeta.stress.runner.Snapshot
@@ -240,6 +241,41 @@ fun soak(
                 items = clients,
                 concurrency = concurrency,
                 schedule = Rates.constant(ratePerMin),
+                durationMs = durationMs,
+                clockMs = deps.clockMs,
+                reporter = deps.reporter,
+                onTick = onTick,
+            ) { row -> pool.get(row)?.let { runAttempt(deps, it, row, expire) } }
+        }
+    }
+}
+
+/**
+ * Waveform load: drive the cohort for [durationMs] following a time-varying [schedule] (see
+ * [Rates.profile]) — e.g. warm-up → burst → slow-down → spikes → repeat. Same machinery as [soak];
+ * only the admission-rate curve differs.
+ */
+fun profile(
+    deps: ScenarioDeps,
+    resource: String,
+    cohort: Int,
+    concurrency: Int,
+    schedule: RateSchedule,
+    durationMs: Long,
+    expire: Expire,
+    scopes: List<String>,
+    onTick: (Long, Int, Snapshot) -> Unit,
+) {
+    val clients = deps.clientStore.cohort(resource, cohort)
+    require(clients.isNotEmpty()) { "no registered clients for $resource — run preflight first" }
+    log.info { "Profile: ${clients.size} clients for ${durationMs / 1000}s, expire=$expire" }
+
+    ClientPool(deps, resource, scopes).use { pool ->
+        runBlocking {
+            runContinuous(
+                items = clients,
+                concurrency = concurrency,
+                schedule = schedule,
                 durationMs = durationMs,
                 clockMs = deps.clockMs,
                 reporter = deps.reporter,

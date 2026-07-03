@@ -1,0 +1,38 @@
+# zeta-stress run profile — connection + fleet settings and the rate waveform in one file.
+#
+#   zeta-stress run stress-profile.yaml
+#
+# Values set here are used for the run; omit any key to fall back to the CLI flag / its default.
+# Rates are requests/min. `warmup` runs once, then `cycle` phases run back-to-back and repeat
+# until `duration` elapses. Phase names show in the live panel (current → next).
+#
+# The server's throughput caps the achieved rate: a burst above the box's ceiling (~2350/min on
+# the 2-core test node) shows as rising latency / in-flight backpressure, not higher req/s. Keep
+# warm-up and slow-down below the ceiling so the shape stays visible, and give concurrency enough
+# headroom (e.g. 200) for bursts to open up.
+
+resource: https://zeta-plain.t20r.cloud
+scope: zero:audience
+cohort: 2000
+concurrency: 50
+insecure: true
+duration: 5m          # total run time (ms/s/m/h; bare = seconds); omit to run one full cycle
+
+warmup:
+  name: warmup         # 1. warm up — moderate, steady
+  rate: 80
+  duration: 30s
+
+cycle:
+  - name: burst        # 2. burst — push past the ceiling
+    rate: 5000
+    duration: 1m
+  - name: slowdown     # 3. slow down — let it recover
+    rate: 60
+    duration: 45s
+  - name: spikes       # 4. fuzzy spikes — random peaks in 2s buckets
+    base: 60
+    peak: 5000
+    probability: 0.20
+    duration: 1m
+  # 5. repeat the cycle from #2 until `duration`
