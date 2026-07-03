@@ -21,7 +21,10 @@ import de.gematik.zeta.stress.db.CardStore
 import de.gematik.zeta.stress.db.ClientStore
 import de.gematik.zeta.stress.db.Db
 import de.gematik.zeta.stress.db.ResultStore
+import de.gematik.zeta.stress.runner.LiveView
 import de.gematik.zeta.stress.runner.LoadShape
+import de.gematik.zeta.stress.runner.PlainProgress
+import de.gematik.zeta.stress.runner.Progress
 import de.gematik.zeta.stress.runner.Reporter
 import de.gematik.zeta.stress.runner.Snapshot
 import de.gematik.zeta.stress.scenario.Expire
@@ -185,13 +188,13 @@ class RunCommand : StressBaseCommand(name = "run") {
         applyVerbosity()
         if (resource.isBlank()) throw UsageError("--resource is required")
         val expire = if (scenario == Scenario.REFRESH_CHURN) Expire.ACCESS_ONLY else Expire.ALL
-        val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w ->
-            System.err.println(
-                "[t=%4ds] target %5d/min  did %5.0f/min  ok %d fail %d  p50 %dms p95 %dms p99 %dms".format(
-                    elapsedMs / 1000, target, w.throughputPerSec * 60, w.ok, w.fail, w.p50, w.p95, w.p99,
-                ),
-            )
+        val interactive = System.console() != null
+        val progress: Progress = if (interactive) {
+            LiveView("zeta-stress", scenario.name.lowercase().replace('_', '-'), resource, colorize = true)
+        } else {
+            PlainProgress()
         }
+        val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w -> progress.tick(elapsedMs, target, w) }
 
         openDb(concurrency).use { db ->
             val d = deps(db)
@@ -209,6 +212,7 @@ class RunCommand : StressBaseCommand(name = "run") {
                         maxFailFraction = maxFailPct / 100.0, maxP99Ms = maxP99,
                         expire = expire, scopes = scopes, onTick = tick,
                     )
+                    progress.close()
                     echo(d.reporter.summary(d.clockMs() - start))
                     echo(
                         if (result.stoppedEarly) "Breaking point reached — peak healthy rate ≈ ${result.peakHealthyPerMin} req/min"
@@ -218,6 +222,7 @@ class RunCommand : StressBaseCommand(name = "run") {
 
                 duration > 0 -> {
                     soak(d, resource, cohort, concurrency, rate, duration * 1000, expire, scopes, tick)
+                    progress.close()
                     echo(d.reporter.summary(d.clockMs() - start))
                 }
 
