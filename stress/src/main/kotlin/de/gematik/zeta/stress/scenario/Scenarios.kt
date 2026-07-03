@@ -6,13 +6,18 @@ import de.gematik.zeta.stress.db.CardStore
 import de.gematik.zeta.stress.db.ClientRow
 import de.gematik.zeta.stress.db.ClientStore
 import de.gematik.zeta.stress.runner.Attempt
+import de.gematik.zeta.stress.runner.DriverResult
 import de.gematik.zeta.stress.runner.LoadShape
+import de.gematik.zeta.stress.runner.Rates
 import de.gematik.zeta.stress.runner.Reporter
+import de.gematik.zeta.stress.runner.Snapshot
+import de.gematik.zeta.stress.runner.runContinuous
 import de.gematik.zeta.stress.runner.runLoad
 import de.gematik.zeta.stress.sdk.StressSdkClientFactory
 import de.gematik.zeta.stress.storage.StateExpiry
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
 import kotlinx.coroutines.TimeoutCancellationException
@@ -136,21 +141,42 @@ fun refreshChurn(
     }
 }
 
+/** What to wipe from a client's state before an attempt, to force real token-endpoint load. */
+enum class Expire { NONE, ACCESS_ONLY, ALL }
+
+/** Once-mode: build a client, run one attempt (state already expired by the caller), close it. */
 private suspend fun authenticateOnce(deps: ScenarioDeps, row: ClientRow, scopes: List<String>) {
     val card = deps.cardStore.get(row.cardId) ?: return
     val sdk = deps.factory.build(row.clientRef, card, row.resource, scopes)
+    try {
+        runAttempt(deps, sdk, row, Expire.NONE)
+    } finally {
+        sdk.closeQuietly()
+    }
+}
+
+/**
+ * Runs a single authenticate attempt against an already-built [sdk], optionally expiring state
+ * first, and records the outcome. Success requires the SDK to actually hold an access token
+ * afterwards — `authenticate()` can return success without one (e.g. the AS rejects the token
+ * request server-side but the SDK swallows it), so we verify rather than trust the return.
+ * A stalled attempt is capped by [ScenarioDeps.attemptTimeoutMs] and recorded as a failure.
+ */
+private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, row: ClientRow, expire: Expire) {
     val start = deps.clockMs()
     try {
         withTimeout(deps.attemptTimeoutMs) {
+            when (expire) {
+                Expire.ALL -> deps.stateExpiry.expireAll(row.clientRef)
+                Expire.ACCESS_ONLY -> deps.stateExpiry.expireAccessTokenOnly(row.clientRef)
+                Expire.NONE -> Unit
+            }
             val status = sdk.status().getOrThrow()
             if (status == SdkStatus.NOT_REGISTERED) {
                 sdk.discover().getOrThrow()
                 sdk.register().getOrThrow()
             }
             sdk.authenticate().getOrThrow()
-            // authenticate() can return success without a usable token — e.g. the AS rejects the
-            // token request server-side but the SDK swallows it. Require the SDK to actually hold
-            // an access token before counting the attempt as a pass, so those surface as failures.
             val finalStatus = sdk.status().getOrThrow()
             if (finalStatus == SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN) {
                 deps.reporter.record(Attempt("authenticate", deps.clockMs() - start, true, null))
@@ -166,12 +192,107 @@ private suspend fun authenticateOnce(deps: ScenarioDeps, row: ClientRow, scopes:
         throw e
     } catch (e: Throwable) {
         deps.reporter.record(Attempt("authenticate", deps.clockMs() - start, false, e.errorLabel()))
-    } finally {
-        sdk.closeQuietly()
     }
 }
 
-private fun ZetaSdkClient.closeQuietly() = runCatching { runBlocking { close() } }
+/**
+ * Sustained load: drive the cohort continuously for [durationMs] at [ratePerMin], re-expiring each
+ * picked client so every op is a real token-endpoint hit ([expire] picks refresh vs full re-login).
+ * SDK clients are built once and reused across ops via [ClientPool] — building one per op would
+ * spawn an OkHttp engine per request and exhaust the box under a soak.
+ */
+fun soak(
+    deps: ScenarioDeps,
+    resource: String,
+    cohort: Int,
+    concurrency: Int,
+    ratePerMin: Int,
+    durationMs: Long,
+    expire: Expire,
+    scopes: List<String>,
+    onTick: (Long, Int, Snapshot) -> Unit,
+) {
+    val clients = deps.clientStore.cohort(resource, cohort)
+    require(clients.isNotEmpty()) { "no registered clients for $resource — run preflight first" }
+    log.info { "Soak: ${clients.size} clients, ${ratePerMin}/min for ${durationMs / 1000}s, expire=$expire" }
+
+    ClientPool(deps, resource, scopes).use { pool ->
+        runBlocking {
+            runContinuous(
+                items = clients,
+                concurrency = concurrency,
+                schedule = Rates.constant(ratePerMin),
+                durationMs = durationMs,
+                clockMs = deps.clockMs,
+                reporter = deps.reporter,
+                onTick = onTick,
+            ) { row -> pool.get(row)?.let { runAttempt(deps, it, row, expire) } }
+        }
+    }
+}
+
+/**
+ * Ramp to the breaking point: step the rate up from [startPerMin] by [stepPerMin] every
+ * [stepEverySec], up to [maxPerMin] or [durationMs], stopping when the trailing window's failure
+ * fraction exceeds [maxFailFraction] or its p99 exceeds [maxP99Ms]. Returns the peak healthy
+ * throughput observed.
+ */
+fun ramp(
+    deps: ScenarioDeps,
+    resource: String,
+    cohort: Int,
+    concurrency: Int,
+    startPerMin: Int,
+    stepPerMin: Int,
+    stepEverySec: Long,
+    maxPerMin: Int,
+    durationMs: Long,
+    maxFailFraction: Double,
+    maxP99Ms: Long,
+    expire: Expire,
+    scopes: List<String>,
+    onTick: (Long, Int, Snapshot) -> Unit,
+): DriverResult {
+    val clients = deps.clientStore.cohort(resource, cohort)
+    require(clients.isNotEmpty()) { "no registered clients for $resource — run preflight first" }
+    log.info { "Ramp: $startPerMin→$maxPerMin/min (+$stepPerMin every ${stepEverySec}s), stop at fail>$maxFailFraction or p99>${maxP99Ms}ms" }
+
+    return ClientPool(deps, resource, scopes).use { pool ->
+        runBlocking {
+            runContinuous(
+                items = clients,
+                concurrency = concurrency,
+                schedule = Rates.ramp(startPerMin, stepPerMin, stepEverySec * 1000, maxPerMin),
+                durationMs = durationMs,
+                clockMs = deps.clockMs,
+                reporter = deps.reporter,
+                stopWhen = { w -> w.failFraction > maxFailFraction || w.p99 > maxP99Ms },
+                onTick = onTick,
+            ) { row -> pool.get(row)?.let { runAttempt(deps, it, row, expire) } }
+        }
+    }
+}
+
+/** Reuses one [ZetaSdkClient] per client_ref across many ops; closes them all on exit. */
+private class ClientPool(
+    private val deps: ScenarioDeps,
+    private val resource: String,
+    private val scopes: List<String>,
+) : AutoCloseable {
+    private val cache = ConcurrentHashMap<String, ZetaSdkClient>()
+
+    fun get(row: ClientRow): ZetaSdkClient? =
+        cache.getOrPut(row.clientRef) {
+            val card = deps.cardStore.get(row.cardId) ?: return null
+            deps.factory.build(row.clientRef, card, resource, scopes.ifEmpty { row.scopes })
+        }
+
+    override fun close() = cache.values.forEach { it.closeQuietly() }
+}
+
+private fun ZetaSdkClient.closeQuietly() {
+    runCatching { runBlocking { close() } }
+}
 
 private fun Throwable.errorLabel(): String =
     "${this::class.simpleName}: ${message?.take(120) ?: ""}".trim()

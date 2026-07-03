@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
@@ -19,21 +20,34 @@ import de.gematik.zeta.stress.card.CardImporter
 import de.gematik.zeta.stress.db.CardStore
 import de.gematik.zeta.stress.db.ClientStore
 import de.gematik.zeta.stress.db.Db
+import de.gematik.zeta.stress.db.ResultStore
 import de.gematik.zeta.stress.runner.LoadShape
 import de.gematik.zeta.stress.runner.Reporter
+import de.gematik.zeta.stress.runner.Snapshot
+import de.gematik.zeta.stress.scenario.Expire
 import de.gematik.zeta.stress.scenario.ScenarioDeps
 import de.gematik.zeta.stress.scenario.loginStorm
 import de.gematik.zeta.stress.scenario.preflight
+import de.gematik.zeta.stress.scenario.ramp
 import de.gematik.zeta.stress.scenario.refreshChurn
+import de.gematik.zeta.stress.scenario.soak
 import de.gematik.zeta.stress.sdk.HttpSettings
 import de.gematik.zeta.stress.sdk.StressSdkClientFactory
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
 
 fun main(args: Array<String>) {
-    StressCommand()
-        .subcommands(ImportCardsCommand(), PreflightCommand(), RunCommand(), ReportCommand())
-        .main(args)
+    try {
+        StressCommand()
+            .subcommands(ImportCardsCommand(), PreflightCommand(), RunCommand(), ReportCommand())
+            .main(args)
+    } catch (e: Exception) {
+        // Clikt renders its own CliktError/UsageError (clean message + exit code) inside main().
+        // Anything else — a failed precondition, an SDK/DB error — would otherwise print a raw
+        // stack trace; surface it as a one-line message instead.
+        System.err.println("Error: ${e.message ?: e::class.simpleName}")
+        kotlin.system.exitProcess(1)
+    }
     // The SDK/CLI run on Ktor's OkHttp engine, whose non-daemon dispatcher threads keep the JVM
     // alive ~60s after work finishes. Exit promptly instead of hanging.
     kotlin.system.exitProcess(0)
@@ -127,8 +141,8 @@ class PreflightCommand : StressBaseCommand(name = "preflight") {
 
     override fun run() {
         applyVerbosity()
-        require(resource.isNotBlank()) { "--resource is required" }
-        require(scopes.isNotEmpty()) { "at least one --scope is required" }
+        if (resource.isBlank()) throw UsageError("--resource is required")
+        if (scopes.isEmpty()) throw UsageError("at least one --scope is required")
         openDb().use { db ->
             val d = deps(db)
             val start = d.clockMs()
@@ -139,35 +153,90 @@ class PreflightCommand : StressBaseCommand(name = "preflight") {
     }
 }
 
-enum class Scenario { LOGIN_STORM, STEADY, REFRESH_CHURN }
+enum class Scenario { LOGIN_STORM, REFRESH_CHURN }
 
 class RunCommand : StressBaseCommand(name = "run") {
-    private val scenario: Scenario by option("--scenario", help = "Which load scenario to run.")
+    private val scenario: Scenario by option("--scenario", help = "What each op does: login-storm (full re-login) or refresh-churn (refresh only).")
         .enum<Scenario> { it.name.lowercase().replace('_', '-') }
         .default(Scenario.LOGIN_STORM)
     private val cohort: Int by option("--cohort", metavar = "N", help = "How many registered clients to drive.")
         .int().default(100)
     private val concurrency: Int by option("--concurrency", metavar = "N", help = "Max in-flight requests.")
         .int().default(100)
-    private val rate: Int by option("--rate", metavar = "PER_MIN", help = "Steady-mode admission rate.")
+    private val rate: Int by option("--rate", metavar = "PER_MIN", help = "Target admission rate (soak) / ramp ceiling.")
         .int().default(5000)
-    private val burst: Boolean by option("--burst", help = "Thundering herd (ignore --rate).").flag()
+    private val burst: Boolean by option("--burst", help = "One-shot thundering herd (ignore --rate/--duration).").flag()
+    private val duration: Long by option("--duration", metavar = "SECONDS", help = "Sustain the load for this long (soak).")
+        .long().default(0)
+
+    private val doRamp: Boolean by option("--ramp", help = "Ramp the rate up until the AS breaks; report the peak healthy rate.").flag()
+    private val rampStart: Int by option("--ramp-start", metavar = "PER_MIN").int().default(500)
+    private val rampStep: Int by option("--ramp-step", metavar = "PER_MIN").int().default(500)
+    private val rampStepInterval: Long by option("--ramp-step-interval", metavar = "SECONDS").long().default(20)
+    private val maxFailPct: Int by option("--max-fail-pct", help = "Ramp stops when window failure % exceeds this.").int().default(10)
+    private val maxP99: Long by option("--max-p99", metavar = "MS", help = "Ramp stops when window p99 exceeds this.").long().default(5000)
+
+    private val csvOut: String? by option("--csv", metavar = "FILE", help = "Export per-attempt results as CSV.")
+    private val jsonOut: String? by option("--json-out", metavar = "FILE", help = "Export per-attempt results as JSON.")
 
     override fun help(context: Context) = "Drive a load scenario against ZETA Guard."
 
     override fun run() {
         applyVerbosity()
-        require(resource.isNotBlank()) { "--resource is required" }
+        if (resource.isBlank()) throw UsageError("--resource is required")
+        val expire = if (scenario == Scenario.REFRESH_CHURN) Expire.ACCESS_ONLY else Expire.ALL
+        val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w ->
+            System.err.println(
+                "[t=%4ds] target %5d/min  did %5.0f/min  ok %d fail %d  p50 %dms p95 %dms p99 %dms".format(
+                    elapsedMs / 1000, target, w.throughputPerSec * 60, w.ok, w.fail, w.p50, w.p95, w.p99,
+                ),
+            )
+        }
+
         openDb().use { db ->
             val d = deps(db)
-            val shape = if (burst) LoadShape.Burst else LoadShape.Steady(rate)
             val start = d.clockMs()
-            when (scenario) {
-                Scenario.LOGIN_STORM -> loginStorm(d, resource, cohort, concurrency, shape, expire = true, scopes)
-                Scenario.STEADY -> loginStorm(d, resource, cohort, concurrency, shape, expire = false, scopes)
-                Scenario.REFRESH_CHURN -> refreshChurn(d, resource, cohort, concurrency, shape, scopes)
+            when {
+                doRamp -> {
+                    // Default the cap to enough time to climb from start to the ceiling (plus a
+                    // little tail); an explicit --duration overrides it.
+                    val stepsToCeiling = ((rate - rampStart).coerceAtLeast(0) / rampStep.coerceAtLeast(1)) + 2
+                    val rampDurationSec = if (duration > 0) duration else stepsToCeiling * rampStepInterval
+                    val result = ramp(
+                        d, resource, cohort, concurrency,
+                        startPerMin = rampStart, stepPerMin = rampStep, stepEverySec = rampStepInterval,
+                        maxPerMin = rate, durationMs = rampDurationSec * 1000,
+                        maxFailFraction = maxFailPct / 100.0, maxP99Ms = maxP99,
+                        expire = expire, scopes = scopes, onTick = tick,
+                    )
+                    echo(d.reporter.summary(d.clockMs() - start))
+                    echo(
+                        if (result.stoppedEarly) "Breaking point reached — peak healthy rate ≈ ${result.peakHealthyPerMin} req/min"
+                        else "Ramp finished without breaking — peak healthy rate ≈ ${result.peakHealthyPerMin} req/min",
+                    )
+                }
+
+                duration > 0 -> {
+                    soak(d, resource, cohort, concurrency, rate, duration * 1000, expire, scopes, tick)
+                    echo(d.reporter.summary(d.clockMs() - start))
+                }
+
+                else -> {
+                    val shape = if (burst) LoadShape.Burst else LoadShape.Steady(rate)
+                    when (scenario) {
+                        Scenario.LOGIN_STORM -> loginStorm(d, resource, cohort, concurrency, shape, expire = true, scopes)
+                        Scenario.REFRESH_CHURN -> refreshChurn(d, resource, cohort, concurrency, shape, scopes)
+                    }
+                    echo(d.reporter.summary(d.clockMs() - start))
+                }
             }
-            echo(d.reporter.summary(d.clockMs() - start))
+
+            if (csvOut != null || jsonOut != null) {
+                val rows = d.reporter.rows()
+                ResultStore(db).insertAll(rows)
+                csvOut?.let { ResultStore.exportCsv(rows, Path.of(it)); echo("Wrote ${rows.size} results to $it") }
+                jsonOut?.let { ResultStore.exportJson(rows, Path.of(it)); echo("Wrote ${rows.size} results to $it") }
+            }
         }
     }
 }
