@@ -34,6 +34,9 @@ fun main(args: Array<String>) {
     StressCommand()
         .subcommands(ImportCardsCommand(), PreflightCommand(), RunCommand(), ReportCommand())
         .main(args)
+    // The SDK/CLI run on Ktor's OkHttp engine, whose non-daemon dispatcher threads keep the JVM
+    // alive ~60s after work finishes. Exit promptly instead of hanging.
+    kotlin.system.exitProcess(0)
 }
 
 /** Root command — holds the options shared by every subcommand. */
@@ -57,6 +60,10 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
         .multiple()
     protected val connectTimeout: Long? by option("--connect-timeout", metavar = "SECONDS").long()
     protected val requestTimeout: Long? by option("--request-timeout", metavar = "SECONDS").long()
+    protected val attemptTimeout: Long by option(
+        "--attempt-timeout", metavar = "SECONDS",
+        help = "Wall-clock cap per client attempt; a stalled attempt is recorded as a failure.",
+    ).long().default(120)
     protected val insecure: Boolean by option("-k", "--insecure", help = "Disable TLS verification.").flag()
     protected val caCerts: List<String> by option("--ca-cert", metavar = "FILE", help = "Extra PEM CA (repeatable).")
         .multiple()
@@ -79,6 +86,7 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
         stateExpiry = de.gematik.zeta.stress.storage.StateExpiry(db),
         factory = StressSdkClientFactory(db, httpSettings()),
         reporter = Reporter(),
+        attemptTimeoutMs = attemptTimeout * 1000,
     )
 
     protected fun applyVerbosity() {

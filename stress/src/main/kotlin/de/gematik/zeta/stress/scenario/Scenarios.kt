@@ -13,8 +13,11 @@ import de.gematik.zeta.stress.sdk.StressSdkClientFactory
 import de.gematik.zeta.stress.storage.StateExpiry
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 private val log = KotlinLogging.logger {}
 
@@ -25,6 +28,9 @@ class ScenarioDeps(
     val factory: StressSdkClientFactory,
     val reporter: Reporter,
     val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    // Wall-clock cap per attempt. A single client that stalls (e.g. the AS hangs while racing
+    // to create a shared SMC-B user) must not freeze the whole batch — it's recorded as a failure.
+    val attemptTimeoutMs: Long = 120_000,
 )
 
 /**
@@ -58,13 +64,19 @@ fun preflight(
             val sdk = deps.factory.build(w.clientRef, card, resource, scopes)
             val start = deps.clockMs()
             try {
-                sdk.discover().getOrThrow()
-                sdk.register().getOrThrow()
-                val status = sdk.status().getOrThrow()
-                deps.clientStore.insert(
-                    ClientRow(w.clientRef, w.cardId, resource, scopes, deps.clockMs(), status.name),
-                )
-                deps.reporter.record(Attempt("register", deps.clockMs() - start, true, null))
+                withTimeout(deps.attemptTimeoutMs) {
+                    sdk.discover().getOrThrow()
+                    sdk.register().getOrThrow()
+                    val status = sdk.status().getOrThrow()
+                    deps.clientStore.insert(
+                        ClientRow(w.clientRef, w.cardId, resource, scopes, deps.clockMs(), status.name),
+                    )
+                    deps.reporter.record(Attempt("register", deps.clockMs() - start, true, null))
+                }
+            } catch (e: TimeoutCancellationException) {
+                deps.reporter.record(Attempt("register", deps.clockMs() - start, false, "timed out after ${deps.attemptTimeoutMs}ms"))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 deps.reporter.record(Attempt("register", deps.clockMs() - start, false, e.errorLabel()))
             } finally {
@@ -129,13 +141,29 @@ private suspend fun authenticateOnce(deps: ScenarioDeps, row: ClientRow, scopes:
     val sdk = deps.factory.build(row.clientRef, card, row.resource, scopes)
     val start = deps.clockMs()
     try {
-        val status = sdk.status().getOrThrow()
-        if (status == SdkStatus.NOT_REGISTERED) {
-            sdk.discover().getOrThrow()
-            sdk.register().getOrThrow()
+        withTimeout(deps.attemptTimeoutMs) {
+            val status = sdk.status().getOrThrow()
+            if (status == SdkStatus.NOT_REGISTERED) {
+                sdk.discover().getOrThrow()
+                sdk.register().getOrThrow()
+            }
+            sdk.authenticate().getOrThrow()
+            // authenticate() can return success without a usable token — e.g. the AS rejects the
+            // token request server-side but the SDK swallows it. Require the SDK to actually hold
+            // an access token before counting the attempt as a pass, so those surface as failures.
+            val finalStatus = sdk.status().getOrThrow()
+            if (finalStatus == SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN) {
+                deps.reporter.record(Attempt("authenticate", deps.clockMs() - start, true, null))
+            } else {
+                deps.reporter.record(
+                    Attempt("authenticate", deps.clockMs() - start, false, "no access token after authenticate (status=$finalStatus)"),
+                )
+            }
         }
-        sdk.authenticate().getOrThrow()
-        deps.reporter.record(Attempt("authenticate", deps.clockMs() - start, true, null))
+    } catch (e: TimeoutCancellationException) {
+        deps.reporter.record(Attempt("authenticate", deps.clockMs() - start, false, "timed out after ${deps.attemptTimeoutMs}ms"))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Throwable) {
         deps.reporter.record(Attempt("authenticate", deps.clockMs() - start, false, e.errorLabel()))
     } finally {
