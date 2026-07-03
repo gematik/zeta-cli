@@ -3,22 +3,31 @@ package de.gematik.zeta.stress.db
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
+import java.util.concurrent.ArrayBlockingQueue
 
 /**
  * Single-file SQLite store shared by the whole harness: the imported SMC-B card corpus, the
  * registered virtual-client roster, and every client's SDK key/value state.
  *
- * One JDBC connection, guarded by a [ReentrantLock]. SQLite has a single writer anyway, and at
- * the target load (≈83 ops/s, sub-millisecond each) serial access is not the bottleneck — the
- * network round-trips to ZETA Guard are. WAL mode + a generous `busy_timeout` keep the rare
- * lock contention from surfacing as `SQLITE_BUSY`. Callers bridge from `suspend` code via
- * `Dispatchers.IO`; the lock keeps that safe regardless of dispatcher threading.
+ * Backed by a small **pool of WAL connections** rather than one connection behind a global lock.
+ * A single lock serialised every storage op — reads included — across all virtual clients, which
+ * showed up under load as flat throughput with climbing latency (a serialised-bottleneck
+ * signature) long before ZETA Guard itself bent. With a pool, reads run concurrently and writes
+ * serialise only at SQLite's own write lock; `busy_timeout` makes the rare writer collision wait
+ * instead of surfacing as `SQLITE_BUSY`. Each virtual client already has an isolated key
+ * namespace, so no cross-connection coordination is needed above the SQLite level.
  */
-class Db(path: Path) : AutoCloseable {
-    private val conn: Connection =
-        DriverManager.getConnection("jdbc:sqlite:${path.toAbsolutePath()}").apply {
+class Db(path: Path, poolSize: Int = 32) : AutoCloseable {
+    private val url = "jdbc:sqlite:${path.toAbsolutePath()}"
+    private val pool = ArrayBlockingQueue<Connection>(poolSize)
+
+    init {
+        repeat(poolSize) { pool.add(open()) }
+        migrate()
+    }
+
+    private fun open(): Connection =
+        DriverManager.getConnection(url).apply {
             createStatement().use { st ->
                 st.execute("PRAGMA journal_mode=WAL")
                 st.execute("PRAGMA synchronous=NORMAL")
@@ -28,26 +37,27 @@ class Db(path: Path) : AutoCloseable {
             autoCommit = true
         }
 
-    private val lock = ReentrantLock()
-
-    init {
-        migrate()
+    fun <T> withConnection(block: (Connection) -> T): T {
+        val c = pool.take()
+        try {
+            return block(c)
+        } finally {
+            pool.put(c)
+        }
     }
 
-    fun <T> withConnection(block: (Connection) -> T): T = lock.withLock { block(conn) }
-
     /** Run [block] in a single transaction, committing on success and rolling back on failure. */
-    fun <T> transaction(block: (Connection) -> T): T = lock.withLock {
-        conn.autoCommit = false
+    fun <T> transaction(block: (Connection) -> T): T = withConnection { c ->
+        c.autoCommit = false
         try {
-            val result = block(conn)
-            conn.commit()
+            val result = block(c)
+            c.commit()
             result
         } catch (e: Throwable) {
-            conn.rollback()
+            c.rollback()
             throw e
         } finally {
-            conn.autoCommit = true
+            c.autoCommit = true
         }
     }
 
@@ -100,5 +110,9 @@ class Db(path: Path) : AutoCloseable {
         }
     }
 
-    override fun close() = lock.withLock { conn.close() }
+    override fun close() {
+        val drained = mutableListOf<Connection>()
+        pool.drainTo(drained)
+        drained.forEach { runCatching { it.close() } }
+    }
 }

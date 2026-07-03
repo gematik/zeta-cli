@@ -84,7 +84,7 @@ abstract class StressBaseCommand(name: String) : CliktCommand(name = name) {
     protected val aslProd: Boolean by option("--asl-prod", help = "Use the TI production ASL root store.").flag()
     protected val verbosity: Int by option("-v", "--verbose", help = "Raise log level (repeatable).").counted()
 
-    protected fun openDb(): Db = Db(Path.of(dbPath))
+    protected fun openDb(poolSize: Int = 8): Db = Db(Path.of(dbPath), poolSize.coerceIn(4, 128))
 
     protected fun httpSettings() = HttpSettings(
         connectTimeoutMs = connectTimeout?.let { it * 1000 },
@@ -143,7 +143,7 @@ class PreflightCommand : StressBaseCommand(name = "preflight") {
         applyVerbosity()
         if (resource.isBlank()) throw UsageError("--resource is required")
         if (scopes.isEmpty()) throw UsageError("at least one --scope is required")
-        openDb().use { db ->
+        openDb(concurrency).use { db ->
             val d = deps(db)
             val start = d.clockMs()
             preflight(d, identities, clientsMin, clientsMax, resource, scopes, concurrency, seed)
@@ -193,7 +193,7 @@ class RunCommand : StressBaseCommand(name = "run") {
             )
         }
 
-        openDb().use { db ->
+        openDb(concurrency).use { db ->
             val d = deps(db)
             val start = d.clockMs()
             when {
