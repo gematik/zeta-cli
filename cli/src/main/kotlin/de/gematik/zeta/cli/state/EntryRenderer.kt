@@ -120,7 +120,7 @@ internal fun renderEntryJson(entry: Entry, reveal: Boolean): JsonElement = build
 private fun TokenInfo.headerString(name: String): String? =
     (header[name] as? JsonPrimitive)?.contentOrNull()
 
-private fun TokenInfo.claimString(name: String): String? =
+internal fun TokenInfo.claimString(name: String): String? =
     (claims[name] as? JsonPrimitive)?.contentOrNull()
 
 private fun TokenInfo.claimString(name: String, nested: String): String? {

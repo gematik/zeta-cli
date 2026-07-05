@@ -43,6 +43,8 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.sqlite.jdbc)
     implementation(libs.commons.compress)
+    // MockEngine for testing the service-discovery catalog client without a real HTTP call.
+    testImplementation(libs.ktor.client.mock)
 }
 
 application {
