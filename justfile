@@ -51,8 +51,8 @@ install sdk_version="":
     echo "Installed: $(brew --prefix)/bin/zeta"
     "$(brew --prefix)/bin/zeta" version
 
-# build + upload the current release to <owner>/homebrew-tap and bump Formula/zeta.rb
-# usage: just publish-brew <owner>     (e.g. `just publish-brew spilikin`)
+# point <owner>/homebrew-tap at the canonical gematik/zeta-cli release and bump Formula/zeta.rb
+# usage: just publish-brew <owner>     (e.g. `just publish-brew spilikin`); run `just release` first
 publish-brew owner:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -69,29 +69,22 @@ publish-brew owner:
     TAG="v${VERSION}"
     ASSET_NAME="zeta-${VERSION}.tar.gz"
     TAP_REPO="${OWNER}/homebrew-tap"
+    ORIGIN_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
     REPO_ROOT="$PWD"
 
-    ./gradlew :distTar
-    TARBALL="${REPO_ROOT}/build/distributions/${ASSET_NAME}"
-    [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
-
-    SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
-    SHA_FILE="${TARBALL}.sha256"
-    echo "$SHA  ${ASSET_NAME}" > "$SHA_FILE"
-
-    if gh release view "$TAG" --repo "$TAP_REPO" >/dev/null 2>&1; then
-        echo "Release $TAG already exists on $TAP_REPO — replacing assets."
-        gh release upload "$TAG" --repo "$TAP_REPO" --clobber "$TARBALL" "$SHA_FILE"
-    else
-        gh release create "$TAG" --repo "$TAP_REPO" \
-            --title "zeta ${VERSION}" --notes "zeta ${VERSION}" --target main \
-            "$TARBALL" "$SHA_FILE"
-    fi
-
-    DOWNLOAD_URL="https://github.com/${TAP_REPO}/releases/download/${TAG}/${ASSET_NAME}"
+    # Homebrew installs straight from the canonical release asset — the tap only carries the formula.
+    gh release view "$TAG" --repo "$ORIGIN_REPO" >/dev/null 2>&1 || {
+        echo "Release $TAG not found on $ORIGIN_REPO — run 'just release' first." >&2
+        exit 1
+    }
+    DOWNLOAD_URL="https://github.com/${ORIGIN_REPO}/releases/download/${TAG}/${ASSET_NAME}"
 
     WORKDIR=$(mktemp -d)
     trap 'rm -rf "$WORKDIR"' EXIT
+
+    # Hash the exact asset brew will fetch, so the formula's sha256 can't drift from the artifact.
+    gh release download "$TAG" --repo "$ORIGIN_REPO" --pattern "$ASSET_NAME" --dir "$WORKDIR"
+    SHA=$(shasum -a 256 "$WORKDIR/$ASSET_NAME" | awk '{print $1}')
 
     gh repo clone "$TAP_REPO" "$WORKDIR/tap" -- --depth 1
     cd "$WORKDIR/tap"
@@ -109,21 +102,13 @@ publish-brew owner:
         git push
     fi
 
-    cd "$REPO_ROOT"
-    if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-        echo "Local tag ${TAG} already exists."
-    else
-        git tag "$TAG"
-        echo "Created local tag ${TAG}."
-    fi
-
     echo
-    echo "Published zeta ${VERSION} to ${TAP_REPO}"
+    echo "Pointed ${TAP_REPO} at ${ORIGIN_REPO} release ${TAG}"
     echo "Install: brew tap ${OWNER}/tap && brew install zeta"
 
 # build the dist tarball and publish it as a GitHub release on origin (gematik/zeta-cli)
-# usage: just release            (tag/title derived from gradle.properties version)
-release:
+# usage: just release [sdk_version]   (tag/title from gradle.properties; sdk_version overrides the pinned zeta-sdk)
+release sdk_version="":
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -137,7 +122,9 @@ release:
     ASSET_NAME="zeta-${VERSION}.tar.gz"
     REPO_ROOT="$PWD"
 
-    ./gradlew :distTar
+    SDK_ARG=""
+    [ -n "{{sdk_version}}" ] && SDK_ARG="-PzetaSdkVersion={{sdk_version}}"
+    ./gradlew :distTar $SDK_ARG
     TARBALL="${REPO_ROOT}/build/distributions/${ASSET_NAME}"
     [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
 
@@ -151,7 +138,7 @@ release:
         gh release upload "$TAG" --clobber "$TARBALL" "$SHA_FILE"
     else
         gh release create "$TAG" \
-            --title "zeta ${VERSION}" --notes "zeta ${VERSION}" --target main \
+            --title "zeta ${VERSION}" --notes "zeta ${VERSION}" --target main --latest \
             "$TARBALL" "$SHA_FILE"
     fi
 
