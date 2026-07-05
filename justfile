@@ -3,16 +3,23 @@ default:
     @just --list
 
 # build the CLI and brew-install it locally from Formula/zeta.rb
-install:
+# optional sdk_version overrides the pinned zeta-sdk (e.g. `just install latest` for a local mavenLocal build)
+install sdk_version="":
     #!/usr/bin/env bash
     set -euo pipefail
+
+    # Suppress Homebrew's interactive prompts (reinstall confirmation, auto-update).
+    export NONINTERACTIVE=1
+    export HOMEBREW_NO_AUTO_UPDATE=1
 
     command -v brew >/dev/null 2>&1 || {
         echo "Homebrew is required: https://brew.sh" >&2
         exit 1
     }
 
-    ./gradlew distTar
+    SDK_ARG=""
+    [ -n "{{sdk_version}}" ] && SDK_ARG="-PzetaSdkVersion={{sdk_version}}"
+    ./gradlew :distTar $SDK_ARG
 
     VERSION=$(grep '^version=' gradle.properties | cut -d= -f2)
     TARBALL="$(pwd)/build/distributions/zeta-${VERSION}.tar.gz"
@@ -36,9 +43,9 @@ install:
         -e "s|^( *)sha256 .*|\\1sha256 \"${SHA}\"|" \
         Formula/zeta.rb > "$TAP_DIR/Formula/zeta.rb"
 
-    # Replace any prior install (from this recipe or a real tap).
+    # Replace any prior install (from this recipe or a real tap), non-interactively.
     brew uninstall --ignore-dependencies zeta >/dev/null 2>&1 || true
-    brew install --build-from-source "${TAP}/zeta"
+    brew install --build-from-source --force "${TAP}/zeta"
 
     echo
     echo "Installed: $(brew --prefix)/bin/zeta"
@@ -64,7 +71,7 @@ publish-brew owner:
     TAP_REPO="${OWNER}/homebrew-tap"
     REPO_ROOT="$PWD"
 
-    ./gradlew distTar
+    ./gradlew :distTar
     TARBALL="${REPO_ROOT}/build/distributions/${ASSET_NAME}"
     [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
 
@@ -130,7 +137,7 @@ release:
     ASSET_NAME="zeta-${VERSION}.tar.gz"
     REPO_ROOT="$PWD"
 
-    ./gradlew distTar
+    ./gradlew :distTar
     TARBALL="${REPO_ROOT}/build/distributions/${ASSET_NAME}"
     [ -f "$TARBALL" ] || { echo "Tarball not found: $TARBALL" >&2; exit 1; }
 

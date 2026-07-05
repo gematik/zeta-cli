@@ -134,6 +134,31 @@ internal class P12AuthOptions : AuthMethodOptions(
 }
 
 /**
+ * Card-DB authentication: sign locally with an SMC-B identity read straight from a `zeta stress`
+ * card corpus (the same DB + [de.gematik.zeta.stress.card.DbCardSigner] the load-test fleet uses).
+ * Lets the CLI drive any corpus identity without exporting a keystore. The card is selected by
+ * ICCSN (the `card_id` primary key) or Telematik-ID; exactly one is required.
+ */
+internal class CardDbAuthOptions : AuthMethodOptions(
+    name = "Zeta authentication — card-DB method",
+    help = "Sign with an SMC-B identity from a zeta-stress corpus DB. For headless / corpus use.",
+) {
+    val db: Path by option(
+        "--card-db",
+        metavar = "FILE",
+        envvar = "ZETA_CARD_DB",
+        help = "SQLite identity corpus (from `zeta stress import-identities`). (env: ZETA_CARD_DB)",
+    ).path(canBeFile = true, canBeDir = false).requiredOpt()
+
+    val telematikId: String by option(
+        "--card-telematik-id",
+        metavar = "TID",
+        envvar = "ZETA_CARD_TELEMATIK_ID",
+        help = "Select the identity by Telematik-ID (its primary key). (env: ZETA_CARD_TELEMATIK_ID)",
+    ).requiredOpt()
+}
+
+/**
  * Base for any subcommand that needs an authenticated [ZetaSdkClient]. Owns the shared
  * `--profile` option, the `--auth-method` switch + its dependent option group, and the SDK
  * construction. Subclasses override `runCommand()` and call [openSession] to receive a
@@ -160,11 +185,13 @@ abstract class ZetaSessionCommand(
         "--auth-method",
         metavar = "METHOD",
         envvar = "ZETA_AUTH_METHOD",
-        help = "Authentication method: 'connector' (SMC-B via Konnektor — preferred) or " +
-            "'p12' (PKCS#12 keystore — for headless environments). (env: ZETA_AUTH_METHOD)",
+        help = "Authentication method: 'connector' (SMC-B via Konnektor — preferred), " +
+            "'p12' (PKCS#12 keystore), or 'carddb' (SMC-B from a zeta-stress card corpus). " +
+            "(env: ZETA_AUTH_METHOD)",
     ).groupChoice(
         "connector" to ConnectorAuthOptions(),
         "p12" to P12AuthOptions(),
+        "carddb" to CardDbAuthOptions(),
     ).required()
 
     /**
@@ -254,5 +281,6 @@ abstract class ZetaSessionCommand(
                 alias = opts.alias,
                 password = opts.password,
             ) to null
+            is CardDbAuthOptions -> buildCardDbTokenProvider(opts.db, opts.telematikId) to null
         }
 }

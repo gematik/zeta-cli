@@ -126,19 +126,6 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
             "./zeta.yaml and the XDG-global default. (env: ZETA_CONFIG)",
     ).path(mustExist = false, canBeFile = true, canBeDir = false)
 
-    // Consumed by the launcher before the JVM enters Clikt — declared here only so it
-    // shows in --help and so Clikt accepts it at any depth.
-    @Suppress("unused")
-    private val sdk: String? by option(
-        "--sdk",
-        metavar = "VERSION",
-        envvar = "ZETA_SDK",
-        help = "Bundled zeta-sdk version to load (e.g. 1.0, 1.2). Resolution: flag, then " +
-            "env, then \$XDG_CONFIG_HOME/telematik/zeta/sdk (written by `zeta sdk use`), " +
-            "then the newest bundled version. Use `zeta sdk list` to see what's available. " +
-            "(env: ZETA_SDK)",
-    )
-
     // Same pre-Clikt detection pattern as --trace / -f. Declared here for help-text and
     // sticky parse acceptance only; the real activation happens in Main.kt.
     @Suppress("unused")
@@ -187,10 +174,8 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         // Gating on `invokedSubcommand == null` keeps it to the leaf — without that, nested
         // commands (e.g. `connector get cards`) would each emit it.
         if (currentContext.invokedSubcommand == null) {
-            val sdkVersion = System.getProperty("zeta.sdk.active")?.takeIf { it.isNotBlank() }
-                ?: BuildConfig.ZETA_SDK_VERSION
-            invocationLog.info { "zeta-cli ${BuildConfig.VERSION}, zeta-sdk $sdkVersion" }
-            invocationLog.debug { "zeta " + invocationArgs.joinToString(" ", transform = ::shellQuote) }
+            invocationLog.info { "zeta-cli ${BuildConfig.VERSION}, zeta-sdk ${BuildConfig.ZETA_SDK_VERSION}" }
+            invocationLog.debug { "zeta " + redactSecretArgs(invocationArgs).joinToString(" ", transform = ::shellQuote) }
         }
         runCommand()
     }
@@ -199,6 +184,55 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
 }
 
 private val invocationLog = KotlinLogging.logger("de.gematik.zeta.cli")
+
+// Options whose value is a bare secret — the value is dropped entirely from the argv echo.
+private val SECRET_OPTS = setOf("--proxy-password", "--auth-p12-password", "--popp-token", "-p")
+
+// Options whose value is a URL that may embed a secret in its `user:pass@host` user-info —
+// only the password portion is masked, the rest of the URL stays visible.
+private val URL_WITH_SECRET_OPTS = setOf("--proxy")
+
+/**
+ * Redact credential-bearing option values before the argv is echoed at DEBUG (`-vv`). Env-var
+ * sourced values never appear in argv, so only values given on the command line are handled here.
+ * Supports both `--opt value` and `--opt=value` spellings.
+ */
+internal fun redactSecretArgs(args: Array<String>): List<String> {
+    val out = ArrayList<String>(args.size)
+    var i = 0
+    while (i < args.size) {
+        val arg = args[i]
+        val flag = arg.substringBefore('=')
+        val inline = '=' in arg
+        when {
+            flag in SECRET_OPTS && inline -> out += "$flag=$SECRET_MASK"
+            flag in SECRET_OPTS -> {
+                out += arg
+                if (i + 1 < args.size) { out += SECRET_MASK; i++ }
+            }
+            flag in URL_WITH_SECRET_OPTS && inline -> out += "$flag=" + maskUrlPassword(arg.substringAfter('='))
+            flag in URL_WITH_SECRET_OPTS -> {
+                out += arg
+                if (i + 1 < args.size) { out += maskUrlPassword(args[i + 1]); i++ }
+            }
+            else -> out += arg
+        }
+        i++
+    }
+    return out
+}
+
+private const val SECRET_MASK = "***"
+
+/** Mask only the password in a `scheme://user:pass@host` URL, leaving scheme/user/host intact. */
+private fun maskUrlPassword(url: String): String {
+    val at = url.lastIndexOf('@')
+    if (at < 0) return url
+    val start = url.indexOf("://").let { if (it >= 0) it + 3 else 0 }
+    val colon = url.indexOf(':', start)
+    if (colon < 0 || colon >= at) return url
+    return url.substring(0, colon + 1) + SECRET_MASK + url.substring(at)
+}
 
 /**
  * POSIX-safe quoting: bareword if every char is shell-neutral, otherwise single-quoted with

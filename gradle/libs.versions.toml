@@ -3,13 +3,9 @@ kotlin-gradle-plugin = "2.3.0"
 clikt = "5.1.0"
 kotlin-logging = "7.0.7"
 logback = "1.5.16"
-# Default SDK for :cli. Override with -PzetaSdkVersion=<tag> (e.g. `latest` from mavenLocal).
+# zeta-sdk version the :cli builds against. Override with -PzetaSdkVersion=<tag> (e.g. `latest`
+# from mavenLocal).
 zeta-sdk = "1.2.0"
-# Legacy SDK pinned by :cli-sdk1_0 — each module's bytecode targets one SDK binary shape
-# (Kotlin default-arg synthetic ctors shift between SDK releases), so a separate build is needed.
-# assembleDist bundles both this and zeta-sdk; the cliModuleBySdkVersion map in root
-# build.gradle.kts derives the bundled set and launcher default from these two pins.
-zeta-sdk-legacy = "1.0.1"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.8.0"
 ktor = "3.4.3"
@@ -17,6 +13,8 @@ xmlutil = "0.91.1"
 bouncycastle = "1.83"
 jna = "5.14.0"
 snakeyaml = "2.5"
+sqlite-jdbc = "3.47.1.0"
+commons-compress = "1.27.1"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin-gradle-plugin" }
@@ -34,3 +32,5 @@ xmlutil-serialization = { module = "io.github.pdvrieze.xmlutil:serialization-jvm
 bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }

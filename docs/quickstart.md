@@ -90,21 +90,17 @@ zeta login https://popp.dev.poppservice.de \
 Insert the eGK into a terminal the Konnektor can see, then:
 
 ```sh
-zeta --sdk 1.0.1 popp connector \
+zeta popp connector \
   --auth-method connector \
   --auth-connector-card-iccsn "$SMCB_ICCSN" \
   -v
 ```
 
-The PoPP flow is pinned to `zeta-sdk` **1.0.1** via the global `--sdk` flag (placed before
-the subcommand). See `zeta sdk list` for the bundled versions; `--sdk` only applies to the
-installed distribution — from a dev checkout use `./gradlew :cli-sdk1_0:run` instead.
-
 With exactly one eGK visible it is auto-selected; otherwise pass its handle as the final
 argument. To reuse the token in a follow-up protected call, capture it:
 
 ```sh
-export ZETA_POPP_TOKEN="$(zeta --sdk 1.0.1 popp connector --auth-method connector --auth-connector-card-iccsn "$SMCB_ICCSN")"
+export ZETA_POPP_TOKEN="$(zeta popp connector --auth-method connector --auth-connector-card-iccsn "$SMCB_ICCSN")"
 ```
 
 ## 5. Call the VSDM service (TK)
