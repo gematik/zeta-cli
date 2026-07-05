@@ -8,14 +8,9 @@ import com.github.ajalt.clikt.parameters.types.path
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
-import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
-import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
-import java.util.UUID
-
-private val log = KotlinLogging.logger {}
+import kotlinx.coroutines.runBlocking
 
 private const val DEFAULT_SERVICE_URL =
     "wss://popp.dev.poppservice.de/popp/practitioner/api/v1/token-generation-ehc"
@@ -69,32 +64,6 @@ class PoppKartosCommand : ZetaSessionCommand(name = "kartos") {
     }
 
     private fun runPoppFlow(sdk: ZetaSdkClient): String = runBlocking {
-        Tracer.spanSuspend("popp.flow", attrs = mapOf("scenario" to "kartos")) {
-            // Spawn the simulator once for the whole popp flow — card state needs to persist
-            // across APDU rounds; reopening on every StandardScenarioMessage would reset it.
-            KartosProcess.spawn(image, executable).use { kartos ->
-                val wsParent = Tracer.current()
-                Tracer.spanSuspend("popp.connect", attrs = mapOf("service_url" to serviceUrl)) {
-                    var token: String? = null
-                    sdk.ws(
-                        targetUrl = serviceUrl,
-                        builder = { applyCliHttpDefaults(cliConfig) },
-                        customHeaders = null,
-                    ) {
-                        log.info { "popp WS connected: $serviceUrl" }
-                        val client = PoppClient(this, wsSpanParent = wsParent)
-                        val start = StartMessage(
-                            cardConnectionType = "contact-standard",
-                            clientSessionId = UUID.randomUUID().toString(),
-                        )
-                        token = client.runStandardScenario(start) { steps ->
-                            log.debug { "kartos round: ${steps.size} APDU(s)" }
-                            steps.map { kartos.exchange(it.commandApdu) }
-                        }
-                    }
-                    token ?: error("popp WebSocket closed without yielding a TokenMessage")
-                }
-            }
-        }
+        runKartosPoppFlow(sdk, image, executable, serviceUrl) { applyCliHttpDefaults(cliConfig) }
     }
 }

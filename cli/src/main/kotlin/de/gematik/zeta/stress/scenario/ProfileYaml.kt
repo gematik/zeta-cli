@@ -32,6 +32,7 @@ class RunProfile(
     val scenario: Scenario,
     val request: VsdmRequest?,
     val ramp: RampSpec?,
+    val popp: PoppSpec?,
     private val warmup: Phase?,
     private val cycle: List<Phase>,
 ) {
@@ -145,6 +146,7 @@ object ProfileYaml {
             scenario = scenario(root["scenario"]?.toString()),
             request = (root["request"] as? Map<*, *>)?.let { request(it) },
             ramp = (root["ramp"] as? Map<*, *>)?.let { ramp(it) },
+            popp = (root["popp"] as? Map<*, *>)?.let { popp(it) },
             warmup = warmup,
             cycle = cycle,
         )
@@ -203,6 +205,15 @@ object ProfileYaml {
         maxFailPct = (m["max-fail-pct"] as? Number)?.toInt() ?: 10,
         maxP99Ms = (m["max-p99"] as? Number)?.toLong() ?: 5000,
         durationMs = m["duration"]?.let { duration(it.toString()) },
+    )
+
+    private fun popp(m: Map<*, *>): PoppSpec = PoppSpec(
+        egkDir = (m["egk-dir"] ?: m["egkDir"])?.toString(),
+        perIdentity = (m["per-identity"] as? Number)?.toInt()?.coerceAtLeast(1) ?: 1,
+        serviceUrl = m["service-url"]?.toString() ?: DEFAULT_POPP_SERVICE_URL,
+        kartosBin = m["kartos-bin"]?.toString() ?: "kartos",
+        scope = m["scope"]?.toString() ?: "popp",
+        concurrency = (m["concurrency"] as? Number)?.toInt()?.coerceAtLeast(1) ?: 8,
     )
 
     private fun statusSet(v: Any?): Set<Int> = when (v) {

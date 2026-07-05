@@ -39,6 +39,40 @@ class PoppStore(private val db: Db) {
         }
     }
 
+    /** How many tokens are bound to [telematikId] — the per-identity top-up count for `popp get`. */
+    fun countForIdentity(telematikId: String): Int = db.withConnection { c ->
+        c.prepareStatement("SELECT count(*) FROM popp_token WHERE telematik_id = ?").use { ps ->
+            ps.setString(1, telematikId)
+            ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
+        }
+    }
+
+    /** Every stored token as a full row — for `popp export`. */
+    fun allRows(): List<PoppRow> = db.withConnection { c ->
+        c.createStatement().use { st ->
+            st.executeQuery(
+                "SELECT telematik_id, actor_id, patient_id, insurer_id, proof_time, iat, kid, token FROM popp_token",
+            ).use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        add(
+                            PoppRow(
+                                telematikId = rs.getString(1),
+                                actorId = rs.getString(2),
+                                patientId = rs.getString(3),
+                                insurerId = rs.getString(4),
+                                proofTime = rs.getLong(5).takeUnless { rs.wasNull() },
+                                iat = rs.getLong(6).takeUnless { rs.wasNull() },
+                                kid = rs.getString(7),
+                                token = rs.getString(8),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     /** Tokens bound to [telematikId], newest patient-proof first, for round-robin at run time. */
     fun forIdentity(telematikId: String): List<String> = db.withConnection { c ->
         c.prepareStatement("SELECT token FROM popp_token WHERE telematik_id = ? ORDER BY proof_time DESC").use { ps ->

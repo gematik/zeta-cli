@@ -23,6 +23,17 @@ cohort:
   clients-per-institution: 1..3   # N, "a..b", or [a, b]; each institution registers a random count
   seed: 42                        # optional — reproducible fan-out
 
+# PoPP tokens for `login-and-vsdm-storm`. `zeta stress popp get stress-profile.yaml` obtains, per
+# roster identity, `per-identity` tokens by driving the kartos flow against eGK images in `egk-dir`,
+# and stores them; `zeta stress popp export <dir>` writes them out as <insurant>-<telematik-id>.jwt.
+popp:
+  egk-dir: ./egk-images     # directory of eGK XML card images (fed to the kartos simulator)
+  per-identity: 1           # tokens to obtain (top-up) per roster identity
+  concurrency: 8            # parallel workers (each spawns a kartos subprocess per token)
+  service-url: wss://popp.dev.poppservice.de/popp/practitioner/api/v1/token-generation-ehc
+  kartos-bin: kartos        # path to the kartos executable (default: on PATH)
+  scope: popp
+
 warmup:
   name: warmup         # ease in below the ceiling
   rate: 120

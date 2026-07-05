@@ -29,6 +29,24 @@ data class CohortSpec(
     val seed: Long? = null,
 )
 
+const val DEFAULT_POPP_SERVICE_URL =
+    "wss://popp.dev.poppservice.de/popp/practitioner/api/v1/token-generation-ehc"
+
+/**
+ * Batch PoPP-token settings for `zeta stress popp get`: for each roster identity, obtain
+ * [perIdentity] tokens by driving the kartos Standard flow against [egkDir] card images and the
+ * popp service at [serviceUrl]. [concurrency] bounds parallel identities (each spawns a kartos
+ * subprocess per flow).
+ */
+data class PoppSpec(
+    val egkDir: String?,
+    val perIdentity: Int = 1,
+    val serviceUrl: String = DEFAULT_POPP_SERVICE_URL,
+    val kartosBin: String = "kartos",
+    val scope: String = "popp",
+    val concurrency: Int = 8,
+)
+
 /** A breaking-point ramp: step the admission rate up until failure/latency thresholds trip. */
 data class RampSpec(
     val startPerMin: Int,
