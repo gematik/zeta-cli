@@ -3,4 +3,4 @@ plugins {
 }
 
 rootProject.name = "zeta-cli"
-include("connector", "cli", "stress")
+include("connector", "cli")

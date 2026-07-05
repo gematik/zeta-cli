@@ -1,10 +1,15 @@
 package de.gematik.zeta.cli.client
 
+import com.github.ajalt.clikt.core.UsageError
 import de.gematik.zeta.cli.connector.ConnectorTokenProvider
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
+import de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider
 import de.gematik.zeta.sdk.authentication.smcb.SmcbTokenProvider
+import de.gematik.zeta.stress.identity.DbCardSigner
+import de.gematik.zeta.stress.db.IdentityStore
+import de.gematik.zeta.stress.db.Db
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
 
@@ -45,6 +50,22 @@ internal fun buildConnectorTokenProvider(
         ),
         connectorApi = ConnectorTokenProvider(connector),
     )
+}
+
+/**
+ * Build an SMC-B [SubjectTokenProvider] backed by an identity read from a `zeta stress` corpus DB,
+ * selected by its Telematik-ID. Signs in software via [DbCardSigner] — the same seam the load-test
+ * fleet uses. The DB is only read to pull the one identity's cert + key into memory; the connection
+ * is closed immediately (the [DbCardSigner] holds the bytes).
+ */
+internal fun buildCardDbTokenProvider(
+    dbPath: Path,
+    telematikId: String,
+): SubjectTokenProvider {
+    val identity = Db(dbPath, poolSize = 2).use { db -> IdentityStore(db).get(telematikId) }
+        ?: throw UsageError("no identity in $dbPath for telematik-id $telematikId")
+    log.info { "Using carddb identity: telematikId=${identity.telematikId}" }
+    return CustomSmcbTokenProvider(DbCardSigner(identity))
 }
 
 /** Build an SMC-B [SubjectTokenProvider] backed by a PKCS#12 keystore on disk. */

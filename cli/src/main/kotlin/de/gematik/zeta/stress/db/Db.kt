@@ -6,7 +6,7 @@ import java.sql.DriverManager
 import java.util.concurrent.ArrayBlockingQueue
 
 /**
- * Single-file SQLite store shared by the whole harness: the imported SMC-B card corpus, the
+ * Single-file SQLite store shared by the whole harness: the imported SMC-B identity corpus, the
  * registered virtual-client roster, and every client's SDK key/value state.
  *
  * Backed by a small **pool of WAL connections** rather than one connection behind a global lock.
@@ -65,26 +65,26 @@ class Db(path: Path, poolSize: Int = 32) : AutoCloseable {
         c.createStatement().use { st ->
             st.execute(
                 """
-                CREATE TABLE IF NOT EXISTS card (
-                    card_id   TEXT PRIMARY KEY,
-                    cert      BLOB NOT NULL,
-                    priv_key  BLOB NOT NULL
+                CREATE TABLE IF NOT EXISTS identity (
+                    telematik_id TEXT PRIMARY KEY,
+                    cert         BLOB NOT NULL,
+                    priv_key     BLOB NOT NULL
                 )
                 """.trimIndent(),
             )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS client (
-                    client_ref TEXT PRIMARY KEY,
-                    card_id    TEXT NOT NULL,
-                    resource   TEXT NOT NULL,
-                    scopes     TEXT NOT NULL,
-                    created_at INTEGER NOT NULL,
-                    status     TEXT NOT NULL
+                    client_ref   TEXT PRIMARY KEY,
+                    telematik_id TEXT NOT NULL,
+                    resource     TEXT NOT NULL,
+                    scopes       TEXT NOT NULL,
+                    created_at   INTEGER NOT NULL,
+                    status       TEXT NOT NULL
                 )
                 """.trimIndent(),
             )
-            st.execute("CREATE INDEX IF NOT EXISTS client_by_card ON client(card_id)")
+            st.execute("CREATE INDEX IF NOT EXISTS client_by_identity ON client(telematik_id)")
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sdk_state (
@@ -107,6 +107,24 @@ class Db(path: Path, poolSize: Int = 32) : AutoCloseable {
                 )
                 """.trimIndent(),
             )
+            // Off-band, long-lived (~quarterly) PoPP tokens, imported once and bound to an identity
+            // via identity.telematik_id = the token's actorId. Never touched by StateExpiry.
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS popp_token (
+                    telematik_id TEXT,
+                    actor_id     TEXT NOT NULL,
+                    patient_id   TEXT NOT NULL,
+                    insurer_id   TEXT NOT NULL,
+                    proof_time   INTEGER,
+                    iat          INTEGER,
+                    kid          TEXT,
+                    token        TEXT NOT NULL,
+                    PRIMARY KEY (telematik_id, patient_id, insurer_id)
+                )
+                """.trimIndent(),
+            )
+            st.execute("CREATE INDEX IF NOT EXISTS popp_by_identity ON popp_token(telematik_id)")
         }
     }
 

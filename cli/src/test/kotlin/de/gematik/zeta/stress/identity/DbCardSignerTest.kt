@@ -1,6 +1,6 @@
-package de.gematik.zeta.stress.card
+package de.gematik.zeta.stress.identity
 
-import de.gematik.zeta.stress.db.Card
+import de.gematik.zeta.stress.db.Identity
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
@@ -22,8 +22,8 @@ class DbCardSignerTest {
         val digest = ByteArray(32) { it.toByte() }
         val challenge = Base64.getEncoder().withoutPadding().encodeToString(digest)
 
-        val card = Card("test", cert = byteArrayOf(1, 2, 3), privKey = kp.private.encoded)
-        val signer = DbCardSigner(card)
+        val identity = Identity("test", cert = byteArrayOf(1, 2, 3), privKey = kp.private.encoded)
+        val signer = DbCardSigner(identity)
 
         assertArrayEquals(byteArrayOf(1, 2, 3), signer.readCertificate())
 
@@ -35,6 +35,6 @@ class DbCardSignerTest {
             update(digest)
             verify(sig)
         }
-        assertTrue(ok, "signature must verify against the card public key")
+        assertTrue(ok, "signature must verify against the identity public key")
     }
 }

@@ -7,16 +7,14 @@ allprojects {
     version = rootProject.version
 }
 
-// The release ships two entry points from one archive: `bin/zeta` (the CLI) and
-// `bin/zeta-stress` (the load-test tool). Each module produces its own application image via
-// the `application` plugin; we merge the two `installDist` trees into a single layout, sharing
-// one `lib/` (the ~86 common jars are deduplicated by filename).
+// The release ships a single entry point, `bin/zeta`, from one archive. The CLI (which now hosts
+// the `zeta stress` load-test commands too) produces its application image via the `application`
+// plugin; we stage it under a `zeta-<v>/` top-level dir so the tarball extracts cleanly.
 //
 // ```
 // zeta-<v>/
-// ├── bin/zeta          # CLI launcher
-// ├── bin/zeta-stress   # stress-test launcher
-// └── lib/              # every jar both entry points need (shared, deduped)
+// ├── bin/zeta   # single launcher
+// └── lib/       # every jar the CLI needs
 // ```
 
 val distDirName = "zeta-${project.version}"
@@ -24,13 +22,9 @@ val distRoot = layout.buildDirectory.dir("dist/$distDirName")
 
 val assembleDist by tasks.registering(Sync::class) {
     group = "distribution"
-    description = "Merge the zeta + zeta-stress application images into one release tree."
-    dependsOn(":cli:installDist", ":stress:installDist")
-    // Same jar (identical filename + version, one source of truth in the catalog) appears in
-    // both images; keep the first copy.
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    description = "Stage the zeta application image into the release tree."
+    dependsOn(":cli:installDist")
     from(project(":cli").layout.buildDirectory.dir("install/zeta"))
-    from(project(":stress").layout.buildDirectory.dir("install/zeta-stress"))
     into(distRoot)
 }
 

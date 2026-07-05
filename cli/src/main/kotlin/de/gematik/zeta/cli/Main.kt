@@ -23,6 +23,7 @@ import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
+import de.gematik.zeta.stress.stressCommand
 import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
@@ -111,6 +112,7 @@ fun main(args: Array<String>) {
                         ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
                     ),
                     PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),
+                    stressCommand(),
                 )
                 .main(args)
             0

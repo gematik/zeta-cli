@@ -1,7 +1,7 @@
-package de.gematik.zeta.stress.card
+package de.gematik.zeta.stress.identity
 
 import de.gematik.zeta.sdk.authentication.smcb.CustomConnectorApi
-import de.gematik.zeta.stress.db.Card
+import de.gematik.zeta.stress.db.Identity
 import de.gematik.zeta.stress.crypto.BC_PROVIDER
 import java.security.KeyFactory
 import java.security.PrivateKey
@@ -10,7 +10,7 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Base64
 
 /**
- * Signs SMC-B subject tokens straight from the card blobs held in the DB — no PKCS#12 detour.
+ * Signs SMC-B subject tokens straight from the identity blobs held in the DB — no PKCS#12 detour.
  *
  * Plugged into [de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider], which is the
  * SDK's official "external signer" seam (the same one the Konnektor path uses). The SDK's
@@ -27,13 +27,13 @@ import java.util.Base64
  * signing. The parsed [PrivateKey] is cached; `createSubjectToken` runs at most once per client
  * per cold auth, but caching keeps repeated storms cheap.
  */
-class DbCardSigner(private val card: Card) : CustomConnectorApi {
+class DbCardSigner(private val identity: Identity) : CustomConnectorApi {
 
     private val privateKey: PrivateKey by lazy {
-        KeyFactory.getInstance("EC", BC_PROVIDER).generatePrivate(PKCS8EncodedKeySpec(card.privKey))
+        KeyFactory.getInstance("EC", BC_PROVIDER).generatePrivate(PKCS8EncodedKeySpec(identity.privKey))
     }
 
-    override suspend fun readCertificate(): ByteArray = card.cert
+    override suspend fun readCertificate(): ByteArray = identity.cert
 
     override suspend fun externalAuthenticate(base64Challenge: String): ByteArray {
         val digest = Base64.getDecoder().decode(base64Challenge)

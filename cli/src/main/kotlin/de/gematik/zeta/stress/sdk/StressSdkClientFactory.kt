@@ -10,8 +10,8 @@ import de.gematik.zeta.sdk.authentication.AuthConfig
 import de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
 import de.gematik.zeta.sdk.storage.StorageConfig
-import de.gematik.zeta.stress.card.DbCardSigner
-import de.gematik.zeta.stress.db.Card
+import de.gematik.zeta.stress.identity.DbCardSigner
+import de.gematik.zeta.stress.db.Identity
 import de.gematik.zeta.stress.db.Db
 import de.gematik.zeta.stress.storage.SqliteSdkStorage
 
@@ -28,14 +28,14 @@ data class HttpSettings(
 
 /**
  * Builds a [ZetaSdkClient] per virtual client: its own SQLite-backed [SqliteSdkStorage]
- * namespace, an in-software [SmbTokenProvider] over the card's PKCS#12, software attestation,
+ * namespace, an in-software [SmbTokenProvider] over the identity's PKCS#12, software attestation,
  * and the ZETA Guard role OID. Mirrors the CLI's `buildZetaSdkClient` minus the Connector path.
  */
 class StressSdkClientFactory(
     private val db: Db,
     private val http: HttpSettings,
 ) {
-    fun build(clientRef: String, card: Card, resource: String, scopes: List<String>): ZetaSdkClient =
+    fun build(clientRef: String, identity: Identity, resource: String, scopes: List<String>): ZetaSdkClient =
         ZetaSdk.build(
             resource,
             BuildConfig(
@@ -48,7 +48,7 @@ class StressSdkClientFactory(
                     scopes = scopes,
                     exp = 30,
                     aslProdEnvironment = http.aslProdEnvironment,
-                    subjectTokenProvider = CustomSmcbTokenProvider(DbCardSigner(card)),
+                    subjectTokenProvider = CustomSmcbTokenProvider(DbCardSigner(identity)),
                     attestation = AttestationConfig.software(),
                     requiredRoleOid = OID_ZETA_GUARD,
                 ),

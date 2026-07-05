@@ -30,11 +30,19 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.logging)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
     // Already on the runtime classpath via mordant-jvm-jna; declared here so we can call
     // isatty(2) directly to detect whether stderr is a TTY (see term/StderrColors.kt).
     implementation(libs.jna)
-    // YAML parser backing the config-file value source (./zeta.yaml and the XDG fallback).
+    // YAML parser backing the config-file value source (./zeta.yaml and the XDG fallback),
+    // and the `zeta stress run` rate-waveform profiles.
     implementation(libs.snakeyaml)
+    // `zeta stress`: build an in-memory PKCS#12 per SMC-B card from its DER cert + PKCS#8 EC key,
+    // hold the 100k-card corpus + per-client SDK state in one embedded SQLite file, and read the
+    // gzip+tar SMC-B bundles during `import-cards`.
+    implementation(libs.bouncycastle.bcpkix)
+    implementation(libs.sqlite.jdbc)
+    implementation(libs.commons.compress)
 }
 
 application {
