@@ -29,6 +29,9 @@ class RunProfile(
 
     fun schedule(): RateSchedule = Rates.profile(warmup, cycle)
 
+    /** Distinct phases in declaration order (warm-up first if present), for the report's phase table. */
+    fun allPhases(): List<Phase> = (if (warmup != null) listOf(warmup) else emptyList()) + cycle
+
     /** Phase-transition markers (name, startMs) across [totalMs], for report annotation. */
     fun timeline(totalMs: Long): List<Pair<String, Long>> {
         val out = mutableListOf<Pair<String, Long>>()

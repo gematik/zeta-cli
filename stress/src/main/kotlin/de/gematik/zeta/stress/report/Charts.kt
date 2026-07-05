@@ -5,8 +5,18 @@ import java.util.Locale
 /** A named line series sharing the chart's x-axis. Points are (x, y) in data coordinates. */
 data class Series(val name: String, val color: String, val points: List<Pair<Double, Double>>)
 
-/** A phase boundary drawn as a dashed vertical rule on time charts. */
-data class PhaseMarker(val atSec: Double, val name: String)
+/**
+ * A phase occurrence drawn as a shaded background band on time charts. Bands repeat across cycle
+ * loops, so the waveform structure stays legible no matter how many times the cycle runs; only the
+ * first occurrence of each phase name is labelled (the rest are keyed by the legend).
+ */
+data class Band(
+    val startSec: Double,
+    val endSec: Double,
+    val name: String,
+    val color: String,
+    val label: Boolean,
+)
 
 /** One histogram bucket. */
 data class Bin(val lo: Double, val hi: Double, val count: Int)
@@ -34,14 +44,14 @@ private fun esc(s: String): String =
 
 private fun d1(v: Double): String = String.format(Locale.ROOT, "%.1f", v)
 
-/** A multi-series line chart with gridlines, axis ticks, and optional phase markers. */
+/** A multi-series line chart with gridlines, axis ticks, and optional phase bands. */
 fun lineChart(
     series: List<Series>,
     xMax: Double,
     yMax: Double,
     xLabel: String,
     yLabel: String,
-    markers: List<PhaseMarker> = emptyList(),
+    bands: List<Band> = emptyList(),
 ): String {
     val pw = W - PAD_L - PAD_R
     val ph = H - PAD_T - PAD_B
@@ -52,6 +62,17 @@ fun lineChart(
 
     val sb = StringBuilder()
     sb.append("""<svg viewBox="0 0 $W $H" width="$W" height="$H" class="chart" preserveAspectRatio="xMidYMid meet" role="img">""")
+    // phase bands first, so gridlines and data draw on top
+    for (b in bands) {
+        val x0 = px(b.startSec.coerceIn(0.0, xm))
+        val x1 = px(b.endSec.coerceIn(0.0, xm))
+        if (x1 - x0 < 0.5) continue
+        sb.append("""<rect x="${d1(x0)}" y="$PAD_T" width="${d1(x1 - x0)}" height="$ph" fill="${b.color}" opacity="0.13"/>""")
+        sb.append("""<line x1="${d1(x0)}" y1="$PAD_T" x2="${d1(x0)}" y2="${PAD_T + ph}" stroke="${b.color}" stroke-width="1" opacity="0.45"/>""")
+        if (b.label) {
+            sb.append("""<text class="band-label" x="${d1(x0 + 3)}" y="${PAD_T + 11}" fill="${b.color}">${esc(b.name)}</text>""")
+        }
+    }
     for (i in 0..5) {
         val yVal = ym * i / 5
         val yy = py(yVal)
@@ -62,12 +83,6 @@ fun lineChart(
         val xVal = xm * i / 6
         val xx = px(xVal)
         sb.append("""<text class="axis" x="${d1(xx)}" y="${PAD_T + ph + 18}" text-anchor="middle">${num(xVal)}</text>""")
-    }
-    for (m in markers) {
-        if (m.atSec < 0 || m.atSec > xm) continue
-        val xx = px(m.atSec)
-        sb.append("""<line class="marker" x1="${d1(xx)}" y1="$PAD_T" x2="${d1(xx)}" y2="${PAD_T + ph}"/>""")
-        sb.append("""<text class="marker-label" x="${d1(xx + 3)}" y="${PAD_T + 11}">${esc(m.name)}</text>""")
     }
     for (s in series) {
         if (s.points.isEmpty()) continue

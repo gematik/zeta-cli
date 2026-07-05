@@ -49,17 +49,24 @@ object Rates {
  * One segment of a [Rates.profile] waveform: a wall-clock [durationMs] plus the target rate as a
  * function of time-within-the-phase. Build via [hold], [ramp], or [spikes].
  */
-class Phase private constructor(val name: String, val durationMs: Long, private val rate: (Long) -> Int) {
+class Phase private constructor(
+    val name: String,
+    val spec: String,
+    val durationMs: Long,
+    private val rate: (Long) -> Int,
+) {
     fun rateAt(inPhaseMs: Long): Int = rate(inPhaseMs).coerceAtLeast(1)
 
     companion object {
         /** Constant [perMin] for the whole phase. */
-        fun hold(name: String, perMin: Int, durationMs: Long) = Phase(name, durationMs) { perMin }
+        fun hold(name: String, perMin: Int, durationMs: Long) =
+            Phase(name, "$perMin/min", durationMs) { perMin }
 
         /** Linear glide from [fromPerMin] to [toPerMin] across the phase. */
-        fun ramp(name: String, fromPerMin: Int, toPerMin: Int, durationMs: Long) = Phase(name, durationMs) { t ->
-            (fromPerMin + (toPerMin - fromPerMin) * t / durationMs.coerceAtLeast(1)).toInt()
-        }
+        fun ramp(name: String, fromPerMin: Int, toPerMin: Int, durationMs: Long) =
+            Phase(name, "$fromPerMin→$toPerMin/min", durationMs) { t ->
+                (fromPerMin + (toPerMin - fromPerMin) * t / durationMs.coerceAtLeast(1)).toInt()
+            }
 
         /**
          * Baseline [basePerMin] that jumps to [peakPerMin] in random [bucketMs]-wide slots, each
@@ -67,7 +74,7 @@ class Phase private constructor(val name: String, val durationMs: Long, private 
          * the same profile replays identically rather than differing run to run.
          */
         fun spikes(name: String, basePerMin: Int, peakPerMin: Int, prob: Double, durationMs: Long, bucketMs: Long = 2000) =
-            Phase(name, durationMs) { t ->
+            Phase(name, "$basePerMin base · $peakPerMin peak/min · p=$prob", durationMs) { t ->
                 val slot = t / bucketMs.coerceAtLeast(1)
                 val h = (slot * 2654435761L) and 0x7fffffffL
                 if ((h % 1000) / 1000.0 < prob) peakPerMin else basePerMin

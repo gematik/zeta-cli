@@ -32,7 +32,8 @@ import de.gematik.zeta.stress.runner.Reporter
 import de.gematik.zeta.stress.runner.Snapshot
 import de.gematik.zeta.stress.scenario.Expire
 import de.gematik.zeta.stress.scenario.ScenarioDeps
-import de.gematik.zeta.stress.report.PhaseMarker
+import de.gematik.zeta.stress.report.PhaseDef
+import de.gematik.zeta.stress.report.PhaseSpan
 import de.gematik.zeta.stress.report.ReportWriter
 import de.gematik.zeta.stress.report.RunMeta
 import de.gematik.zeta.stress.scenario.ProfileYaml
@@ -217,8 +218,11 @@ class RunCommand : StressBaseCommand(name = "run") {
         val insecureEff = prof?.insecure ?: insecure
 
         val startedAt = java.time.LocalDateTime.now()
+        val host = runCatching { java.net.URI(resourceEff).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: resourceEff
         val expire = if (scenario == Scenario.REFRESH_CHURN) Expire.ACCESS_ONLY else Expire.ALL
-        var reportPhases: List<PhaseMarker> = emptyList()
+        var phaseDefs: List<PhaseDef> = emptyList()
+        var phaseSpans: List<PhaseSpan> = emptyList()
+        var plannedMs = 0L
         val progress = progress(scenario.name.lowercase().replace('_', '-'), resourceEff)
         val tick: (Long, Int, Snapshot) -> Unit = { elapsedMs, target, w ->
             prof?.phaseAt(elapsedMs)?.let { progress.phase(it.current, it.next, it.remainingSec) }
@@ -232,7 +236,13 @@ class RunCommand : StressBaseCommand(name = "run") {
                 prof != null -> {
                     val totalMs = prof.durationMs
                         ?: if (duration > 0) duration * 1000 else prof.warmupMs + prof.cycleMs
-                    reportPhases = prof.timeline(totalMs).map { PhaseMarker(it.second / 1000.0, it.first) }
+                    plannedMs = totalMs
+                    phaseDefs = prof.allPhases().map { PhaseDef(it.name, it.spec, it.durationMs) }
+                    val tl = prof.timeline(totalMs)
+                    phaseSpans = tl.mapIndexed { i, (name, startMs) ->
+                        val endMs = tl.getOrNull(i + 1)?.second ?: totalMs
+                        PhaseSpan(name, startMs / 1000.0, endMs / 1000.0)
+                    }
                     profile(d, resourceEff, cohortEff, concurrencyEff, prof.schedule(), totalMs, expire, scopesEff, tick)
                     progress.close()
                     echo(d.reporter.summary(d.clockMs() - start))
@@ -243,6 +253,7 @@ class RunCommand : StressBaseCommand(name = "run") {
                     // little tail); an explicit --duration overrides it.
                     val stepsToCeiling = ((rate - rampStart).coerceAtLeast(0) / rampStep.coerceAtLeast(1)) + 2
                     val rampDurationSec = if (duration > 0) duration else stepsToCeiling * rampStepInterval
+                    plannedMs = rampDurationSec * 1000
                     val result = ramp(
                         d, resourceEff, cohortEff, concurrencyEff,
                         startPerMin = rampStart, stepPerMin = rampStep, stepEverySec = rampStepInterval,
@@ -259,6 +270,7 @@ class RunCommand : StressBaseCommand(name = "run") {
                 }
 
                 duration > 0 -> {
+                    plannedMs = duration * 1000
                     soak(d, resourceEff, cohortEff, concurrencyEff, rate, duration * 1000, expire, scopesEff, tick)
                     progress.close()
                     echo(d.reporter.summary(d.clockMs() - start))
@@ -278,12 +290,16 @@ class RunCommand : StressBaseCommand(name = "run") {
             val reportDir = ReportWriter.write(
                 RunMeta(
                     resource = resourceEff,
+                    host = host,
                     scenario = scenario.name.lowercase().replace('_', '-'),
                     cohort = cohortEff,
                     concurrency = concurrencyEff,
+                    insecure = insecureEff,
                     startedAt = startedAt,
+                    plannedMs = plannedMs,
                     wallMs = d.clockMs() - start,
-                    phases = reportPhases,
+                    phaseDefs = phaseDefs,
+                    phaseSpans = phaseSpans,
                 ),
                 rows,
             )
