@@ -105,9 +105,24 @@ export ZETA_POPP_TOKEN="$(zeta popp connector --auth-method connector --auth-con
 
 ## 5. Call the VSDM service (TK)
 
-With `ZETA_POPP_TOKEN` exported from step 4, read the insured's VSD bundle. `zeta http` logs
-in against the VSDM resource on first use (same connector auth), adds the bearer token for the
-`vsdservice` scope, and forwards the captured token as the `PoPP` header automatically:
+With `ZETA_POPP_TOKEN` exported from step 4, read the insured's VSD bundle. `zeta vsdm` derives
+the environment and the insurer's VSDM endpoint from the token, logs in against that resource on
+first use (same connector auth), adds the bearer token for the `vsdservice` scope, forwards the
+token as the `PoPP` header, and renders the returned FHIR bundle as JSON:
+
+```sh
+zeta vsdm \
+  --auth-method connector \
+  --auth-connector-card-iccsn "$SMCB_ICCSN" \
+  -vv
+```
+
+This is where the *Techniker Krankenkasse* test eGK matters — it backs a working VSDM read.
+Without a PoPP token (argument or `ZETA_POPP_TOKEN`) the command has nothing to resolve; with one
+whose `actorId` differs from the authenticated SMC-B, it warns but still reads.
+
+If you need to target the endpoint by hand — a different path, custom headers, or a conditional
+request — drop to `zeta http` and forward the token yourself:
 
 ```sh
 zeta http 'https://vsdm-dev.tk.de/vsdservice/v1/vsdmbundle?profileVersion=1.0' \
@@ -120,9 +135,7 @@ zeta http 'https://vsdm-dev.tk.de/vsdservice/v1/vsdmbundle?profileVersion=1.0' \
 ```
 
 The all-zero `If-None-Match` ETag forces a full bundle (a matching ETag would return
-`304 Not Modified`). This is where the *Techniker Krankenkasse* test eGK matters — it backs a
-working VSDM read. Drop `--popp-token`/`ZETA_POPP_TOKEN` and the request is rejected for
-missing proof of patient presence.
+`304 Not Modified`).
 
 ## Notes
 

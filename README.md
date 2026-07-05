@@ -65,6 +65,7 @@ zeta login https://popp.dev.poppservice.de \
 
 - `zeta http URL` — HTTP request to a Zeta-protected resource (curl-like).
 - `zeta ws URL` — WebSocket to a Zeta-protected resource, round-tripping JSON from stdin.
+- `zeta vsdm [POPP-TOKEN]` — read a patient's VSDM bundle straight from a PoPP token: derives the environment and insurer from the token, resolves the VSDM endpoint via the TI service-discovery catalog, and fetches the bundle (scope `vsdservice`). Token falls back to `ZETA_POPP_TOKEN`.
 
 **Konnektor & PoPP**
 
@@ -78,6 +79,7 @@ zeta login https://popp.dev.poppservice.de \
 **Tooling**
 
 - `zeta version` — print the CLI and `zeta-sdk` version.
+- `zeta stress …` — load-test ZETA Guard with a fleet of SMC-B-backed clients. See [docs/stress.md](docs/stress.md).
 
 Examples for the less obvious ones:
 
@@ -141,7 +143,7 @@ Available on every command.
 
 State (registrations, tokens) is namespaced by profile. Persisted as `$XDG_CONFIG_HOME/telematik/zeta/<profile>.storage.json`.
 
-Available on: `discover`, `status`, `register`, `authenticate`, `login`, `logout`, `forget`, `http`, `ws`, `popp …`.
+Available on: `discover`, `status`, `register`, `authenticate`, `login`, `logout`, `forget`, `http`, `ws`, `vsdm`, `popp …`.
 
 | Option | Env var | Default |
 | --- | --- | --- |
@@ -149,13 +151,13 @@ Available on: `discover`, `status`, `register`, `authenticate`, `login`, `logout
 
 ### Authentication
 
-Required by: `register`, `authenticate`, `login`, `logout`, `http`, `ws`, `popp …`.
+Required by: `register`, `authenticate`, `login`, `logout`, `http`, `ws`, `vsdm`, `popp …`.
 
 Pick a method via `--auth-method`, then supply that method's options.
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--auth-method=connector\|p12` | `ZETA_AUTH_METHOD` | required |
+| `--auth-method=connector\|p12\|db` | `ZETA_AUTH_METHOD` | required |
 
 #### Connector method (`--auth-method connector`)
 
@@ -227,6 +229,15 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 | `--auth-p12-alias=<name>` | `ZETA_AUTH_P12_ALIAS` | `alias` |
 | `--auth-p12-password=<password>` | `ZETA_AUTH_P12_PASSWORD` | `00` |
 
+#### Identity-database method (`--auth-method db`)
+
+Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, built by `zeta stress import-identities`). For headless / bulk runs.
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--auth-db=<file>` | `ZETA_AUTH_DB` | `stress.db` |
+| `--auth-db-telematik-id=<tid>` | `ZETA_AUTH_DB_TELEMATIK_ID` | required — except `zeta vsdm`, which derives it from the token's `actorId` |
+
 ### Command-specific options
 
 #### `zeta authenticate` / `zeta login` / `zeta register` / `zeta logout` / `zeta status`
@@ -261,6 +272,14 @@ For headless / no-Konnektor environments. Signs locally with a `.p12` keystore.
 | `-H, --header=<name: value>` (repeatable) | `ZETA_WS_HEADER` | — |
 | `-s, --scope=<name>` (repeatable, **required**) | `ZETA_SCOPE` | — |
 | `-p, --popp-token=<token>` | `ZETA_POPP_TOKEN` | — |
+
+#### `zeta vsdm [POPP-TOKEN]`
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `POPP-TOKEN` (positional, optional) | `ZETA_POPP_TOKEN` | — |
+
+Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
 
 #### `zeta popp connector [EGK_HANDLE]`
 
@@ -408,7 +427,7 @@ The CLI is built against a single `zeta-sdk` version (`1.2.0`), pinned in
 
 ```sh
 $ zeta version
-zeta-cli 0.7.1
+zeta-cli 0.8.2
 zeta-sdk 1.2.0
 ```
 
