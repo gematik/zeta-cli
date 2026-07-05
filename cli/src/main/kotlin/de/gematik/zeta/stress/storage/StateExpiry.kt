@@ -39,6 +39,15 @@ class StateExpiry(private val db: Db) {
         expireAsl(clientRef)
     }
 
+    /** How many `sdk_state` rows this client holds whose key matches [likePattern] (SQL LIKE). */
+    fun countKeys(clientRef: String, likePattern: String): Int = db.withConnection { c ->
+        c.prepareStatement("SELECT count(*) FROM sdk_state WHERE client_ref = ? AND key LIKE ?").use { ps ->
+            ps.setString(1, clientRef)
+            ps.setString(2, likePattern)
+            ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
+        }
+    }
+
     private fun deleteWhere(clientRef: String, predicate: String) = db.withConnection { c ->
         c.prepareStatement("DELETE FROM sdk_state WHERE client_ref = ? AND ($predicate)").use { ps ->
             ps.setString(1, clientRef)

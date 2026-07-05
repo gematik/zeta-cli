@@ -6,6 +6,7 @@ import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
 import de.gematik.zeta.stress.db.IdentityStore
 import de.gematik.zeta.stress.db.ClientRow
 import de.gematik.zeta.stress.db.ClientStore
+import de.gematik.zeta.stress.identity.PoppJwt
 import de.gematik.zeta.stress.runner.Attempt
 import de.gematik.zeta.stress.runner.DriverResult
 import de.gematik.zeta.stress.runner.LoadShape
@@ -16,7 +17,9 @@ import de.gematik.zeta.stress.runner.Reporter
 import de.gematik.zeta.stress.runner.Snapshot
 import de.gematik.zeta.stress.runner.runContinuous
 import de.gematik.zeta.stress.runner.runLoad
+import de.gematik.zeta.stress.sdk.HttpSettings
 import de.gematik.zeta.stress.sdk.StressSdkClientFactory
+import de.gematik.zeta.stress.sdk.applyStressHttp
 import de.gematik.zeta.stress.storage.StateExpiry
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.header
@@ -40,6 +43,7 @@ class ScenarioDeps(
     val clientStore: ClientStore,
     val stateExpiry: StateExpiry,
     val factory: StressSdkClientFactory,
+    val http: HttpSettings,
     val reporter: Reporter,
     val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
     // Wall-clock cap per attempt. A single client that stalls (e.g. the AS hangs while racing
@@ -99,14 +103,14 @@ fun preflight(
                     deps.clientStore.insert(
                         ClientRow(w.clientRef, w.telematikId, resource, scopes, deps.clockMs(), status.name),
                     )
-                    deps.reporter.record(Attempt("register", deps.clockMs() - start, true, null))
+                    deps.reporter.record(Attempt("register", deps.clockMs() - start, true, null, w.clientRef, w.telematikId))
                 }
             } catch (e: TimeoutCancellationException) {
-                deps.reporter.record(Attempt("register", deps.clockMs() - start, false, "timed out after ${deps.attemptTimeoutMs}ms"))
+                deps.reporter.record(Attempt("register", deps.clockMs() - start, false, "timed out after ${deps.attemptTimeoutMs}ms", w.clientRef, w.telematikId))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                deps.reporter.record(Attempt("register", deps.clockMs() - start, false, e.errorLabel()))
+                deps.reporter.record(Attempt("register", deps.clockMs() - start, false, e.errorLabel(), w.clientRef, w.telematikId))
             } finally {
                 sdk.closeQuietly()
             }
@@ -133,6 +137,9 @@ private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: Zet
     val start = deps.clockMs()
     val req = deps.request
     val op = req?.opLabel ?: "authenticate"
+    // httpStatus is null for the login-only path (authenticate has no HTTP response); the VSDM path fills it.
+    fun rec(ok: Boolean, error: String?, httpStatus: Int? = null) =
+        deps.reporter.record(Attempt(op, deps.clockMs() - start, ok, error, row.clientRef, row.telematikId, httpStatus))
     try {
         withTimeout(deps.attemptTimeoutMs) {
             when (expire) {
@@ -149,22 +156,20 @@ private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: Zet
                 sdk.authenticate().getOrThrow()
                 val finalStatus = sdk.status().getOrThrow()
                 if (finalStatus == SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN) {
-                    deps.reporter.record(Attempt(op, deps.clockMs() - start, true, null))
+                    rec(true, null)
                 } else {
-                    deps.reporter.record(
-                        Attempt(op, deps.clockMs() - start, false, "no access token after authenticate (status=$finalStatus)"),
-                    )
+                    rec(false, "no access token after authenticate (status=$finalStatus)")
                 }
                 return@withTimeout
             }
 
             val popp = if (req.popp) deps.poppPicker?.next(row.telematikId) else null
             if (req.popp && popp == null) {
-                deps.reporter.record(Attempt(op, deps.clockMs() - start, false, "no PoPP token for identity ${row.telematikId}"))
+                rec(false, "no PoPP token for identity ${row.telematikId}")
                 return@withTimeout
             }
             if (http == null) {
-                deps.reporter.record(Attempt(op, deps.clockMs() - start, false, "no http client"))
+                rec(false, "no http client")
                 return@withTimeout
             }
             val resp = http.request(req.url) {
@@ -173,18 +178,26 @@ private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: Zet
                 popp?.let { header("PoPP", it) }
             }
             val code = resp.status.value
-            if (code in req.expectStatus) {
-                deps.reporter.record(Attempt(op, deps.clockMs() - start, true, null))
+            if (code !in req.expectStatus) {
+                rec(false, "status=$code", code)
+                return@withTimeout
+            }
+            // A 200 must return the insurant carried by the PoPP token we sent — which is
+            // impossible unless the access token (nonce → SMC-B sign → token exchange), the ASL
+            // handshake, and PoPP acceptance all succeeded. A green status alone doesn't prove that.
+            val kvnr = popp?.let { PoppJwt.parse(it)?.patientId }
+            if (code == 200 && kvnr != null && kvnr !in resp.bodyAsText()) {
+                rec(false, "kvnr $kvnr not in FHIR body", code)
             } else {
-                deps.reporter.record(Attempt(op, deps.clockMs() - start, false, "status=$code"))
+                rec(true, null, code)
             }
         }
     } catch (e: TimeoutCancellationException) {
-        deps.reporter.record(Attempt(op, deps.clockMs() - start, false, "timed out after ${deps.attemptTimeoutMs}ms"))
+        rec(false, "timed out after ${deps.attemptTimeoutMs}ms")
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {
-        deps.reporter.record(Attempt(op, deps.clockMs() - start, false, e.errorLabel()))
+        rec(false, e.errorLabel())
     }
 }
 
@@ -294,7 +307,7 @@ private class ClientPool(
 
     fun httpClient(row: ClientRow): ZetaHttpClient? {
         val sdk = get(row) ?: return null
-        return https.getOrPut(row.clientRef) { sdk.httpClient { } }
+        return https.getOrPut(row.clientRef) { sdk.httpClient { applyStressHttp(deps.http) } }
     }
 
     override fun close() {

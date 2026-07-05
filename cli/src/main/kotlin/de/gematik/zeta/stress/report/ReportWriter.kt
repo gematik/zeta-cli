@@ -38,7 +38,10 @@ object ReportWriter {
     fun write(meta: RunMeta, rows: List<ResultRow>): Path {
         val dir = Path.of("reports", meta.startedAt.format(FOLDER))
         Files.createDirectories(dir)
-        ResultStore.exportCsv(rows, dir.resolve("results.csv"))
+        val t0 = rows.minOfOrNull { it.atMs } ?: 0L
+        // The active phase is the last span whose window has opened by then (empty for ramp / gaps).
+        val phaseAt: (Double) -> String? = { sec -> meta.phaseSpans.lastOrNull { sec >= it.startSec }?.name }
+        ResultStore.exportCsv(rows, dir.resolve("results.csv"), t0, meta.scenario, phaseAt)
         Files.writeString(dir.resolve("report.html"), buildHtml(meta, rows))
         return dir
     }

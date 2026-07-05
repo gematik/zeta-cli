@@ -2,10 +2,27 @@ package de.gematik.zeta.stress.runner
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-data class Attempt(val op: String, val latencyMs: Long, val ok: Boolean, val error: String?)
+data class Attempt(
+    val op: String,
+    val latencyMs: Long,
+    val ok: Boolean,
+    val error: String?,
+    val clientRef: String = "",
+    val telematikId: String = "",
+    val httpStatus: Int? = null,
+)
 
 /** A recorded attempt with its completion time — for persistence / export. */
-data class ResultRow(val atMs: Long, val op: String, val latencyMs: Long, val ok: Boolean, val error: String?)
+data class ResultRow(
+    val atMs: Long,
+    val op: String,
+    val latencyMs: Long,
+    val ok: Boolean,
+    val error: String?,
+    val clientRef: String = "",
+    val telematikId: String = "",
+    val httpStatus: Int? = null,
+)
 
 /** Stats over some set of attempts — the whole run, or a trailing time window. */
 data class Snapshot(
@@ -30,21 +47,31 @@ data class Snapshot(
  */
 class Reporter(private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 }) {
 
-    private class Rec(val atMs: Long, val op: String, val latencyMs: Long, val ok: Boolean, val error: String?)
+    private class Rec(
+        val atMs: Long,
+        val op: String,
+        val latencyMs: Long,
+        val ok: Boolean,
+        val error: String?,
+        val clientRef: String,
+        val telematikId: String,
+        val httpStatus: Int?,
+    )
 
     private val recs = ConcurrentLinkedQueue<Rec>()
     private val okTotal = java.util.concurrent.atomic.AtomicInteger()
     private val failTotal = java.util.concurrent.atomic.AtomicInteger()
 
     fun record(attempt: Attempt) {
-        recs += Rec(clockMs(), attempt.op, attempt.latencyMs, attempt.ok, attempt.error)
+        recs += Rec(clockMs(), attempt.op, attempt.latencyMs, attempt.ok, attempt.error, attempt.clientRef, attempt.telematikId, attempt.httpStatus)
         if (attempt.ok) okTotal.incrementAndGet() else failTotal.incrementAndGet()
     }
 
     val completed: Int get() = recs.size
 
     /** All recorded attempts with timestamps, for persistence/export. */
-    fun rows(): List<ResultRow> = recs.map { ResultRow(it.atMs, it.op, it.latencyMs, it.ok, it.error) }
+    fun rows(): List<ResultRow> =
+        recs.map { ResultRow(it.atMs, it.op, it.latencyMs, it.ok, it.error, it.clientRef, it.telematikId, it.httpStatus) }
 
     /** Snapshot over attempts completed in the last [windowMs]. */
     fun window(windowMs: Long): Snapshot {
