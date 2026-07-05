@@ -1,6 +1,7 @@
 # zeta stress run profile — the whole run in one file.
 #
-#   zeta stress run stress-profile.yaml
+# End-to-end order:  zeta stress preflight <this>  →  zeta stress popp get <this>  →  zeta stress run <this>
+#   (a full parameter reference for every key is at the bottom of this file, commented out.)
 #
 # A small login-storm test against the plain ZETA Guard: a cohort whose tokens + ASL are wiped
 # all re-login (authenticate). Moderate load, short duration — meant for a quick smoke, not a
@@ -46,3 +47,47 @@ cycle:
   - name: calm         # let it recover
     rate: 120
     duration: 30s
+
+# ============================ full parameter reference ============================
+# Every key the run loader understands, with its default. Uncomment/adjust as needed.
+#
+# --- target & identity ---
+# db: stress.db                 # SQLite state file (or pass --db on the command line)
+# resource: https://…           # REQUIRED — resource origin (base URL)
+# scope: zero:audience          # or a list:  scopes: [a, b]. Access-token scope the SDK requests.
+#
+# --- scenario ---
+# scenario: login-storm         # login-storm | login-and-vsdm-storm | refresh-churn
+#
+# --- load / timing ---
+# concurrency: 100              # max in-flight attempts + DB pool (coerced to 4..128)
+# duration: 2m                  # total run (default = warmup + one cycle)
+# attempt-timeout: 120          # seconds; per-attempt wall-clock cap → failure on stall
+#
+# --- TLS / environment (applied to every leg, including the VSDM read) ---
+# insecure: false               # disable TLS verification (dev / self-signed only)
+# ca-cert: ./corp-ca.pem        # or a list; extra PEM CAs on top of the JVM roots
+# connect-timeout: 10           # seconds
+# request-timeout: 30           # seconds
+# asl-prod: false               # use the ASL production environment
+#
+# --- login-and-vsdm-storm ONLY: the authenticated read after login (REQUIRED for that scenario) ---
+# request:
+#   url: https://…/vsdservice/v1/vsdmbundle   # REQUIRED
+#   method: GET                               # default GET
+#   headers: { Accept: application/json }     # optional extra request headers
+#   popp: true                                # attach the identity's PoPP token as the `PoPP` header;
+#                                             #   strict — an identity with no token → recorded failure
+#   expect-status: [200, 304]                 # success set (single int or list)
+#   op: vsdm                                  # reporter label
+#   # PoPP tokens are read from the DB (minted by `zeta stress popp get`), NOT the popp: block above.
+#   # The `scope` above must be one the VSDM resource accepts, or the read returns an auth error.
+#
+# --- alternative load shape: breaking-point ramp (use INSTEAD of warmup/cycle) ---
+# ramp:
+#   start: 500          # req/min
+#   step: 500
+#   step-interval: 20   # seconds per step
+#   ceiling: 5000
+#   max-fail-pct: 10    # stop if the failure rate exceeds this
+#   max-p99: 5000       # ms; stop if p99 latency exceeds this

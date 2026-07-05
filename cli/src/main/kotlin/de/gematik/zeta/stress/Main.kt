@@ -52,6 +52,7 @@ fun stressCommand(): CliktCommand =
         StressPoppCommand().subcommands(PoppImportCommand(), PoppGetCommand(), PoppExportCommand()),
         PreflightCommand(),
         RunCommand(),
+        StressVerifyCommand(),
         StressDbCommand().subcommands(DbInfoCommand()),
     )
 
@@ -128,6 +129,7 @@ class PreflightCommand : CliktCommand(name = "preflight") {
                 clientStore = ClientStore(db),
                 stateExpiry = StateExpiry(db),
                 factory = StressSdkClientFactory(db, http),
+                http = http,
                 reporter = Reporter(),
                 attemptTimeoutMs = prof.attemptTimeoutMs,
             )
@@ -199,6 +201,7 @@ class RunCommand : CliktCommand(name = "run") {
                 clientStore = ClientStore(db),
                 stateExpiry = StateExpiry(db),
                 factory = StressSdkClientFactory(db, http),
+                http = http,
                 reporter = Reporter(),
                 attemptTimeoutMs = prof.attemptTimeoutMs,
                 request = request,

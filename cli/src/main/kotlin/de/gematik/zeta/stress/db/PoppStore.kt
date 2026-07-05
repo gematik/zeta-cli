@@ -81,13 +81,6 @@ class PoppStore(private val db: Db) {
         }
     }
 
-    /** Every token, as a global pool fallback for clients whose identity has none bound. */
-    fun any(): List<String> = db.withConnection { c ->
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT token FROM popp_token").use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
-        }
-    }
-
     fun count(): Long = db.withConnection { c ->
         c.createStatement().use { st ->
             st.executeQuery("SELECT count(*) FROM popp_token").use { rs -> rs.next(); rs.getLong(1) }
