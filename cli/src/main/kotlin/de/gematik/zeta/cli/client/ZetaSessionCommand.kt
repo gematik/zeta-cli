@@ -134,28 +134,29 @@ internal class P12AuthOptions : AuthMethodOptions(
 }
 
 /**
- * Card-DB authentication: sign locally with an SMC-B identity read straight from a `zeta stress`
- * card corpus (the same DB + [de.gematik.zeta.stress.card.DbCardSigner] the load-test fleet uses).
- * Lets the CLI drive any corpus identity without exporting a keystore. The card is selected by
- * ICCSN (the `card_id` primary key) or Telematik-ID; exactly one is required.
+ * DB authentication: sign locally with an SMC-B identity read from a `zeta stress` identity
+ * database (the same DB + [de.gematik.zeta.stress.card.DbCardSigner] the load-test fleet uses, named
+ * `--db` to match the `zeta stress` commands). Lets the CLI drive any identity in it without
+ * exporting a keystore. The card is selected by Telematik-ID.
  */
-internal class CardDbAuthOptions : AuthMethodOptions(
-    name = "Zeta authentication — card-DB method",
-    help = "Sign with an SMC-B identity from a zeta-stress corpus DB. For headless / corpus use.",
+internal class DbAuthOptions : AuthMethodOptions(
+    name = "Zeta authentication — stress DB method",
+    help = "Sign with an SMC-B identity from a zeta-stress identity database. For headless use.",
 ) {
     val db: Path by option(
-        "--card-db",
+        "--auth-db",
         metavar = "FILE",
-        envvar = "ZETA_CARD_DB",
-        help = "SQLite identity corpus (from `zeta stress import-identities`). (env: ZETA_CARD_DB)",
-    ).path(canBeFile = true, canBeDir = false).requiredOpt()
+        envvar = "ZETA_AUTH_DB",
+        help = "SQLite identity database (from `zeta stress import-identities`). Default: stress.db. (env: ZETA_AUTH_DB)",
+    ).path(canBeFile = true, canBeDir = false).default(Path.of("stress.db"))
 
-    val telematikId: String by option(
-        "--card-telematik-id",
+    val telematikId: String? by option(
+        "--auth-db-telematik-id",
         metavar = "TID",
-        envvar = "ZETA_CARD_TELEMATIK_ID",
-        help = "Select the identity by Telematik-ID (its primary key). (env: ZETA_CARD_TELEMATIK_ID)",
-    ).requiredOpt()
+        envvar = "ZETA_AUTH_DB_TELEMATIK_ID",
+        help = "Select the identity by Telematik-ID. Optional for `zeta vsdm` — taken from the token's " +
+            "actorId when omitted. (env: ZETA_AUTH_DB_TELEMATIK_ID)",
+    )
 }
 
 /**
@@ -186,12 +187,12 @@ abstract class ZetaSessionCommand(
         metavar = "METHOD",
         envvar = "ZETA_AUTH_METHOD",
         help = "Authentication method: 'connector' (SMC-B via Konnektor — preferred), " +
-            "'p12' (PKCS#12 keystore), or 'carddb' (SMC-B from a zeta-stress card corpus). " +
+            "'p12' (PKCS#12 keystore), or 'db' (SMC-B from a zeta-stress identity database). " +
             "(env: ZETA_AUTH_METHOD)",
     ).groupChoice(
         "connector" to ConnectorAuthOptions(),
         "p12" to P12AuthOptions(),
-        "carddb" to CardDbAuthOptions(),
+        "db" to DbAuthOptions(),
     ).required()
 
     /**
@@ -281,6 +282,20 @@ abstract class ZetaSessionCommand(
                 alias = opts.alias,
                 password = opts.password,
             ) to null
-            is CardDbAuthOptions -> buildCardDbTokenProvider(opts.db, opts.telematikId) to null
+            is DbAuthOptions -> {
+                val tid = opts.telematikId ?: dbTelematikIdOverride
+                    ?: throw UsageError(
+                        "--auth-method db needs a Telematik-ID: pass --auth-db-telematik-id " +
+                            "(env: ZETA_AUTH_DB_TELEMATIK_ID)",
+                    )
+                buildDbTokenProvider(opts.db, tid) to null
+            }
         }
+
+    /**
+     * A Telematik-ID for the `db` auth method supplied by the command rather than the user, used when
+     * `--auth-db-telematik-id` is omitted. `zeta vsdm` returns the PoPP token's `actorId` here so the
+     * acting SMC-B is picked automatically. Null (the default) means the user must pass the option.
+     */
+    protected open val dbTelematikIdOverride: String? get() = null
 }

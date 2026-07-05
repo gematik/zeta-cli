@@ -53,18 +53,18 @@ internal fun buildConnectorTokenProvider(
 }
 
 /**
- * Build an SMC-B [SubjectTokenProvider] backed by an identity read from a `zeta stress` corpus DB,
- * selected by its Telematik-ID. Signs in software via [DbCardSigner] — the same seam the load-test
- * fleet uses. The DB is only read to pull the one identity's cert + key into memory; the connection
- * is closed immediately (the [DbCardSigner] holds the bytes).
+ * Build an SMC-B [SubjectTokenProvider] backed by an identity read from a `zeta stress` identity
+ * database, selected by its Telematik-ID. Signs in software via [DbCardSigner] — the same seam the
+ * load-test fleet uses. The DB is only read to pull the one identity's cert + key into memory; the
+ * connection is closed immediately (the [DbCardSigner] holds the bytes).
  */
-internal fun buildCardDbTokenProvider(
+internal fun buildDbTokenProvider(
     dbPath: Path,
     telematikId: String,
 ): SubjectTokenProvider {
     val identity = Db(dbPath, poolSize = 2).use { db -> IdentityStore(db).get(telematikId) }
         ?: throw UsageError("no identity in $dbPath for telematik-id $telematikId")
-    log.info { "Using carddb identity: telematikId=${identity.telematikId}" }
+    log.info { "Using db identity: telematikId=${identity.telematikId}" }
     return CustomSmcbTokenProvider(DbCardSigner(identity))
 }
 

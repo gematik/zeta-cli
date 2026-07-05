@@ -17,6 +17,7 @@ data class PoppClaims(
     val proofTime: Long?,
     val iat: Long?,
     val kid: String?,
+    val iss: String?,
 )
 
 /**
@@ -45,6 +46,7 @@ object PoppJwt {
                 proofTime = num("patientProofTime"),
                 iat = num("iat"),
                 kid = header["kid"]?.jsonPrimitive?.content,
+                iss = str("iss"),
             )
         } catch (e: Exception) {
             log.warn { "failed to parse PoPP token: ${e.message}" }

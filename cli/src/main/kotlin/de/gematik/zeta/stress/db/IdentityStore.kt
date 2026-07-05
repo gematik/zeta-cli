@@ -28,7 +28,7 @@ class IdentityStore(private val db: Db) {
         }
     }
 
-    /** Look up an identity by its Telematik-ID (the fleet signer + the CLI's `carddb` auth backend). */
+    /** Look up an identity by its Telematik-ID (the fleet signer + the CLI's `db` auth backend). */
     fun get(telematikId: String): Identity? = db.withConnection { c ->
         c.prepareStatement("SELECT cert, priv_key FROM identity WHERE telematik_id = ?").use { ps ->
             ps.setString(1, telematikId)
