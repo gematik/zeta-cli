@@ -64,6 +64,14 @@ class ClientStore(private val db: Db) {
         }
     }
 
+    /** Distinct identities (Telematik-IDs) registered for a resource — the roster for `popp get`. */
+    fun identitiesForResource(resource: String): List<String> = db.withConnection { c ->
+        c.prepareStatement("SELECT DISTINCT telematik_id FROM client WHERE resource = ? ORDER BY telematik_id").use { ps ->
+            ps.setString(1, resource)
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
+    }
+
     /** A cohort of registered clients for a resource, capped at [limit]. */
     fun cohort(resource: String, limit: Int): List<ClientRow> = select(resource, limit)
 

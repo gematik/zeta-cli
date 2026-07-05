@@ -11,7 +11,6 @@ import com.github.ajalt.clikt.parameters.options.counted
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.stress.identity.IdentityImporter
-import de.gematik.zeta.stress.identity.PoppImporter
 import de.gematik.zeta.stress.db.IdentityStore
 import de.gematik.zeta.stress.db.ClientStore
 import de.gematik.zeta.stress.db.Db
@@ -50,7 +49,7 @@ class StressCommand : CliktCommand(name = "stress") {
 fun stressCommand(): CliktCommand =
     StressCommand().subcommands(
         ImportIdentitiesCommand(),
-        ImportPoppCommand(),
+        StressPoppCommand().subcommands(PoppImportCommand(), PoppGetCommand(), PoppExportCommand()),
         PreflightCommand(),
         RunCommand(),
         StressDbCommand().subcommands(DbInfoCommand()),
@@ -95,20 +94,6 @@ class ImportIdentitiesCommand : StressBaseCommand(name = "import-identities") {
             }
             if (tty) System.err.println()
             echo("Imported $n identities (total in DB: ${IdentityStore(db).count()}).")
-        }
-    }
-}
-
-class ImportPoppCommand : StressBaseCommand(name = "import-popp") {
-    private val dir: String by argument(name = "DIR", help = "Directory of PoPP token files (compact JWTs, one per line).")
-
-    override fun help(context: Context) = "Import off-band PoPP tokens and bind them to identities."
-
-    override fun run() {
-        applyVerbosity()
-        openDb().use { db ->
-            val r = PoppImporter(IdentityStore(db), PoppStore(db)).importDir(Path.of(dir))
-            echo("Imported ${r.imported} PoPP tokens: ${r.matched} bound to an identity, ${r.unmatched} unmatched. Total in DB: ${PoppStore(db).count()}.")
         }
     }
 }

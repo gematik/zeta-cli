@@ -58,12 +58,14 @@ class StressSdkClientFactory(
         )
 
     private fun buildHttpClientBuilder(): ZetaHttpClientBuilder =
-        ZetaHttpClientBuilder()
-            .timeouts(http.connectTimeoutMs, http.requestTimeoutMs)
-            .apply {
-                if (http.insecure) disableServerValidation(true)
-                http.caCertFiles.forEach { addCaPemFile(it) }
-            }
+        ZetaHttpClientBuilder().apply { applyStressHttp(http) }
+}
+
+/** Apply the shared [HttpSettings] to a [ZetaHttpClientBuilder] — used at SDK build + `sdk.ws(builder=…)`. */
+fun ZetaHttpClientBuilder.applyStressHttp(http: HttpSettings) {
+    timeouts(http.connectTimeoutMs, http.requestTimeoutMs)
+    if (http.insecure) disableServerValidation(true)
+    http.caCertFiles.forEach { addCaPemFile(it) }
 }
 
 /**
