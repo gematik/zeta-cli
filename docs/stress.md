@@ -1,162 +1,322 @@
 # Load testing ZETA Guard: `zeta stress`
 
-`zeta stress` drives a ZETA-Guard-protected resource with a fleet of SMC-B-backed OAuth clients to
-measure how it behaves under load — login storms, refresh churn, and authenticated VSDM reads. It
-keeps all its state (the SMC-B identities, their registered OAuth clients, and any PoPP tokens) in a
-single SQLite file so a large client population can be built once and reused across runs.
+`zeta stress` drives a ZETA-Guard-protected resource with a fleet of **SMC-B-backed OAuth clients** and
+measures how the guard behaves under load — login storms, refresh churn, and authenticated VSDM reads. It
+builds a realistic client population once, keeps it in a single SQLite file, and replays it at controllable
+rates while recording per-attempt latency and outcome into a text summary and an HTML report.
 
-Everything is described by one **run profile** (a YAML file). A fully-commented example lives at
-[`stress-profile.yaml`](../stress-profile.yaml) in the repo root — that file is the canonical
-parameter reference; this page is the workflow around it.
+It is part of the `zeta` binary — every command below is `zeta stress …`, not a separate tool. A run is
+described entirely by **one YAML profile**; the CLI adds only `-v` and `--db`.
 
-## State database
+```
+zeta stress import-identities ./smcb-bundles   # 1. build the SMC-B identity corpus (once)
+zeta stress preflight  profile.yaml            # 2. register the OAuth client population (DCR)
+zeta stress popp get   profile.yaml            # 3. (VSDM only) obtain PoPP tokens via kartos
+zeta stress verify     profile.yaml            # 4. prove one client runs the scenario end-to-end
+zeta stress run        profile.yaml            # 5. drive the load, write the report
+```
 
-All subcommands read and write one SQLite file, `--db FILE` (default `stress.db`). It holds three
-things, populated in order by the workflow below:
+---
+
+## 1. The state database
+
+Every subcommand reads and writes one SQLite file — `--db FILE` (default `stress.db`). It holds three
+tables, populated in order by the workflow:
 
 | Table | Populated by | Contents |
 | --- | --- | --- |
-| identities | `import-identities` | the SMC-B signing identities (keys + Telematik-IDs) |
-| clients | `preflight` | OAuth clients registered (DCR) per identity, per resource |
-| popp tokens | `popp get` / `popp import` | PoPP tokens bound to identities (for VSDM scenarios) |
+| **identities** | `import-identities` | SMC-B signing identities — private key + certificate + Telematik-ID, parsed from card bundles |
+| **clients** | `preflight` | the OAuth clients registered (DCR) per identity, per resource |
+| **popp tokens** | `popp get` / `popp import` | PoPP tokens bound to identities, for VSDM scenarios |
 
-`zeta stress db info` prints the totals, broken down per resource endpoint.
+The client population models the field: **N institutions** (each an SMC-B identity / Telematik-ID) each
+running **1..many OAuth clients** (workstations / PVS). Subject tokens are signed straight from the DB with
+the identity's SMC-B key (brainpoolP256r1) via the SDK's `CustomSmcbTokenProvider` seam — no smartcard or
+connector in the loop, so a large fleet can re-login as fast as the guard allows.
 
-## Commands
+`zeta stress db info` prints the totals, broken down per resource endpoint:
+
+```
+identities  : 2000
+clients     : 4137
+popp tokens : 2000
+
+per endpoint:
+  https://zeta-plain.t20r.cloud   clients 4137   institutions 2000
+```
+
+---
+
+## 2. Commands
 
 | Command | Purpose |
 | --- | --- |
-| `zeta stress import-identities DIR` | Import a directory of SMC-B card bundles (`*.tar.gz`) into the state DB. |
-| `zeta stress preflight PROFILE` | Register the run's client population (DCR) from the profile's `cohort:`. Idempotent — tops up to each identity's seeded target. |
-| `zeta stress popp get PROFILE` | Obtain PoPP tokens for the roster via the kartos eGK flow (needs a `popp:` block). `--force` re-fetches to target. |
-| `zeta stress popp import DIR` | Import off-band PoPP tokens (compact JWTs, one per line) and bind them to identities. |
+| `zeta stress import-identities DIR` | Import a directory of `*.tar.gz` SMC-B card bundles into the corpus. |
+| `zeta stress preflight PROFILE` | Register the run's client population (DCR) from the profile's `cohort:`. **Idempotent** — tops each identity up to its seeded target, skipping clients already registered. |
+| `zeta stress popp get PROFILE` | Obtain PoPP tokens for the registered roster via the kartos eGK flow (needs a `popp:` block). Idempotent; `--force` re-fetches to the target. |
+| `zeta stress popp import DIR` | Import off-band PoPP tokens (compact JWTs, one per line) and bind them to identities by their `actorId`. |
 | `zeta stress popp export OUT_DIR` | Export stored PoPP tokens as `<insurant>-<telematik-id>.jwt` files. |
-| `zeta stress verify PROFILE` | Drive **one** client through the profile's scenario end-to-end (login, and VSDM if configured) — a smoke test before a full run. |
-| `zeta stress run PROFILE` | Run the load test and write an HTML report. |
+| `zeta stress verify PROFILE` | Drive **one** client through the profile's scenario end-to-end and assert the observable facts (see [§6](#6-verify--proving-the-scenario)). A smoke test before a full run. |
+| `zeta stress run PROFILE` | Run the load test; print a summary and write `report.html`. |
 | `zeta stress db info` | Show identity / client / PoPP-token totals, per endpoint. |
 
-Shared options: `--db FILE` (default `stress.db`) and `-v`/`-vv`/`-vvv` for log level.
+Shared options on every subcommand: `--db FILE` (default `stress.db`) and `-v` / `-vv` / `-vvv` (INFO /
+DEBUG / TRACE). Commands that take a `PROFILE` accept `--db` as an override of the profile's own `db:`.
 
-## Scenarios
+---
 
-Set `scenario:` in the profile:
+## 3. The run profile
 
-- **`login-storm`** — expire every client's tokens + ASL state, then re-login (authenticate) the whole
-  cohort. Measures the pure auth path.
-- **`login-and-vsdm-storm`** — as above, then each client performs an authenticated read defined by the
-  profile's `request:` block (typically a VSDM `vsdmbundle` GET), optionally attaching the identity's
-  PoPP token as the `PoPP` header. Requires a `request:` block; with `popp: true` an identity without a
-  token is a recorded failure.
-- **`refresh-churn`** — expire only the access token, exercising the refresh-token path.
+One YAML file is the single source of truth for a run — fleet, connection, scenario, and load shape. A
+fully-commented example lives at [`stress-profile.yaml`](../stress-profile.yaml) in the repo root. Every
+key is optional except the ones a scenario needs at run time (`resource:`, and `request.url:` for
+`login-and-vsdm-storm`).
 
-## End-to-end workflow
+### Target, identity, load
 
-```sh
-# 1. Build the identity population once (SMC-B bundles → DB)
-zeta stress import-identities ./smcb-bundles
-
-# 2. Register the OAuth clients for the run's cohort (DCR)
-zeta stress preflight stress-profile.yaml
-
-# 3. Only for login-and-vsdm-storm: obtain PoPP tokens for the roster (kartos + eGK images)
-zeta stress popp get stress-profile.yaml
-
-# 4. Smoke one client through the whole scenario before hammering
-zeta stress verify stress-profile.yaml
-
-# 5. Run the load test
-zeta stress run stress-profile.yaml
-
-# Inspect what's in the DB at any point
-zeta stress db info
-```
-
-Steps 1–3 are one-time setup for a given cohort; iterate on 4–5 as you tune the profile.
-
-## Load shape
-
-The run's rate over time comes from **one** of two blocks in the profile (rates are requests/minute):
-
-- **Waveform** — a `warmup:` phase followed by a repeating `cycle:` of phases, until `duration:`. Use
-  this to hold or oscillate a target rate and watch the response.
-- **`ramp:`** — step the rate up until the response degrades, to find the breaking point (below).
-
-If a `ramp:` block is present it **takes over** — `warmup:` / `cycle:` are ignored. `concurrency:` caps
-in-flight attempts (and the DB pool); `attempt-timeout:` fails an attempt that stalls. TLS/environment
-keys (`insecure`, `ca-cert`, `connect-timeout`, `request-timeout`, `asl-prod`) apply to every leg,
-including the VSDM read. See [`stress-profile.yaml`](../stress-profile.yaml) for the complete key
-reference and defaults.
-
-## Ramp: finding the breaking point
-
-A ramp starts at `start` req/min and adds `step` req/min every `step-interval` seconds, up to `ceiling`.
-It **stops early** the moment a step's failure rate exceeds `max-fail-pct` **or** its p99 latency exceeds
-`max-p99`, and reports the **peak healthy rate** — the highest step that stayed within both limits. Use
-it to answer "how much can this deployment take before it degrades?".
-
-| `ramp:` key | Default | Meaning |
+| Key | Default | Meaning |
 | --- | --- | --- |
-| `start` | `500` | initial rate (req/min) |
-| `step` | `500` | rate added each step (req/min) |
-| `step-interval` | `20` | seconds held per step |
-| `ceiling` | `5000` | max rate — stop climbing here even if still healthy |
-| `max-fail-pct` | `10` | break if a step's failure rate exceeds this (%) |
-| `max-p99` | `5000` | break if a step's p99 latency exceeds this (ms) |
-| `duration` | — | optional hard cap on total ramp time (e.g. `5m`) |
+| `resource` | — (**required**) | Resource origin (base URL) the fleet authenticates against. |
+| `scope` / `scopes` | — | Access-token scope the SDK requests. A string, or a list `scopes: [a, b]`. Required for `preflight`. |
+| `db` | `stress.db` | SQLite state file (overridable with `--db`). |
+| `concurrency` | `100` | Max in-flight attempts and DB pool size. Coerced to `4..128`. |
+| `duration` | warm-up + one cycle | Total run time. Accepts `ms` / `s` / `m` / `h`; a bare number is **seconds**. |
+| `attempt-timeout` | `120` | Seconds; a per-attempt wall-clock cap. A stalled attempt is recorded as a failure. |
 
-A complete ramp profile — target, scope, cohort, TLS, and the ramp, all in one file:
+### Cohort — the client population
 
 ```yaml
-# stress-ramp.yaml
-resource: https://zeta-plain.t20r.cloud
-scope: zero:audience
-scenario: login-storm        # login-storm | login-and-vsdm-storm | refresh-churn
-concurrency: 50
-insecure: true               # dev / self-signed endpoint
-
 cohort:
-  institutions: 200
-  clients-per-institution: 1..3
-  seed: 42
+  institutions: 2000            # N SMC-B identities
+  clients-per-institution: 1..8 # each registers a random count in this range
+  seed: 42                      # optional — makes the fan-out reproducible
+```
 
+`clients-per-institution` accepts `N`, `"a..b"`, or `[a, b]`. `cohort:` may also be a bare number (that
+many institutions, one client each). Default: 100 institutions, one client each. Total clients ≈
+institutions × mean(clients-per-institution).
+
+### TLS / environment (applied to every leg, including the VSDM read)
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `insecure` | `false` | Disable TLS verification (dev / self-signed only). |
+| `ca-cert` | — | Extra PEM CA file(s) on top of the JVM roots — a string or a list. |
+| `connect-timeout` | — | Seconds. |
+| `request-timeout` | — | Seconds. |
+| `asl-prod` | `false` | Use the ASL **production** environment (default is the non-prod ASL env). |
+
+---
+
+## 4. Scenarios
+
+Set `scenario:` (default `login-storm`). Each scenario decides **which credential state is wiped before an
+attempt** and **what each attempt does**:
+
+| Scenario | Wiped per attempt | Each attempt | Measures |
+| --- | --- | --- | --- |
+| **`login-storm`** | all tokens + ASL state | a bare `authenticate()` (cold re-login), verified via `status()` | the pure auth path: nonce → SMC-B sign → token exchange |
+| **`login-and-vsdm-storm`** | all tokens + ASL state | one authenticated read from the `request:` block, driving the whole cold chain (token exchange + ASL handshake + read), PoPP token attached | the full end-to-end read path |
+| **`refresh-churn`** | access token only | `authenticate()` from a surviving refresh token | the refresh path (cheaper — no subject-token verify / ASL) |
+
+### `request:` — the read for `login-and-vsdm-storm` (required for that scenario)
+
+```yaml
+request:
+  url: https://vsdm-dev.tk.de/vsdservice/v1/vsdmbundle?profileVersion=1.0   # required
+  method: GET                                   # default GET
+  headers:                                      # optional extra request headers
+    Accept: application/fhir+json
+  popp: true                                    # attach the identity's cached PoPP token as the PoPP header
+  expect-status: [200, 304]                     # success set — a single int or a list
+  op: vsdm                                      # reporter label for the attempt
+```
+
+With `popp: true` the attempt is **strict** — a roster identity with no stored PoPP token is a recorded
+failure. PoPP tokens come from the DB (minted by `popp get` / `popp import`), not from the `popp:` block,
+which only configures how `popp get` mints them.
+
+### `popp:` — how `popp get` mints tokens
+
+```yaml
+popp:
+  egk-dir: ./egk-images     # directory of eGK XML card images fed to the kartos simulator
+  per-identity: 1           # tokens to hold per roster identity (top-up target)
+  concurrency: 8            # parallel identities (each spawns a kartos subprocess per token)
+  service-url: wss://popp.dev.poppservice.de/popp/practitioner/api/v1/token-generation-ehc
+  kartos-bin: kartos        # kartos executable (default: on PATH)
+  scope: popp               # scope requested for the PoPP service
+```
+
+---
+
+## 5. Load shapes (modes)
+
+The run's rate over time comes from **one of two** blocks. If a `ramp:` is present it **takes over** and
+`warmup:` / `cycle:` are ignored. Rates are **requests per minute**.
+
+### Waveform — hold or oscillate a rate
+
+A `warmup:` phase (optional, runs once) followed by a `cycle:` of phases that **repeats until `duration`**.
+Use it to hold a steady rate, or oscillate to watch recovery. Each phase is one of two kinds:
+
+**Hold** — a constant rate for the phase:
+
+```yaml
+warmup: { name: warmup, rate: 300, duration: 30s }
+cycle:
+  - { name: burst, rate: 5000, duration: 1m }
+  - { name: calm,  rate: 300,  duration: 1m }
+```
+
+**Spike** — a baseline that jumps to a peak in random time-slots (a phase with `peak:`):
+
+```yaml
+cycle:
+  - name: bursty
+    base: 300         # baseline req/min
+    peak: 4000        # spike req/min
+    probability: 0.2  # chance each slot spikes
+    duration: 2m
+    bucket: 2s        # slot width (default 2s)
+```
+
+The spike choice is a deterministic hash of the slot index, so the same profile **replays identically**
+run to run. Durations accept `ms` / `s` / `m` / `h` (bare = seconds).
+
+### Ramp — find the breaking point
+
+Start at `start` req/min and add `step` every `step-interval` seconds, up to `ceiling`. The ramp **stops
+early** the moment a trailing window's failure rate exceeds `max-fail-pct` **or** its p99 latency exceeds
+`max-p99`, and reports the **peak healthy rate** — the highest sustained rate that stayed within both
+limits.
+
+```yaml
 ramp:
-  start: 300                 # begin at 300 req/min
-  step: 300                  # +300 req/min …
-  step-interval: 30          # … every 30 s
-  ceiling: 4000              # never exceed 4000 req/min
-  max-fail-pct: 2            # break when a step fails > 2 %
-  max-p99: 1500              # … or p99 latency exceeds 1.5 s
+  start: 500          # initial rate (req/min)
+  step: 500           # added each step
+  step-interval: 20   # seconds held per step
+  ceiling: 5000       # never climb past this, even if still healthy
+  max-fail-pct: 10    # break if a window's failure rate exceeds this (%)
+  max-p99: 5000       # break if a window's p99 latency exceeds this (ms)
+  duration: 5m        # optional hard cap on total ramp time
 ```
 
-Run it like any other profile — register the client cohort once, then run:
+| `ramp:` key | Default |
+| --- | --- |
+| `start` | `500` |
+| `step` | `500` |
+| `step-interval` | `20` |
+| `ceiling` | `5000` |
+| `max-fail-pct` | `10` |
+| `max-p99` | `5000` |
+| `duration` | derived from the step schedule |
 
-```sh
-zeta stress preflight stress-ramp.yaml     # one-time (DCR); skips clients already registered
-zeta stress run stress-ramp.yaml           # drives the ramp; live panel on a TTY
+The run's last line is the verdict:
+
+```
+Breaking point reached — peak healthy rate ≈ 2440 req/min
+# …or, if it reached the ceiling without ever tripping a limit:
+Ramp finished without breaking — peak healthy rate ≈ 5000 req/min
 ```
 
-The tail of the run prints the verdict, and the full per-step latency/failure curve lands in the written
-`report.html`:
+See [`loadtest-findings.md`](loadtest-findings.md) for a worked ramp analysis.
+
+---
+
+## 6. `verify` — proving the scenario
+
+`zeta stress run` reports HTTP-level success, but a green status alone doesn't prove the *crypto chain*
+ran. `zeta stress verify` takes **one** registered client, wipes the same state the scenario would, runs
+the cold chain once, and asserts the facts a status code can't:
+
+- **login** (every scenario): SDK state transitions `REGISTERED_NO_VALID_TOKENS → HAS_ACCESS_AND_REFRESH_TOKEN`
+  (an access token can't exist unless nonce → SMC-B sign → token exchange all ran). `refresh-churn` starts
+  from `HAS_REFRESH_TOKEN`.
+- **VSDM** (`login-and-vsdm-storm`): the read establishes an ASL session (storage populated) and returns a
+  FHIR bundle **carrying the insurant (KVNR) from the PoPP token that was sent**.
 
 ```
-Breaking point reached — peak healthy rate ≈ 1800 req/min
-# …or, if it reached `ceiling` without ever tripping a limit:
-Ramp finished without breaking — peak healthy rate ≈ 4000 req/min
+verify [login-and-vsdm-storm] — client ws-01 (identity 5-2-…, insurant X1102…)
+resource https://vsdm-dev.tk.de → https://vsdm-dev.tk.de/vsdservice/v1/vsdmbundle
+
+  ✓ login: pre-state is REGISTERED_NO_VALID_TOKENS
+  ✓ login: storage cleared (no tokens, no ASL)
+  ✓ login: access + refresh minted (nonce → sign → token exchange)
+  ✓ vsdm: ASL session established (storage populated)
+  ✓ vsdm: HTTP 200 accepted
+  ✓ popp: FHIR body carries insurant X1102…
+
+PASS — 6/6 checks passed in 812 ms.
 ```
 
-## Output & reports
+It exits non-zero on any failed check. Run with `-vvv` to also see every HTTP leg on the wire.
 
-- On a TTY, `run` shows a live k9s-style panel; when piped it prints one plain progress line per second,
-  so logs and reports stay clean.
-- At the end it prints a text summary and writes a self-contained `report.html` (path echoed on the last
-  line), with the per-phase timeline, latency percentiles, and failure breakdown.
+---
 
-## Notes
+## 7. How success and failure are counted
 
-- **kartos** — `popp get` and the `login-and-vsdm-storm` PoPP flow shell out to the `kartos` smartcard
-  simulator (`popp.kartos-bin`, default `kartos` on `PATH`) against the eGK card images in
-  `popp.egk-dir`. Install kartos and point at a directory of eGK XML images.
-- **Dev TLS** — set `insecure: true` (or `-k`) for self-signed dev endpoints; prefer `ca-cert:` for a
-  corporate/self-signed CA in anything lasting.
+Because the SDK's `discover()` / `register()` / `authenticate()` return `Result<Unit>` but can report
+success even when the underlying flow failed, the harness does **not** trust those Results alone. After
+each step it **re-reads `status()`** — the one call that reflects real state — and treats a step as a
+failure unless the status actually advanced (registration present; an access **and** refresh token minted).
+For `login-and-vsdm-storm` the authenticated read's own HTTP status is checked against `expect-status`.
+This is why the reported failure count is trustworthy even though the SDK's step results are not (tracked
+in the SDK bug report *"`Result` swallows capability errors"*).
+
+A failure is recorded with a short label (SDK error, `status=…`, `status=<code>`, or `timed out`) that is
+aggregated into the summary and report histograms.
+
+---
+
+## 8. Output and reports
+
+**Live progress.** On a TTY, `run` shows a k9s-style panel — current rate vs target, active phase, ok/fail
+counts, throughput, p50/p95/p99, and a throughput sparkline. When piped it prints one plain progress line
+per second, so logs and redirected output stay clean.
+
+**Text summary** (stdout at the end):
+
+```
+── Stress summary ──────────────────────────
+attempts     : 720
+succeeded    : 720
+failed       : 0
+wall time    : 60.8 s
+throughput   : 11.8 req/s (711 req/min)
+latency (ok) : p50=285ms  p95=2206ms  p99=3038ms
+failures     :
+  3×  SdkStepFailure: authenticate reported success but status=HAS_REFRESH_TOKEN
+```
+
+Latency percentiles are over **successful** attempts; the failure histogram lists each distinct error by
+count.
+
+**HTML report + CSV.** Each run writes a timestamped folder `reports/<yyyyMMdd-HHmmss>/` containing:
+
+- **`report.html`** — a self-contained, theme-aware page (path echoed on the last line):
+  - **stat cards** — attempts, succeeded, failed, throughput, p50 / p95 / p99;
+  - **Run details** — host, resource, scenario, cohort size, concurrency, TLS mode, start time, planned
+    vs wall duration, and % ok;
+  - **Phases** (waveform runs) — each phase's rate spec and duration, plus the cycle length and how many
+    loops ran;
+  - **Throughput over time** — req/s bucketed across the run, with coloured phase bands;
+  - **Latency percentiles over time** — p50 / p95 / p99, same bands;
+  - **Latency distribution** — a histogram over successful attempts;
+  - **Failures** — count per distinct error (only if any failed).
+- **`results.csv`** — every attempt, raw: relative timestamp, op, latency, ok, error, client ref,
+  Telematik-ID, HTTP status, scenario, and active phase — for your own analysis.
+
+---
+
+## 9. Notes
+
+- **kartos** — `popp get` and the `login-and-vsdm-storm` PoPP flow shell out to the kartos smartcard
+  simulator (`popp.kartos-bin`, default `kartos` on `PATH`) against the eGK XML images in `popp.egk-dir`.
+- **Dev TLS** — set `insecure: true` for self-signed dev endpoints; prefer `ca-cert:` for a
+  corporate/self-signed CA in anything lasting. TLS settings apply to every leg, including the VSDM read.
 - **Reproducible cohorts** — set `cohort.seed:` so the per-institution client fan-out is deterministic
-  across `preflight` runs.
+  across `preflight` runs, and use spike phases (deterministic by design) for repeatable load shapes.
+- **Measure the guard, not the harness** — front proxies or test recorders in the request path can become
+  the bottleneck before the guard does; confirm what you're measuring server-side. See
+  [`loadtest-findings.md`](loadtest-findings.md).
