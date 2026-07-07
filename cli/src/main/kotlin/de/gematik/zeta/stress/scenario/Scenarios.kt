@@ -99,7 +99,12 @@ fun preflight(
                 withTimeout(deps.attemptTimeoutMs) {
                     sdk.discover().getOrThrow()
                     sdk.register().getOrThrow()
-                    val status = sdk.status().getOrThrow()
+                    val status = sdk.requireStatus(
+                        "register",
+                        SdkStatus.REGISTERED_NO_VALID_TOKENS,
+                        SdkStatus.HAS_REFRESH_TOKEN,
+                        SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN,
+                    )
                     deps.clientStore.insert(
                         ClientRow(w.clientRef, w.telematikId, resource, scopes, deps.clockMs(), status.name),
                     )
@@ -152,14 +157,16 @@ private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: Zet
                 if (status == SdkStatus.NOT_REGISTERED) {
                     sdk.discover().getOrThrow()
                     sdk.register().getOrThrow()
+                    sdk.requireStatus(
+                        "register",
+                        SdkStatus.REGISTERED_NO_VALID_TOKENS,
+                        SdkStatus.HAS_REFRESH_TOKEN,
+                        SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN,
+                    )
                 }
                 sdk.authenticate().getOrThrow()
-                val finalStatus = sdk.status().getOrThrow()
-                if (finalStatus == SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN) {
-                    rec(true, null)
-                } else {
-                    rec(false, "no access token after authenticate (status=$finalStatus)")
-                }
+                sdk.requireStatus("authenticate", SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN)
+                rec(true, null)
                 return@withTimeout
             }
 
@@ -322,3 +329,18 @@ private fun ZetaSdkClient.closeQuietly() {
 
 private fun Throwable.errorLabel(): String =
     "${this::class.simpleName}: ${message?.take(120) ?: ""}".trim()
+
+/**
+ * `discover()`, `register()` and `authenticate()` return `Result<Unit>` but swallow the flow's
+ * `CapabilityResult.Error` — a failed step still yields `Result.success`, so `getOrThrow()` on them
+ * can't detect a service-discovery / registration / token failure. `status()` is the only call that
+ * reflects real state, so a step is trusted only once `status()` has reached one of [expected];
+ * otherwise this raises, and the caller's `catch` records it as a failure.
+ */
+private class SdkStepFailure(message: String) : Exception(message)
+
+private suspend fun ZetaSdkClient.requireStatus(step: String, vararg expected: SdkStatus): SdkStatus {
+    val status = status().getOrThrow()
+    if (status !in expected) throw SdkStepFailure("$step reported success but status=$status")
+    return status
+}

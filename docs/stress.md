@@ -9,8 +9,6 @@ Everything is described by one **run profile** (a YAML file). A fully-commented 
 [`stress-profile.yaml`](../stress-profile.yaml) in the repo root — that file is the canonical
 parameter reference; this page is the workflow around it.
 
-> The load tool shares the CLI's binary — it's `zeta stress …`, not a separate command.
-
 ## State database
 
 All subcommands read and write one SQLite file, `--db FILE` (default `stress.db`). It holds three
@@ -81,13 +79,70 @@ The run's rate over time comes from **one** of two blocks in the profile (rates 
 
 - **Waveform** — a `warmup:` phase followed by a repeating `cycle:` of phases, until `duration:`. Use
   this to hold or oscillate a target rate and watch the response.
-- **`ramp:`** — step the rate up until a health ceiling (`maxFailPct` / `maxP99Ms`) is breached, to find
-  the breaking point. The run reports the peak healthy rate.
+- **`ramp:`** — step the rate up until the response degrades, to find the breaking point (below).
 
-`concurrency:` caps in-flight attempts (and the DB pool); `attempt-timeout:` fails an attempt that
-stalls. TLS/environment keys (`insecure`, `ca-cert`, `connect-timeout`, `request-timeout`, `asl-prod`)
-apply to every leg, including the VSDM read. See [`stress-profile.yaml`](../stress-profile.yaml) for the
-complete key reference and defaults.
+If a `ramp:` block is present it **takes over** — `warmup:` / `cycle:` are ignored. `concurrency:` caps
+in-flight attempts (and the DB pool); `attempt-timeout:` fails an attempt that stalls. TLS/environment
+keys (`insecure`, `ca-cert`, `connect-timeout`, `request-timeout`, `asl-prod`) apply to every leg,
+including the VSDM read. See [`stress-profile.yaml`](../stress-profile.yaml) for the complete key
+reference and defaults.
+
+## Ramp: finding the breaking point
+
+A ramp starts at `start` req/min and adds `step` req/min every `step-interval` seconds, up to `ceiling`.
+It **stops early** the moment a step's failure rate exceeds `max-fail-pct` **or** its p99 latency exceeds
+`max-p99`, and reports the **peak healthy rate** — the highest step that stayed within both limits. Use
+it to answer "how much can this deployment take before it degrades?".
+
+| `ramp:` key | Default | Meaning |
+| --- | --- | --- |
+| `start` | `500` | initial rate (req/min) |
+| `step` | `500` | rate added each step (req/min) |
+| `step-interval` | `20` | seconds held per step |
+| `ceiling` | `5000` | max rate — stop climbing here even if still healthy |
+| `max-fail-pct` | `10` | break if a step's failure rate exceeds this (%) |
+| `max-p99` | `5000` | break if a step's p99 latency exceeds this (ms) |
+| `duration` | — | optional hard cap on total ramp time (e.g. `5m`) |
+
+A complete ramp profile — target, scope, cohort, TLS, and the ramp, all in one file:
+
+```yaml
+# stress-ramp.yaml
+resource: https://zeta-plain.t20r.cloud
+scope: zero:audience
+scenario: login-storm        # login-storm | login-and-vsdm-storm | refresh-churn
+concurrency: 50
+insecure: true               # dev / self-signed endpoint
+
+cohort:
+  institutions: 200
+  clients-per-institution: 1..3
+  seed: 42
+
+ramp:
+  start: 300                 # begin at 300 req/min
+  step: 300                  # +300 req/min …
+  step-interval: 30          # … every 30 s
+  ceiling: 4000              # never exceed 4000 req/min
+  max-fail-pct: 2            # break when a step fails > 2 %
+  max-p99: 1500              # … or p99 latency exceeds 1.5 s
+```
+
+Run it like any other profile — register the client cohort once, then run:
+
+```sh
+zeta stress preflight stress-ramp.yaml     # one-time (DCR); skips clients already registered
+zeta stress run stress-ramp.yaml           # drives the ramp; live panel on a TTY
+```
+
+The tail of the run prints the verdict, and the full per-step latency/failure curve lands in the written
+`report.html`:
+
+```
+Breaking point reached — peak healthy rate ≈ 1800 req/min
+# …or, if it reached `ceiling` without ever tripping a limit:
+Ramp finished without breaking — peak healthy rate ≈ 4000 req/min
+```
 
 ## Output & reports
 
