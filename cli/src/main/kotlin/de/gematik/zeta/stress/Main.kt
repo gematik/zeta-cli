@@ -36,6 +36,7 @@ import de.gematik.zeta.stress.storage.StateExpiry
 import de.gematik.zeta.stress.sdk.HttpSettings
 import de.gematik.zeta.stress.sdk.StressSdkClientFactory
 import java.nio.file.Path
+import kotlin.random.Random
 import org.slf4j.LoggerFactory
 
 /** The `zeta stress` command group — a plain container for the load-test subcommands. */
@@ -168,7 +169,9 @@ class RunCommand : CliktCommand(name = "run") {
             Scenario.LOGIN_STORM -> Expire.ALL to null
             Scenario.LOGIN_AND_VSDM_STORM ->
                 Expire.ALL to (prof.request ?: throw UsageError("scenario login-and-vsdm-storm needs a 'request:' block"))
-            Scenario.REFRESH_CHURN -> Expire.ACCESS_ONLY to null
+            Scenario.REFRESH_STORM -> Expire.ACCESS_ONLY to null
+            Scenario.REGISTER_STORM -> Expire.EVERYTHING to null
+            Scenario.DISCOVER_STORM -> Expire.EVERYTHING to null
         }
 
         val startedAt = java.time.LocalDateTime.now()
@@ -192,9 +195,20 @@ class RunCommand : CliktCommand(name = "run") {
         }
 
         Db(Path.of(dbPath), prof.concurrency.coerceIn(4, 128)).use { db ->
-            val clients = ClientStore(db).forResource(resource)
-            if (clients.isEmpty()) {
+            val registered = ClientStore(db).forResource(resource)
+            if (registered.isEmpty()) {
                 throw UsageError("no registered clients for $resource — run 'zeta stress preflight' first")
+            }
+            // Each live client holds several HTTP engines that are never shared across the fleet, so
+            // driving the whole roster keeps every engine resident and exhausts host threads at scale.
+            // Two ways to stay bounded: reuse a warm working set (default), or (random-clients) shuffle
+            // the whole fleet and build/close a client per attempt — iterating the full population over
+            // a long run while only the in-flight clients stay live.
+            val clients = if (prof.randomClients) {
+                registered.shuffled(prof.cohort.seed?.let { Random(it) } ?: Random.Default)
+            } else {
+                val workingSet = prof.maxLiveClients ?: (prof.concurrency * 4)
+                if (workingSet < registered.size) registered.take(workingSet) else registered
             }
             val d = ScenarioDeps(
                 identityStore = IdentityStore(db),
@@ -205,6 +219,7 @@ class RunCommand : CliktCommand(name = "run") {
                 reporter = Reporter(),
                 attemptTimeoutMs = prof.attemptTimeoutMs,
                 request = request,
+                discoverOnly = prof.scenario == Scenario.DISCOVER_STORM,
                 poppPicker = if (request?.popp == true) PoppPicker(PoppStore(db)) else null,
             )
             val start = d.clockMs()
@@ -220,6 +235,7 @@ class RunCommand : CliktCommand(name = "run") {
                     maxPerMin = rampSpec.maxPerMin, durationMs = plannedMs,
                     maxFailFraction = rampSpec.maxFailPct / 100.0, maxP99Ms = rampSpec.maxP99Ms,
                     expire = expire, scopes = scopes, onTick = tick,
+                    perAttempt = prof.randomClients,
                 )
                 progress.close()
                 echo(d.reporter.summary(d.clockMs() - start))
@@ -237,9 +253,16 @@ class RunCommand : CliktCommand(name = "run") {
                     val endMs = tl.getOrNull(i + 1)?.second ?: totalMs
                     PhaseSpan(name, startMs / 1000.0, endMs / 1000.0)
                 }
-                profile(d, resource, clients, prof.concurrency, prof.schedule(), totalMs, expire, scopes, tick)
+                val result = profile(
+                    d, resource, clients, prof.concurrency, prof.schedule(), totalMs, expire, scopes, tick,
+                    maxFailFraction = prof.abortOnFailFraction,
+                    perAttempt = prof.randomClients,
+                )
                 progress.close()
                 echo(d.reporter.summary(d.clockMs() - start))
+                if (result.stoppedEarly) {
+                    echo("Aborted early — sustained failure rate exceeded ${(prof.abortOnFailFraction!! * 100).toInt()}% (guard likely collapsed; set 'abort-on-fail-pct: 100' to disable)")
+                }
             }
 
             val reportDir = ReportWriter.write(

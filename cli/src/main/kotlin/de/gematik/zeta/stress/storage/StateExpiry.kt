@@ -39,6 +39,14 @@ class StateExpiry(private val db: Db) {
         expireAsl(clientRef)
     }
 
+    /**
+     * Full cold reset: drop *every* `sdk_state` row for the client — DCR registration, client key,
+     * tokens, ASL, and the cached discovery metadata — so the next attempt re-runs the whole cold
+     * cycle (discovery → nonce → DCR → token exchange). Used by `register-storm` to keep client
+     * registration under load; note each attempt then creates a fresh server-side client.
+     */
+    fun expireEverything(clientRef: String) = deleteWhere(clientRef, "1 = 1")
+
     /** How many `sdk_state` rows this client holds whose key matches [likePattern] (SQL LIKE). */
     fun countKeys(clientRef: String, likePattern: String): Int = db.withConnection { c ->
         c.prepareStatement("SELECT count(*) FROM sdk_state WHERE client_ref = ? AND key LIKE ?").use { ps ->

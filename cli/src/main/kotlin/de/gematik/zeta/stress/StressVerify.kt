@@ -31,7 +31,8 @@ import kotlinx.coroutines.runBlocking
  * prove:
  *  - **login** (every scenario): SDK state transitions REGISTERED_NO_VALID_TOKENS →
  *    HAS_ACCESS_AND_REFRESH_TOKEN, so nonce → SMC-B sign → token exchange ran (no token exists
- *    otherwise). `refresh-churn` starts from HAS_REFRESH_TOKEN instead.
+ *    otherwise). `refresh-storm` starts from HAS_REFRESH_TOKEN; `register-storm` starts cold
+ *    (NOT_REGISTERED) and re-runs the whole DCR + token cycle.
  *  - **VSDM** (`login-and-vsdm-storm` only): the read establishes an ASL session (storage populated)
  *    and returns a FHIR bundle carrying the insurant (KVNR) from the PoPP token that was sent.
  *
@@ -83,16 +84,23 @@ class StressVerifyCommand : CliktCommand(name = "verify") {
                     val client = sdk.httpClient { applyStressHttp(http) }
 
                     // Expire the same state this scenario would, then assert the cold-start precondition.
-                    val expectedPre = if (scenario == Scenario.REFRESH_CHURN) {
-                        expiry.expireAccessTokenOnly(pick.clientRef)
-                        SdkStatus.HAS_REFRESH_TOKEN
-                    } else {
-                        expiry.expireAll(pick.clientRef)
-                        SdkStatus.REGISTERED_NO_VALID_TOKENS
+                    val expectedPre = when (scenario) {
+                        Scenario.REFRESH_STORM -> {
+                            expiry.expireAccessTokenOnly(pick.clientRef)
+                            SdkStatus.HAS_REFRESH_TOKEN
+                        }
+                        Scenario.REGISTER_STORM -> {
+                            expiry.expireEverything(pick.clientRef)
+                            SdkStatus.NOT_REGISTERED
+                        }
+                        else -> {
+                            expiry.expireAll(pick.clientRef)
+                            SdkStatus.REGISTERED_NO_VALID_TOKENS
+                        }
                     }
                     val before = sdk.status().getOrThrow()
                     checks += Check("login: pre-state is $expectedPre", before == expectedPre, "$before")
-                    if (scenario != Scenario.REFRESH_CHURN) {
+                    if (scenario != Scenario.REFRESH_STORM) {
                         val atBefore = expiry.countKeys(pick.clientRef, "at:%")
                         val aslBefore = expiry.countKeys(pick.clientRef, "asl_%")
                         checks += Check("login: storage cleared (no tokens, no ASL)", atBefore == 0 && aslBefore == 0, "at=$atBefore asl=$aslBefore")

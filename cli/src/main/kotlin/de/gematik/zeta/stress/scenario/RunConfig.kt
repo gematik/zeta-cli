@@ -1,7 +1,7 @@
 package de.gematik.zeta.stress.scenario
 
 /** Which load scenario each attempt runs. */
-enum class Scenario { LOGIN_STORM, LOGIN_AND_VSDM_STORM, REFRESH_CHURN }
+enum class Scenario { LOGIN_STORM, LOGIN_AND_VSDM_STORM, REFRESH_STORM, REGISTER_STORM, DISCOVER_STORM }
 
 /**
  * The authenticated resource read performed after login in `login-and-vsdm-storm`. It's issued

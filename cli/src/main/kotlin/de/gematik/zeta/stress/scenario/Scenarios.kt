@@ -48,10 +48,15 @@ class ScenarioDeps(
     val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
     // Wall-clock cap per attempt. A single client that stalls (e.g. the AS hangs while racing
     // to create a shared SMC-B user) must not freeze the whole batch — it's recorded as a failure.
-    val attemptTimeoutMs: Long = 120_000,
+    // Kept short so a collapsing guard releases its concurrency permit (and the blocking HTTP call
+    // behind it) quickly, rather than pinning in-flight work for minutes.
+    val attemptTimeoutMs: Long = 30_000,
     // When set (login-and-vsdm-storm), each attempt makes this authenticated request instead of a
     // bare authenticate(), driving the full cold chain (token exchange + ASL handshake + read).
     val request: VsdmRequest? = null,
+    // discover-storm: each attempt runs only discover() — the lightest guard interaction, used to
+    // self-test the harness (rate control, concurrency, reporting) with minimal server load.
+    val discoverOnly: Boolean = false,
     val poppPicker: PoppPicker? = null,
 )
 
@@ -127,7 +132,7 @@ fun preflight(
 }
 
 /** What to wipe from a client's state before an attempt, to force real token-endpoint load. */
-enum class Expire { NONE, ACCESS_ONLY, ALL }
+enum class Expire { NONE, ACCESS_ONLY, ALL, EVERYTHING }
 
 /**
  * Runs one attempt against an already-built [sdk], optionally expiring state first, and records the
@@ -141,7 +146,7 @@ enum class Expire { NONE, ACCESS_ONLY, ALL }
 private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: ZetaHttpClient?, row: ClientRow, expire: Expire) {
     val start = deps.clockMs()
     val req = deps.request
-    val op = req?.opLabel ?: "authenticate"
+    val op = if (deps.discoverOnly) "discover" else req?.opLabel ?: "authenticate"
     // httpStatus is null for the login-only path (authenticate has no HTTP response); the VSDM path fills it.
     fun rec(ok: Boolean, error: String?, httpStatus: Int? = null) =
         deps.reporter.record(Attempt(op, deps.clockMs() - start, ok, error, row.clientRef, row.telematikId, httpStatus))
@@ -150,7 +155,20 @@ private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: Zet
             when (expire) {
                 Expire.ALL -> deps.stateExpiry.expireAll(row.clientRef)
                 Expire.ACCESS_ONLY -> deps.stateExpiry.expireAccessTokenOnly(row.clientRef)
+                Expire.EVERYTHING -> deps.stateExpiry.expireEverything(row.clientRef)
                 Expire.NONE -> Unit
+            }
+            if (deps.discoverOnly) {
+                // EVERYTHING expiry above wiped the cached config, so this forces a real fetch. discover()
+                // swallows a failed service-discovery into Result.success, so confirm it actually
+                // persisted the metadata — zero rows means a swallowed fetch failure, not a success.
+                sdk.discover().getOrThrow()
+                if (deps.stateExpiry.countKeys(row.clientRef, "%") == 0) {
+                    rec(false, "discover reported success but persisted no configuration")
+                } else {
+                    rec(true, null)
+                }
+                return@withTimeout
             }
             if (req == null) {
                 val status = sdk.status().getOrThrow()
@@ -209,9 +227,43 @@ private suspend fun runAttempt(deps: ScenarioDeps, sdk: ZetaSdkClient, http: Zet
 }
 
 /**
+ * Provisions the SDK client for one attempt. With [pool] the client is cached and reused across
+ * attempts — cheap, but only the pool's resident set is ever exercised. Without it (random-fleet mode)
+ * each attempt builds and closes its own client, so the driver can iterate the whole shuffled fleet
+ * while keeping live HTTP engines bounded to the in-flight count; the price is rebuilding those engines
+ * each attempt. SDK state lives in SQLite, so a freshly built client still loads its persisted
+ * registration/tokens.
+ */
+private suspend fun runOne(
+    deps: ScenarioDeps,
+    resource: String,
+    scopes: List<String>,
+    pool: ClientPool?,
+    row: ClientRow,
+    expire: Expire,
+) {
+    if (pool != null) {
+        val sdk = pool.get(row) ?: return
+        runAttempt(deps, sdk, if (deps.request != null) pool.httpClient(row) else null, row, expire)
+        return
+    }
+    val identity = deps.identityStore.get(row.telematikId) ?: return
+    val sdk = deps.factory.build(row.clientRef, identity, resource, scopes.ifEmpty { row.scopes })
+    val http = if (deps.request != null) sdk.httpClient { applyStressHttp(deps.http) } else null
+    try {
+        runAttempt(deps, sdk, http, row, expire)
+    } finally {
+        http?.let { runCatching { it.close() } }
+        sdk.closeQuietly()
+    }
+}
+
+/**
  * Waveform load: drive the cohort for [durationMs] following a time-varying [schedule] (see
  * [Rates.profile]) — e.g. warm-up → burst → slow-down → spikes → repeat. Same machinery as [soak];
- * only the admission-rate curve differs.
+ * only the admission-rate curve differs. When [maxFailFraction] is set, the run aborts once the
+ * trailing window's failure fraction exceeds it, so a collapsed guard ends the run instead of being
+ * hammered for the full duration; [DriverResult.stoppedEarly] reports whether that fired.
  */
 fun profile(
     deps: ScenarioDeps,
@@ -223,12 +275,15 @@ fun profile(
     expire: Expire,
     scopes: List<String>,
     onTick: (Long, Int, Snapshot) -> Unit,
-) {
+    maxFailFraction: Double? = null,
+    perAttempt: Boolean = false,
+): DriverResult {
     require(clients.isNotEmpty()) { "no registered clients for $resource — run preflight first" }
-    log.info { "Profile: ${clients.size} clients for ${durationMs / 1000}s, expire=$expire" }
+    log.info { "Profile: ${clients.size} clients for ${durationMs / 1000}s, expire=$expire, perAttempt=$perAttempt" }
 
-    ClientPool(deps, resource, scopes).use { pool ->
-        runBlocking {
+    val pool = if (perAttempt) null else ClientPool(deps, resource, scopes)
+    try {
+        return runBlocking {
             runContinuous(
                 items = clients,
                 concurrency = concurrency,
@@ -236,13 +291,12 @@ fun profile(
                 durationMs = durationMs,
                 clockMs = deps.clockMs,
                 reporter = deps.reporter,
+                stopWhen = maxFailFraction?.let { frac -> { w -> w.failFraction > frac } },
                 onTick = onTick,
-            ) { row ->
-                pool.get(row)?.let { sdk ->
-                    runAttempt(deps, sdk, if (deps.request != null) pool.httpClient(row) else null, row, expire)
-                }
-            }
+            ) { row -> runOne(deps, resource, scopes, pool, row, expire) }
         }
+    } finally {
+        pool?.close()
     }
 }
 
@@ -267,12 +321,14 @@ fun ramp(
     expire: Expire,
     scopes: List<String>,
     onTick: (Long, Int, Snapshot) -> Unit,
+    perAttempt: Boolean = false,
 ): DriverResult {
     require(clients.isNotEmpty()) { "no registered clients for $resource — run preflight first" }
     log.info { "Ramp: $startPerMin→$maxPerMin/min (+$stepPerMin every ${stepEverySec}s), stop at fail>$maxFailFraction or p99>${maxP99Ms}ms" }
 
-    return ClientPool(deps, resource, scopes).use { pool ->
-        runBlocking {
+    val pool = if (perAttempt) null else ClientPool(deps, resource, scopes)
+    try {
+        return runBlocking {
             runContinuous(
                 items = clients,
                 concurrency = concurrency,
@@ -282,12 +338,10 @@ fun ramp(
                 reporter = deps.reporter,
                 stopWhen = { w -> w.failFraction > maxFailFraction || w.p99 > maxP99Ms },
                 onTick = onTick,
-            ) { row ->
-                pool.get(row)?.let { sdk ->
-                    runAttempt(deps, sdk, if (deps.request != null) pool.httpClient(row) else null, row, expire)
-                }
-            }
+            ) { row -> runOne(deps, resource, scopes, pool, row, expire) }
         }
+    } finally {
+        pool?.close()
     }
 }
 

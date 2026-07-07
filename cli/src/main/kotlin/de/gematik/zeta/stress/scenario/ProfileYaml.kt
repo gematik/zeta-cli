@@ -28,6 +28,9 @@ class RunProfile(
     val connectTimeoutMs: Long?,
     val requestTimeoutMs: Long?,
     val attemptTimeoutMs: Long,
+    val maxLiveClients: Int?,
+    val abortOnFailFraction: Double?,
+    val randomClients: Boolean,
     val durationMs: Long?,
     val scenario: Scenario,
     val request: VsdmRequest?,
@@ -92,7 +95,7 @@ class RunProfile(
  * concurrency: 200
  * insecure: true
  * duration: 5m                    # total run time (ms/s/m/h; bare = seconds)
- * scenario: login-and-vsdm-storm  # login-storm | login-and-vsdm-storm | refresh-churn
+ * scenario: login-and-vsdm-storm  # login-storm | login-and-vsdm-storm | refresh-storm | register-storm
  *
  * request:                        # required for login-and-vsdm-storm
  *   url: https://vsdm-dev.tk.de/vsdservice/v1/vsdmbundle?profileVersion=1.0
@@ -141,7 +144,11 @@ object ProfileYaml {
             caCerts = stringList(root["ca-cert"] ?: root["caCert"] ?: root["caCerts"]),
             connectTimeoutMs = (root["connect-timeout"] as? Number)?.toLong()?.times(1000),
             requestTimeoutMs = (root["request-timeout"] as? Number)?.toLong()?.times(1000),
-            attemptTimeoutMs = ((root["attempt-timeout"] as? Number)?.toLong() ?: 120L) * 1000,
+            attemptTimeoutMs = ((root["attempt-timeout"] as? Number)?.toLong() ?: 30L) * 1000,
+            maxLiveClients = (root["max-live-clients"] as? Number)?.toInt()?.coerceAtLeast(1),
+            abortOnFailFraction = ((root["abort-on-fail-pct"] as? Number)?.toInt() ?: 90)
+                .let { if (it >= 100) null else it.coerceAtLeast(1) / 100.0 },
+            randomClients = (root["random-clients"] as? Boolean) ?: false,
             durationMs = root["duration"]?.let { duration(it.toString()) },
             scenario = scenario(root["scenario"]?.toString()),
             request = (root["request"] as? Map<*, *>)?.let { request(it) },
@@ -183,8 +190,10 @@ object ProfileYaml {
     private fun scenario(s: String?): Scenario = when (s?.lowercase()?.replace('_', '-')) {
         null, "login-storm" -> Scenario.LOGIN_STORM
         "login-and-vsdm-storm" -> Scenario.LOGIN_AND_VSDM_STORM
-        "refresh-churn" -> Scenario.REFRESH_CHURN
-        else -> error("unknown scenario '$s' (login-storm | login-and-vsdm-storm | refresh-churn)")
+        "refresh-storm" -> Scenario.REFRESH_STORM
+        "register-storm" -> Scenario.REGISTER_STORM
+        "discover-storm" -> Scenario.DISCOVER_STORM
+        else -> error("unknown scenario '$s' (login-storm | login-and-vsdm-storm | refresh-storm | register-storm | discover-storm)")
     }
 
     private fun request(m: Map<*, *>): VsdmRequest = VsdmRequest(

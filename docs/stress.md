@@ -81,7 +81,10 @@ key is optional except the ones a scenario needs at run time (`resource:`, and `
 | `db` | `stress.db` | SQLite state file (overridable with `--db`). |
 | `concurrency` | `100` | Max in-flight attempts and DB pool size. Coerced to `4..128`. |
 | `duration` | warm-up + one cycle | Total run time. Accepts `ms` / `s` / `m` / `h`; a bare number is **seconds**. |
-| `attempt-timeout` | `120` | Seconds; a per-attempt wall-clock cap. A stalled attempt is recorded as a failure. |
+| `attempt-timeout` | `30` | Seconds; a per-attempt wall-clock cap. A stalled attempt is recorded as a failure and releases its permit promptly, so a collapsing guard can't pin in-flight work for minutes. |
+| `max-live-clients` | `concurrency × 4` | Cap on the **working set** of distinct clients driven at once. Each live client holds several HTTP engines that aren't shared across the fleet, so driving a huge roster exhausts host threads; only `concurrency` clients run at a time, so a bounded warm set drives identical load without the sprawl. Rate/latency are unaffected; register-storm still mints a fresh server-side client per attempt. Raise it to exercise more distinct identities. |
+| `abort-on-fail-pct` | `90` | Abort a waveform run once the trailing window's failure rate exceeds this percent — a collapsed guard ends the run instead of being hammered for the full duration. Set to `100` to disable. (Ramps use their own `max-fail-pct`.) |
+| `random-clients` | `false` | Ignore the fixed working set: shuffle the **whole** fleet (seeded by `cohort.seed`) and build/close one client per attempt, so a long run iterates the entire population in random order while only in-flight clients stay resident. Trades per-attempt HTTP-engine rebuild CPU for full client diversity — use it when the test cares about exercising many distinct registered clients, not just steady-state throughput. |
 
 ### Cohort — the client population
 
@@ -95,6 +98,27 @@ cohort:
 `clients-per-institution` accepts `N`, `"a..b"`, or `[a, b]`. `cohort:` may also be a bare number (that
 many institutions, one client each). Default: 100 institutions, one client each. Total clients ≈
 institutions × mean(clients-per-institution).
+
+**Cohort vs. working set — two independent dials.** The cohort is the client *population*: how many OAuth
+clients `preflight` registers (server-side rows, index size, the table every token exchange looks a client
+up in). The **working set** (`max-live-clients`, default `concurrency × 4`) is how many distinct clients a
+`run` actually drives at once. They measure different things and needn't match:
+
+- Size the **cohort** to the *registration scale* you want to test — production realism (tens of thousands
+  of registered PVS) → large; a pure throughput number → a few thousand is plenty.
+- Size the **working set** to the *concurrent active* load — only `concurrency` clients run at any instant,
+  so a bounded set gives ample rotation while keeping resident HTTP engines (and host threads) in check.
+
+Driving, say, 800 of 20 000 registered clients is realistic rather than wasteful: in production most
+registered clients are idle at any instant, and the 800 active ones still query against the full-size
+tables, so the registration scale *is* exercised. It's only overkill when you're measuring steady-state
+throughput on a crypto-bound guard, where the population barely moves the number — then `cohort ≈ working
+set` is the efficient choice. The HTML report's *cohort size* reflects the **driven working set**.
+
+When the test genuinely needs to exercise the *whole* population (many distinct clients over a long run,
+not just a warm subset), set `random-clients: true`: it shuffles the full fleet and builds/closes a client
+per attempt, so live engines stay bounded to the in-flight count while coverage spans the entire cohort.
+The cost is rebuilding each client's HTTP engines per attempt (the `random-clients` row above).
 
 ### TLS / environment (applied to every leg, including the VSDM read)
 
@@ -117,7 +141,14 @@ attempt** and **what each attempt does**:
 | --- | --- | --- | --- |
 | **`login-storm`** | all tokens + ASL state | a bare `authenticate()` (cold re-login), verified via `status()` | the pure auth path: nonce → SMC-B sign → token exchange |
 | **`login-and-vsdm-storm`** | all tokens + ASL state | one authenticated read from the `request:` block, driving the whole cold chain (token exchange + ASL handshake + read), PoPP token attached | the full end-to-end read path |
-| **`refresh-churn`** | access token only | `authenticate()` from a surviving refresh token | the refresh path (cheaper — no subject-token verify / ASL) |
+| **`refresh-storm`** | access token only | `authenticate()` from a surviving refresh token | the refresh path (cheaper — no subject-token verify / ASL) |
+| **`register-storm`** | **all state** — registration, tokens, ASL, discovery cache | the full cold cycle: discovery → nonce → **fresh DCR** → token exchange, verified via `status()` | registration + token under load; reproduces a client-rotation long-term test |
+| **`discover-storm`** | **all state** (forces a real fetch) | only `discover()` — fetch + validate the well-known metadata, verified by asserting the config actually persisted (`discover()` swallows fetch failures) | the lightest guard interaction; a **harness self-test** for rate control / concurrency / reporting with minimal server load |
+
+> **`register-storm` re-registers every attempt.** Each attempt creates a **new server-side OAuth
+> client** (fresh DCR), so it puts the auth server's registration path *and* the DB under sustained load —
+> the way to reproduce registration-pool exhaustion. It also **accumulates clients in Keycloak**; clean
+> them up afterwards. Run `preflight` first to seed the client slots the run iterates.
 
 ### `request:` — the read for `login-and-vsdm-storm` (required for that scenario)
 
@@ -220,8 +251,6 @@ Breaking point reached — peak healthy rate ≈ 2440 req/min
 Ramp finished without breaking — peak healthy rate ≈ 5000 req/min
 ```
 
-See [`loadtest-findings.md`](loadtest-findings.md) for a worked ramp analysis.
-
 ---
 
 ## 6. `verify` — proving the scenario
@@ -231,8 +260,8 @@ ran. `zeta stress verify` takes **one** registered client, wipes the same state 
 the cold chain once, and asserts the facts a status code can't:
 
 - **login** (every scenario): SDK state transitions `REGISTERED_NO_VALID_TOKENS → HAS_ACCESS_AND_REFRESH_TOKEN`
-  (an access token can't exist unless nonce → SMC-B sign → token exchange all ran). `refresh-churn` starts
-  from `HAS_REFRESH_TOKEN`.
+  (an access token can't exist unless nonce → SMC-B sign → token exchange all ran). `refresh-storm` starts
+  from `HAS_REFRESH_TOKEN`; `register-storm` starts cold (`NOT_REGISTERED`) and re-runs the full DCR cycle.
 - **VSDM** (`login-and-vsdm-storm`): the read establishes an ASL session (storage populated) and returns a
   FHIR bundle **carrying the insurant (KVNR) from the PoPP token that was sent**.
 
@@ -317,6 +346,11 @@ count.
   corporate/self-signed CA in anything lasting. TLS settings apply to every leg, including the VSDM read.
 - **Reproducible cohorts** — set `cohort.seed:` so the per-institution client fan-out is deterministic
   across `preflight` runs, and use spike phases (deterministic by design) for repeatable load shapes.
+- **Surviving a collapsing target** — the harness is built not to fall over when the guard does. Only the
+  working set of clients is kept resident (`max-live-clients`), so a huge roster can't exhaust host threads
+  with per-client HTTP engines; a short `attempt-timeout` (30 s) releases a stalled attempt's concurrency
+  permit promptly; and `abort-on-fail-pct` (default 90 %) ends a waveform run once the target has clearly
+  collapsed rather than hammering it — and your driver — for the full duration. The failures that remain
+  stay attributed to the guard, not the client.
 - **Measure the guard, not the harness** — front proxies or test recorders in the request path can become
-  the bottleneck before the guard does; confirm what you're measuring server-side. See
-  [`loadtest-findings.md`](loadtest-findings.md).
+  the bottleneck before the guard does; confirm what you're measuring server-side.
