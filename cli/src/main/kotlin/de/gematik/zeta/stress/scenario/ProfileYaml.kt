@@ -18,6 +18,7 @@ data class PhaseInfo(val current: String, val next: String, val remainingSec: Lo
  */
 class RunProfile(
     val db: String?,
+    val title: String?,
     val resource: String?,
     val scopes: List<String>?,
     val cohort: CohortSpec,
@@ -135,6 +136,7 @@ object ProfileYaml {
 
         return RunProfile(
             db = root["db"]?.toString(),
+            title = root["title"]?.toString()?.takeIf { it.isNotBlank() },
             resource = root["resource"]?.toString(),
             scopes = scopeList(root["scopes"] ?: root["scope"]),
             cohort = cohort(root["cohort"]),

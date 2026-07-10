@@ -52,6 +52,7 @@ fun lineChart(
     xLabel: String,
     yLabel: String,
     bands: List<Band> = emptyList(),
+    xTick: (Double) -> String = { num(it) },
 ): String {
     val pw = W - PAD_L - PAD_R
     val ph = H - PAD_T - PAD_B
@@ -82,7 +83,7 @@ fun lineChart(
     for (i in 0..6) {
         val xVal = xm * i / 6
         val xx = px(xVal)
-        sb.append("""<text class="axis" x="${d1(xx)}" y="${PAD_T + ph + 18}" text-anchor="middle">${num(xVal)}</text>""")
+        sb.append("""<text class="axis" x="${d1(xx)}" y="${PAD_T + ph + 18}" text-anchor="middle">${esc(xTick(xVal))}</text>""")
     }
     for (s in series) {
         if (s.points.isEmpty()) continue

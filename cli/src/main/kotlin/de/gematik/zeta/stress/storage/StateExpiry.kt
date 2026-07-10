@@ -7,18 +7,21 @@ import de.gematik.zeta.stress.db.Db
  * namespace, leaving the DCR registration and TPM client key intact so the client stays
  * `REGISTERED_NO_VALID_TOKENS` (i.e. it must re-`authenticate()` but not re-`register()`).
  *
- * The key names/prefixes below match the SDK's domain stores as of zeta-sdk 1.2.0:
- * - tokens: `at:<h>` / `rt:<h>` / `exp:<h>` + the `hash_index` written by AuthenticationStorage
- * - ASL session: `asl_session_by_fqdn<h>` + `asl_hash_index_key`
- * where `<h>` is a per-resource hash. Confirm against a live run's `sdk_state` dump before
- * relying on the patterns (see the verification notes).
+ * The key names/prefixes below match the SDK's domain stores as of zeta-sdk 1.2.2:
+ * - tokens: `at:<h>` / `rt:<h>` / `exp:<h>` — the token-value keys keep their literal prefix
+ *   (they are written outside the resource-scope hashing). The `auth_token_index` map is itself a
+ *   bare hash and is left in place; nulling the value keys is enough to invalidate the tokens.
+ * - ASL session: `asl_session_by_resource:<h>` — likewise prefix-preserved; its `asl_session_index`
+ *   map is a bare hash, left inert.
+ * where `<h>` is an 8-char hash. `expireEverything` (register-storm) is layout-agnostic. Confirm
+ * against a live 1.2.2 `sdk_state` dump before relying on the patterns.
  */
 class StateExpiry(private val db: Db) {
 
-    /** Drop access + refresh tokens (and the token index): forces a full token exchange. */
+    /** Drop access + refresh tokens: forces a full token exchange. */
     fun expireTokens(clientRef: String) = deleteWhere(
         clientRef,
-        "key LIKE 'at:%' OR key LIKE 'rt:%' OR key LIKE 'exp:%' OR key = 'hash_index'",
+        "key LIKE 'at:%' OR key LIKE 'rt:%' OR key LIKE 'exp:%'",
     )
 
     /** Drop only the access token, keeping the refresh token: exercises the refresh path. */

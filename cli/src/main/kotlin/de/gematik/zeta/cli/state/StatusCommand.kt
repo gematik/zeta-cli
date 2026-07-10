@@ -11,6 +11,7 @@ import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.output.OutputFormat
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderSections
+import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.zetaProfilePath
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.Url
@@ -36,9 +37,8 @@ private val log = KotlinLogging.logger {}
  * `client_secret`, and the `registration_access_token`. Refresh tokens are never emitted
  * (only their presence informs the status enum).
  *
- * The status enum mirrors `ZetaSdkClient.status()` from SDK 1.0.1+: tokens are looked up
- * by the build-time resource URL (the same string `AccessTokenProviderImpl` saves under).
- * See [entryFor].
+ * The status enum mirrors `ZetaSdkClient.status()`: storage is scoped per resource+scope, and the
+ * enum is derived from the cached registration + token validity for that scope. See [entryFor].
  */
 class StatusCommand : ZetaProfileCommand(name = "status") {
     private val url: String? by argument(
@@ -67,7 +67,7 @@ class StatusCommand : ZetaProfileCommand(name = "status") {
         } else {
             val path = zetaProfilePath(profile)
             log.debug { "Enumerating resources from $path" }
-            val entries = runBlocking { enumerateEntries(ProfileStores(path)) }
+            val entries = runBlocking { enumerateEntries(ProfileDb(path)) }
             renderProfile(entries, path)
         }
     }

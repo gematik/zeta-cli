@@ -76,6 +76,7 @@ key is optional except the ones a scenario needs at run time (`resource:`, and `
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `title` | — | Human-readable run title. Shown as the report heading (and browser-tab title); otherwise cosmetic. |
 | `resource` | — (**required**) | Resource origin (base URL) the fleet authenticates against. |
 | `scope` / `scopes` | — | Access-token scope the SDK requests. A string, or a list `scopes: [a, b]`. Required for `preflight`. |
 | `db` | `stress.db` | SQLite state file (overridable with `--db`). |
@@ -321,11 +322,14 @@ failures     :
 Latency percentiles are over **successful** attempts; the failure histogram lists each distinct error by
 count.
 
-**HTML report + CSV.** Each run writes a timestamped folder `reports/<yyyyMMdd-HHmmss>/` containing:
+**HTML report + CSV.** Each run writes a folder `reports/<profile>-<yyyyMMdd-HHmmss>/` — the profile
+filename (sans extension) plus the run's **start** time — containing:
 
-- **`report.html`** — a self-contained, theme-aware page (path echoed on the last line):
+- **`report.html`** — a self-contained, theme-aware page (path echoed on the last line), rewritten every
+  minute while the run is in flight so you can open it live, then finalized at the end. Its heading is the
+  profile's `title:` when set:
   - **stat cards** — attempts, succeeded, failed, throughput, p50 / p95 / p99;
-  - **Run details** — host, resource, scenario, cohort size, concurrency, TLS mode, start time, planned
+  - **Run details** — host, resource, scenario, cohort size, concurrency, start time, planned
     vs wall duration, and % ok;
   - **Phases** (waveform runs) — each phase's rate spec and duration, plus the cycle length and how many
     loops ran;

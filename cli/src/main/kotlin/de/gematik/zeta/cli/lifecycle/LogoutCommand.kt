@@ -6,9 +6,16 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.ZetaProfileCommand
 import de.gematik.zeta.cli.client.originOf
+import de.gematik.zeta.cli.state.CommandResult
+import de.gematik.zeta.cli.state.ProfileStores
+import de.gematik.zeta.cli.state.entryFor
+import de.gematik.zeta.cli.state.hasUsableCredentials
+import de.gematik.zeta.cli.state.isRegistered
 import de.gematik.zeta.cli.sdk.NoopSubjectTokenProvider
 import de.gematik.zeta.cli.sdk.buildZetaSdkClient
+import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.zetaProfilePath
+import de.gematik.zeta.sdk.ZetaSdkClientExtension
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 
@@ -45,14 +52,53 @@ class LogoutCommand : ZetaProfileCommand(name = "logout") {
     override fun runCommand() {
         val resource = originOf(url)
         log.info { "Logging out of $resource" }
-        val sdk = buildZetaSdkClient(
-            resource = resource,
-            scopes = emptyList(),
-            storagePath = zetaProfilePath(profile),
-            tokenProvider = NoopSubjectTokenProvider,
-            cliConfig = cliConfig,
+
+        // Tokens live under the resource's scope contexts, not a bare `resource` key — so build the
+        // SDK with each cached scope-set and revoke there. Building with empty scopes would target an
+        // unrelated (empty) context: nothing revoked, and it would then shadow the real one as the
+        // "latest" so status wrongly reads NOT_REGISTERED. logout() keeps the registration.
+        val db = ProfileDb(zetaProfilePath(profile))
+        val contexts = db.contextsForFqdn(resource)
+        if (contexts.isEmpty()) {
+            echo("No cached session for $resource in profile '$profile'. Nothing to log out.")
+            return
+        }
+        contexts.forEach { ctx ->
+            val sdk = buildZetaSdkClient(
+                resource = resource,
+                scopes = ctx.scopes,
+                storagePath = zetaProfilePath(profile),
+                tokenProvider = NoopSubjectTokenProvider,
+                cliConfig = cliConfig,
+            )
+            try {
+                runBlocking { sdk.logout().getOrThrow() }
+            } finally {
+                ZetaSdkClientExtension.close(sdk)
+            }
+        }
+
+        // Report the registered context (logout keeps it) rather than the latest-touched one, which
+        // after the loop could be a scope-less discover context that never held a registration.
+        val entries = runBlocking { contexts.map { entryFor(ProfileStores(it, db)) } }
+        val entry = entries.firstOrNull { it.status.isRegistered } ?: entries.first()
+        val cleared = !entry.status.hasUsableCredentials
+        renderResult(
+            CommandResult(
+                operation = "logout",
+                ok = cleared,
+                endpoint = resource,
+                scopes = emptyList(),
+                authServer = entry.issuer,
+                status = entry.status,
+                detail = when {
+                    !entry.status.isRegistered -> "no client registration for this resource"
+                    cleared -> "tokens revoked and cleared; registration kept"
+                    else -> "tokens still present"
+                },
+            ),
+            entry = entry,
+            reveal = reveal,
         )
-        runBlocking { sdk.logout().getOrThrow() }
-        renderEntry(loadEntry(resource), reveal)
     }
 }

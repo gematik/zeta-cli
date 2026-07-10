@@ -7,6 +7,8 @@ import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.originOf
+import de.gematik.zeta.cli.state.CommandResult
+import de.gematik.zeta.cli.state.hasUsableCredentials
 import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -51,7 +53,20 @@ class AuthenticateCommand : ZetaSessionCommand(name = "authenticate") {
             runBlocking {
                 Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
             }
-            renderEntry(loadEntry(resource), reveal)
+            val entry = loadEntry(resource)
+            renderResult(
+                CommandResult(
+                    operation = "authenticate",
+                    ok = entry.status.hasUsableCredentials,
+                    endpoint = resource,
+                    scopes = scopes,
+                    authServer = entry.issuer,
+                    status = entry.status,
+                    detail = if (entry.status.hasUsableCredentials) null else "no valid tokens issued",
+                ),
+                entry = entry,
+                reveal = reveal,
+            )
         }
     }
 }

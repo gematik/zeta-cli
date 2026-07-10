@@ -43,24 +43,27 @@ class SqliteSdkStorageTest {
     fun `expireAll drops tokens and ASL but keeps registration and tpm key`(@TempDir dir: Path) = runBlocking {
         Db(dir.resolve("s.db")).use { db ->
             val s = SqliteSdkStorage("c1", db)
+            // 1.2.2 layout: token/ASL value keys keep their literal prefix; index maps and the
+            // resource-scoped registration keys are bare hashes that expiry must leave alone.
             s.put("at:abc", "access")
             s.put("rt:abc", "refresh")
             s.put("exp:abc", "123")
-            s.put("hash_index", "abc")
-            s.put("asl_session_by_fqdnabc", "session")
-            s.put("asl_hash_index_key", "abc")
-            s.put("client_registration_by_auth_server", "{...}")
-            s.put("client_private_key", "key")
+            s.put("auth0idx1", "{token-index map}")
+            s.put("asl_session_by_resource:abc", "session")
+            s.put("asl0idx1", "{asl-index map}")
+            s.put("reg0hash1", "{registration}")
+            s.put("pk00hash1", "key")
 
             StateExpiry(db).expireAll("c1")
 
             assertNull(s.get("at:abc"))
             assertNull(s.get("rt:abc"))
             assertNull(s.get("exp:abc"))
-            assertNull(s.get("asl_session_by_fqdnabc"))
-            assertNull(s.get("asl_hash_index_key"))
-            assertEquals("{...}", s.get("client_registration_by_auth_server"))
-            assertEquals("key", s.get("client_private_key"))
+            assertNull(s.get("asl_session_by_resource:abc"))
+            // index maps and registration/key rows survive — only the value keys are dropped.
+            assertEquals("{token-index map}", s.get("auth0idx1"))
+            assertEquals("{registration}", s.get("reg0hash1"))
+            assertEquals("key", s.get("pk00hash1"))
         }
     }
 

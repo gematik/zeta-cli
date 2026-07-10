@@ -16,12 +16,12 @@ data class PhaseDef(val name: String, val spec: String, val durationMs: Long)
 data class PhaseSpan(val name: String, val startSec: Double, val endSec: Double)
 
 data class RunMeta(
+    val title: String?,
     val resource: String,
     val host: String,
     val scenario: String,
     val cohort: Int,
     val concurrency: Int,
-    val insecure: Boolean,
     val startedAt: LocalDateTime,
     val plannedMs: Long,
     val wallMs: Long,
@@ -33,10 +33,18 @@ data class RunMeta(
 object ReportWriter {
     private val FOLDER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
     private val HUMAN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    private val CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss")
     private val PALETTE = listOf("#14b8a6", "#6366f1", "#f59e0b", "#ec4899", "#22c55e", "#8b5cf6", "#ef4444", "#0ea5e9")
 
-    fun write(meta: RunMeta, rows: List<ResultRow>): Path {
-        val dir = Path.of("reports", meta.startedAt.format(FOLDER))
+    /**
+     * The report folder for a run: `reports/<name>-<start>`. Named by the profile ([name]) plus the
+     * run's **start** time, so periodic + final writes share it and runs of the same profile sort
+     * together.
+     */
+    fun folder(name: String, startedAt: LocalDateTime): Path =
+        Path.of("reports", "$name-${startedAt.format(FOLDER)}")
+
+    fun write(dir: Path, meta: RunMeta, rows: List<ResultRow>): Path {
         Files.createDirectories(dir)
         val t0 = rows.minOfOrNull { it.atMs } ?: 0L
         // The active phase is the last span whose window has opened by then (empty for ramp / gaps).
@@ -88,14 +96,16 @@ object ReportWriter {
             Band(s.startSec, s.endSec, s.name, colorOf[s.name] ?: "#888888", seen.add(s.name))
         }
 
-        val throughputSvg = lineChart(listOf(Series("req/s", "#14b8a6", thr)), xMax, thrMax, "elapsed (s)", "req/s", bands)
+        // x is elapsed seconds from the first attempt (t0 ≈ run start); label ticks with wall-clock time.
+        val xTick: (Double) -> String = { sec -> meta.startedAt.plusSeconds(sec.toLong()).format(CLOCK) }
+        val throughputSvg = lineChart(listOf(Series("req/s", "#14b8a6", thr)), xMax, thrMax, "time", "req/s", bands, xTick)
         val latencySvg = lineChart(
             listOf(
                 Series("p50", "#38bdf8", p50s),
                 Series("p95", "#f59e0b", p95s),
                 Series("p99", "#f43f5e", p99s),
             ),
-            xMax, latMax, "elapsed (s)", "latency (ms)", bands,
+            xMax, latMax, "time", "latency (ms)", bands, xTick,
         )
         val histSvg = histogram(latencyBins(lat), "latency (ms)", "count", "#6366f1")
 
@@ -162,7 +172,6 @@ object ReportWriter {
             row("Scenario", escHtml(meta.scenario))
             row("Cohort", "${meta.cohort} clients")
             row("Concurrency", "${meta.concurrency} in-flight")
-            row("TLS", if (meta.insecure) "verification disabled (<code>--insecure</code>)" else "verified")
             row("Started", meta.startedAt.format(HUMAN))
             if (meta.plannedMs > 0) row("Planned duration", humanMs(meta.plannedMs))
             row("Wall time", humanMs(meta.wallMs))
@@ -199,7 +208,7 @@ object ReportWriter {
 
         return """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>zeta-stress · ${escHtml(meta.scenario)} · ${meta.startedAt.format(FOLDER)}</title>
+<title>${escHtml(meta.title ?: "zeta-stress")} · ${escHtml(meta.scenario)} · ${meta.startedAt.format(FOLDER)}</title>
 <style>
 :root{--bg:#ffffff;--panel:#f7f8fa;--border:#e4e7ec;--text:#12161c;--muted:#616b7a;--accent:#0d9488;--grid:#e8ebef;--axis:#98a2b3;--good:#0e9f6e;--bad:#e02424;}
 @media (prefers-color-scheme:dark){:root{--bg:#0e1217;--panel:#161b22;--border:#232a33;--text:#e7ebf0;--muted:#8b95a4;--accent:#2dd4bf;--grid:#20272f;--axis:#5a6472;--good:#34d399;--bad:#f87171;}}
@@ -233,7 +242,7 @@ h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:12px}
 </style></head>
 <body><div class="wrap">
-<h1>zeta-stress report</h1>
+<h1>${escHtml(meta.title ?: "zeta-stress report")}</h1>
 <div class="sub">${escHtml(meta.scenario)} → ${escHtml(meta.host)} · ${meta.startedAt.format(HUMAN)}</div>
 <div class="cards">$cards</div>
 <section class="block"><h2>Run details</h2><table class="tbl kv"><tbody>$details</tbody></table></section>

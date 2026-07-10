@@ -6,6 +6,8 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.originOf
+import de.gematik.zeta.cli.state.CommandResult
+import de.gematik.zeta.cli.state.isRegistered
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 
@@ -42,7 +44,20 @@ class RegisterCommand : ZetaSessionCommand(name = "register") {
         log.info { "Registering with authorization server for $resource" }
         openSession(resource = resource, scopes = emptyList()) { sdk, _ ->
             runBlocking { sdk.register().getOrThrow() }
-            renderEntry(loadEntry(resource), reveal)
+            val entry = loadEntry(resource)
+            renderResult(
+                CommandResult(
+                    operation = "register",
+                    ok = entry.status.isRegistered,
+                    endpoint = resource,
+                    scopes = emptyList(),
+                    authServer = entry.issuer,
+                    status = entry.status,
+                    detail = if (entry.status.isRegistered) "client registered" else "registration failed",
+                ),
+                entry = entry,
+                reveal = reveal,
+            )
         }
     }
 }

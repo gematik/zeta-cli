@@ -7,17 +7,12 @@ import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.originOf
-import de.gematik.zeta.cli.output.OutputFormat
-import de.gematik.zeta.cli.output.renderJson
-import de.gematik.zeta.cli.output.renderSections
-import de.gematik.zeta.cli.state.renderEntryJson
-import de.gematik.zeta.cli.state.renderEntryText
+import de.gematik.zeta.cli.state.CommandResult
+import de.gematik.zeta.cli.state.hasUsableCredentials
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.SdkStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 
 private val log = KotlinLogging.logger {}
 
@@ -84,38 +79,23 @@ class LoginCommand : ZetaSessionCommand(name = "login") {
 
     private fun renderLogin(resource: String, ranRegister: Boolean, ranAuthenticate: Boolean) {
         val entry = loadEntry(resource)
-        when (cliConfig.outputFormat) {
-            OutputFormat.JSON -> echo(
-                renderJson(
-                    buildJsonObject {
-                        put(
-                            "trace",
-                            buildJsonObject {
-                                put("register", JsonPrimitive(if (ranRegister) "ran" else "skipped"))
-                                put("authenticate", JsonPrimitive(if (ranAuthenticate) "ran" else "skipped"))
-                            },
-                        )
-                        put("result", renderEntryJson(entry, reveal))
-                    },
-                    colorize = colorize,
-                ),
-            )
-
-            OutputFormat.TEXT, OutputFormat.RAW -> {
-                echo(
-                    renderSections(colorize = colorize) {
-                        section("Login trace") {
-                            field("register", if (ranRegister) "ran" else "skipped (already registered)")
-                            field(
-                                "authenticate",
-                                if (ranAuthenticate) "ran" else "skipped (token still valid)",
-                            )
-                        }
-                    },
-                )
-                echo("")
-                echo(renderEntryText(entry, colorize, reveal))
-            }
+        val steps = buildList {
+            if (ranRegister) add("registered")
+            if (ranAuthenticate) add("authenticated")
         }
+        renderResult(
+            CommandResult(
+                operation = "login",
+                ok = entry.status.hasUsableCredentials,
+                endpoint = resource,
+                scopes = scopes,
+                authServer = entry.issuer,
+                status = entry.status,
+                detail = if (steps.isEmpty()) "already authenticated — nothing to do"
+                else "ran ${steps.joinToString(" + ")}",
+            ),
+            entry = entry,
+            reveal = reveal,
+        )
     }
 }

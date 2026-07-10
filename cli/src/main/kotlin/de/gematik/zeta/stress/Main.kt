@@ -24,6 +24,7 @@ import de.gematik.zeta.stress.scenario.Expire
 import de.gematik.zeta.stress.scenario.PoppPicker
 import de.gematik.zeta.stress.scenario.Scenario
 import de.gematik.zeta.stress.scenario.ScenarioDeps
+import de.gematik.zeta.stress.report.LiveReport
 import de.gematik.zeta.stress.report.PhaseDef
 import de.gematik.zeta.stress.report.PhaseSpan
 import de.gematik.zeta.stress.report.ReportWriter
@@ -66,6 +67,7 @@ internal fun applyLogLevel(verbosity: Int) {
         else -> Level.TRACE
     }
     (LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger).level = level
+    de.gematik.zeta.cli.SdkLogBridge.install(verbosity)
 }
 
 /** k9s-style live panel on a TTY; a plain per-second line when piped, so logs/reports stay clean. */
@@ -223,6 +225,28 @@ class RunCommand : CliktCommand(name = "run") {
                 poppPicker = if (request?.popp == true) PoppPicker(PoppStore(db)) else null,
             )
             val start = d.clockMs()
+            val profileName = Path.of(profileFile).fileName.toString().substringBeforeLast('.')
+            val reportDir = ReportWriter.folder(profileName, startedAt)
+            // plannedMs / phaseDefs / phaseSpans are assigned synchronously at the top of each branch
+            // below (before the long run call), so this builder captures them by reference and reads
+            // their final values on every tick.
+            val buildMeta = {
+                RunMeta(
+                    title = prof.title,
+                    resource = resource,
+                    host = host,
+                    scenario = scenarioLabel,
+                    cohort = clients.size,
+                    concurrency = prof.concurrency,
+                    startedAt = startedAt,
+                    plannedMs = plannedMs,
+                    wallMs = d.clockMs() - start,
+                    phaseDefs = phaseDefs,
+                    phaseSpans = phaseSpans,
+                )
+            }
+            val live = LiveReport(reportDir, buildMeta, d.reporter::rows).also { it.start() }
+            try {
             val rampSpec = prof.ramp
             if (rampSpec != null) {
                 plannedMs = rampSpec.durationMs ?: run {
@@ -264,23 +288,12 @@ class RunCommand : CliktCommand(name = "run") {
                     echo("Aborted early — sustained failure rate exceeded ${(prof.abortOnFailFraction!! * 100).toInt()}% (guard likely collapsed; set 'abort-on-fail-pct: 100' to disable)")
                 }
             }
+            } finally {
+                live.close()
+            }
 
-            val reportDir = ReportWriter.write(
-                RunMeta(
-                    resource = resource,
-                    host = host,
-                    scenario = scenarioLabel,
-                    cohort = clients.size,
-                    concurrency = prof.concurrency,
-                    insecure = prof.insecure,
-                    startedAt = startedAt,
-                    plannedMs = plannedMs,
-                    wallMs = d.clockMs() - start,
-                    phaseDefs = phaseDefs,
-                    phaseSpans = phaseSpans,
-                ),
-                d.reporter.rows(),
-            )
+            // Authoritative final write, after the live cadence has stopped so it can't race a tick.
+            ReportWriter.write(reportDir, buildMeta(), d.reporter.rows())
             echo("Report: ${reportDir.toAbsolutePath()}/report.html")
         }
     }

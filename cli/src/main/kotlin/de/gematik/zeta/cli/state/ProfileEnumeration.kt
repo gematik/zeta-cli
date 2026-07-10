@@ -1,6 +1,7 @@
 package de.gematik.zeta.cli.state
 
-import de.gematik.zeta.cli.storage.JsonFileStorage
+import de.gematik.zeta.cli.storage.ProfileDb
+import de.gematik.zeta.cli.storage.SqliteSdkStorage
 import de.gematik.zeta.sdk.SdkStatus
 import de.gematik.zeta.sdk.authentication.AuthenticationStorage
 import de.gematik.zeta.sdk.authentication.AuthenticationStorageImpl
@@ -9,11 +10,9 @@ import de.gematik.zeta.sdk.clientregistration.ClientRegistrationStorageImpl
 import de.gematik.zeta.sdk.clientregistration.model.ClientRegistrationResponse
 import de.gematik.zeta.sdk.configuration.ConfigurationStorage
 import de.gematik.zeta.sdk.configuration.ConfigurationStorageImpl
-import de.gematik.zeta.sdk.configuration.models.AuthorizationServerMetadata
-import de.gematik.zeta.sdk.storage.ExtendedStorage
+import de.gematik.zeta.sdk.storage.ResourceScope
 import de.gematik.zeta.sdk.storage.SdkStorage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.nio.file.Path
 import java.util.Base64
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -66,54 +65,45 @@ internal data class RegistrationInfo(
 }
 
 /**
- * Adapter onto a profile's on-disk storage file. The four sub-storages share a single
- * [JsonFileStorage] so reads see a consistent snapshot. All four interfaces are SDK
- * publics — the CLI re-uses them rather than parsing keys directly.
+ * Adapter onto one resource scope's slice of a profile's SQLite storage. The three sub-storages
+ * share a single [SqliteSdkStorage] bound to `scope`; all three are SDK publics, so the CLI
+ * reuses them rather than parsing keys directly.
  */
-internal class ProfileStores(path: Path) {
-    val storage: SdkStorage = JsonFileStorage(path)
-    val configuration: ConfigurationStorage = ConfigurationStorageImpl(storage)
-    val registration: ClientRegistrationStorage = ClientRegistrationStorageImpl(storage)
-    val authentication: AuthenticationStorage = AuthenticationStorageImpl(storage)
+internal class ProfileStores(val scope: ResourceScope, db: ProfileDb) {
+    private val storage: SdkStorage = SqliteSdkStorage(scope.storageKey, db)
+    val configuration: ConfigurationStorage = ConfigurationStorageImpl(storage, scope)
+    val registration: ClientRegistrationStorage = ClientRegistrationStorageImpl(storage, scope)
+    val authentication: AuthenticationStorage = AuthenticationStorageImpl(storage, scope)
 }
 
 /**
- * List every resource cached in the profile. Uses [ConfigurationStorageImpl.RESOURCE_INDEX_KEY]
- * to enumerate FQDNs — the public `ConfigurationStorage` interface itself doesn't expose
- * enumeration, so we go one layer deeper via [ExtendedStorage]. The two index/prefix
- * constants are public on the companion, so this isn't reaching into internal state.
+ * One [Entry] per resource scope recorded in the profile. zeta-sdk 1.2.2 dropped its resource
+ * index, so the CLI keeps its own registry ([ProfileDb.contexts]); each scope is read back
+ * through its own scope-bound [ProfileStores].
  */
-internal suspend fun enumerateEntries(stores: ProfileStores): List<Entry> {
-    val ext = ExtendedStorage(stores.storage)
-    val resFqdns = ext.getMap(ConfigurationStorageImpl.RESOURCE_INDEX_KEY)?.keys ?: return emptyList()
-    return resFqdns.map { entryFor(it, stores) }
-}
+internal suspend fun enumerateEntries(db: ProfileDb): List<Entry> =
+    db.contexts().map { scope -> entryFor(ProfileStores(scope, db)) }
 
 /**
- * Resolve one resource (by host FQDN) into a full [Entry]. Mirrors `ZetaSdkClient.status()`
- * in SDK 1.0.1+: tokens are keyed by the build-time resource URL (what
- * `AccessTokenProviderImpl` saves under), while registration is keyed by the AS issuer.
- *
- * `getAuthServer` / `getProtectedResource` normalise the input to the host, so a
- * synthesised `https://$fqdn/` is sufficient. Tokens saved with a non-default port at SDK
- * build time will not be found by this enumeration since the resource index drops the
- * port — that's an unavoidable side-effect of the FQDN-keyed index.
+ * Resolve one resource scope into a full [Entry]. Mirrors `ZetaSdkClient.status()`: the storages
+ * are already bound to the scope (getters take no resource argument), and registration is looked
+ * up by the AS registration endpoint, falling back to the issuer.
  */
-internal suspend fun entryFor(fqdn: String, stores: ProfileStores): Entry {
-    val fqdnUrl = "https://$fqdn/"
-    val resourceUrl = stores.configuration.getProtectedResource(fqdnUrl)?.resource ?: fqdnUrl
+internal suspend fun entryFor(stores: ProfileStores): Entry {
+    val resourceUrl = stores.configuration.getProtectedResource()?.resource ?: stores.scope.fqdn
 
-    val authServer = stores.configuration.getAuthServer(fqdnUrl)
+    val authServer = stores.configuration.getAuthServer()
         ?: return Entry(resourceUrl, null, SdkStatus.NOT_REGISTERED, null, null)
 
-    val regResponse = stores.registration.getRegistrationInfo(authServer.issuer)
+    val regKey = authServer.registrationEndpoint?.takeIf { it.isNotBlank() } ?: authServer.issuer
+    val regResponse = stores.registration.getRegistrationInfo(regKey)
         ?: return Entry(resourceUrl, authServer.issuer, SdkStatus.NOT_REGISTERED, null, null)
 
-    val expiresAt = stores.authentication.getTokenExpiration(fqdnUrl)?.toLongOrNull() ?: 0L
+    val expiresAt = stores.authentication.getTokenExpiration()?.toLongOrNull() ?: 0L
     val nowEpoch = System.currentTimeMillis() / 1000
     val tokensExpired = expiresAt <= nowEpoch
-    val accessJwt = stores.authentication.getAccessToken(fqdnUrl)
-    val refreshPresent = !stores.authentication.getRefreshToken(fqdnUrl).isNullOrBlank()
+    val accessJwt = stores.authentication.getAccessToken()
+    val refreshPresent = !stores.authentication.getRefreshToken().isNullOrBlank()
 
     val status = when {
         !accessJwt.isNullOrBlank() && refreshPresent && !tokensExpired ->

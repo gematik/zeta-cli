@@ -6,7 +6,6 @@ import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
 import de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider
-import de.gematik.zeta.sdk.authentication.smcb.SmcbTokenProvider
 import de.gematik.zeta.stress.identity.DbCardSigner
 import de.gematik.zeta.stress.db.IdentityStore
 import de.gematik.zeta.stress.db.Db
@@ -22,7 +21,9 @@ private val log = KotlinLogging.logger {}
  * enumeration round trips.
  *
  * The factory passed to [LazySubjectTokenProvider] is the work that used to happen
- * eagerly: lazy-connect the Connector, resolve the card handle, build [SmcbTokenProvider].
+ * eagerly: lazy-connect the Connector, resolve the card handle, build the signer. The mandant /
+ * client-system / workspace context lives on the [ConnectorSession], so the SDK's external-signer
+ * seam ([CustomSmcbTokenProvider]) only needs the resolved card handle.
  */
 internal fun buildConnectorTokenProvider(
     session: ConnectorSession,
@@ -38,18 +39,7 @@ internal fun buildConnectorTokenProvider(
         telematikId = telematikId,
     )
     log.info { "Using SMC-B card handle: $resolvedHandle" }
-    val dotkon = session.dotkon
-    SmcbTokenProvider(
-        SmcbTokenProvider.ConnectorConfig(
-            baseUrl = dotkon.url,
-            mandantId = dotkon.mandantId,
-            clientSystemId = dotkon.clientSystemId,
-            workspaceId = dotkon.workplaceId,
-            userId = dotkon.userId.orEmpty(),
-            cardHandle = resolvedHandle,
-        ),
-        connectorApi = ConnectorTokenProvider(connector),
-    )
+    CustomSmcbTokenProvider(ConnectorTokenProvider(connector, resolvedHandle))
 }
 
 /**

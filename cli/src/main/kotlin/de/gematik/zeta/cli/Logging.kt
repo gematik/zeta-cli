@@ -15,5 +15,6 @@ internal object Logging {
         }
         val ctx = LoggerFactory.getILoggerFactory() as LoggerContext
         ctx.getLogger(Logger.ROOT_LOGGER_NAME).level = level
+        SdkLogBridge.install(count)
     }
 }

@@ -2,7 +2,8 @@ package de.gematik.zeta.cli.sdk
 
 import de.gematik.zeta.cli.CliConfig
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
-import de.gematik.zeta.cli.storage.JsonFileStorage
+import de.gematik.zeta.cli.storage.ProfileDb
+import de.gematik.zeta.cli.storage.SqliteSdkStorage
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.BuildConfig
 import de.gematik.zeta.sdk.TpmConfig
@@ -13,6 +14,7 @@ import de.gematik.zeta.sdk.attestation.model.PlatformProductId
 import de.gematik.zeta.sdk.authentication.AuthConfig
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
+import de.gematik.zeta.sdk.storage.ResourceScope
 import de.gematik.zeta.sdk.storage.StorageConfig
 import de.gematik.zeta.sdk.tpm.TpmProvider
 import java.nio.file.Path
@@ -40,13 +42,18 @@ internal fun buildZetaSdkClient(
         "sdk.init",
         attrs = mapOf("resource" to resource, "scopes" to scopes.joinToString(",")),
     ) {
+        // The SDK isolates its own Default storage per resource, but not a Custom one, so we
+        // scope the DB ourselves by the resource+scope and register it for `zeta status`.
+        val db = ProfileDb(storagePath)
+        val scope = ResourceScope(resource, scopes)
+        db.recordContext(scope)
         ZetaSdk.build(
             resource,
             BuildConfig(
                 productId = "ZETA-Test-Client",
                 productVersion = "1.0.0",
                 clientName = "zeta-cli",
-                storageConfig = StorageConfig.Custom(JsonFileStorage(storagePath)),
+                storageConfig = StorageConfig.Custom(SqliteSdkStorage(scope.storageKey, db)),
                 tpmConfig = object : TpmConfig {},
                 authConfig =
                     AuthConfig(

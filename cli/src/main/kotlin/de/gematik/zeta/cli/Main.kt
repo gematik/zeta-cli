@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.subcommands
 import de.gematik.zeta.cli.client.HttpCommand
 import de.gematik.zeta.cli.client.WsCommand
 import de.gematik.zeta.cli.vsdm.VsdmCommand
+import de.gematik.zeta.cli.vsdm.VsdmGetCommand
 import de.gematik.zeta.cli.config.ConfigFileMissingException
 import de.gematik.zeta.cli.config.resolveConfigFile
 import de.gematik.zeta.cli.connector.ConnectorCommand
@@ -106,7 +107,7 @@ fun main(args: Array<String>) {
                     ForgetCommand(),
                     HttpCommand(),
                     WsCommand(),
-                    VsdmCommand(),
+                    VsdmCommand().subcommands(VsdmGetCommand()),
                     ConnectorCommand().subcommands(
                         ConnectorInspectCommand(),
                         ConnectorConfigsCommand(),

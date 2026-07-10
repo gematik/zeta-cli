@@ -9,6 +9,7 @@
 # `duration`. Keep rates near/below the box ceiling (~2350/min on the 2-core node) so the shape
 # stays visible rather than flat-lining into backpressure.
 
+title: Login storm — zeta-plain smoke
 resource: https://zeta-plain.t20r.cloud
 scope: zero:audience
 concurrency: 50
@@ -52,6 +53,7 @@ cycle:
 # Every key the run loader understands, with its default. Uncomment/adjust as needed.
 #
 # --- target & identity ---
+# title: My run                 # human-readable report heading (and browser-tab title)
 # db: stress.db                 # SQLite state file (or pass --db on the command line)
 # resource: https://…           # REQUIRED — resource origin (base URL)
 # scope: zero:audience          # or a list:  scopes: [a, b]. Access-token scope the SDK requests.

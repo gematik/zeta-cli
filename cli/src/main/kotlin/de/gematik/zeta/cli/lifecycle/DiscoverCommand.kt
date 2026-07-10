@@ -6,15 +6,17 @@ import de.gematik.zeta.cli.ZetaProfileCommand
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.output.OutputFormat
 import de.gematik.zeta.cli.output.renderJson
-import de.gematik.zeta.cli.output.renderSections
 import de.gematik.zeta.cli.sdk.NoopSubjectTokenProvider
 import de.gematik.zeta.cli.sdk.buildZetaSdkClient
+import de.gematik.zeta.cli.state.CommandResult
 import de.gematik.zeta.cli.state.ProfileStores
+import de.gematik.zeta.cli.state.renderResultText
+import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.sdk.ZetaSdkClientExtension
-import de.gematik.zeta.sdk.configuration.models.ApiVersion
 import de.gematik.zeta.sdk.configuration.models.AuthorizationServerMetadata
 import de.gematik.zeta.sdk.configuration.models.ProtectedResourceMetadata
+import de.gematik.zeta.sdk.storage.ResourceScope
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -61,12 +63,12 @@ class DiscoverCommand : ZetaProfileCommand(name = "discover") {
             ZetaSdkClientExtension.close(sdk)
         }
 
-        val stores = ProfileStores(zetaProfilePath(profile))
+        val stores = ProfileStores(ResourceScope(resource, emptyList()), ProfileDb(zetaProfilePath(profile)))
         val (resourceMeta, asMeta) = runBlocking {
-            val pr = stores.configuration.getProtectedResource(resource)
+            val pr = stores.configuration.getProtectedResource()
                 ?: error("discover() succeeded but no protected-resource metadata cached for $resource")
             val asUrl = pr.authorizationServers.firstOrNull()
-            val asm = asUrl?.let { stores.configuration.getAuthServer(resource) }
+            val asm = asUrl?.let { stores.configuration.getAuthServer() }
             pr to asm
         }
 
@@ -76,52 +78,20 @@ class DiscoverCommand : ZetaProfileCommand(name = "discover") {
     private fun render(resource: ProtectedResourceMetadata, authServer: AuthorizationServerMetadata?) {
         when (cliConfig.outputFormat) {
             OutputFormat.JSON -> echo(renderJson(toJsonEnvelope(resource, authServer), colorize = colorize))
-            OutputFormat.TEXT, OutputFormat.RAW -> echo(renderText(resource, authServer))
-        }
-    }
-
-    private fun renderText(
-        resource: ProtectedResourceMetadata,
-        authServer: AuthorizationServerMetadata?,
-    ): String = renderSections(colorize = colorize) {
-        section("Protected Resource") {
-            field("Resource", resource.resource)
-            field("Resource name", resource.resourceName)
-            field("Authorization servers", resource.authorizationServers.orEmpty())
-            field("Zeta ASL use", resource.zetaAslUse.name)
-            field("JWKS URI", resource.jwksUri)
-            field("Scopes supported", resource.scopesSupported.orEmpty())
-            field("Bearer methods", resource.bearerMethodsSupported?.map { it.name }.orEmpty())
-            field("Resource signing algs", resource.resourceSigningAlgValuesSupported.orEmpty())
-            field("Authorization details types", resource.authorizationDetailsTypesSupported.orEmpty())
-            field("DPoP signing algs", resource.dpopSigningAlgValuesSupported.orEmpty())
-            field("DPoP bound tokens required", resource.dpopBoundAccessTokensRequired.toString())
-            field("mTLS client cert bound tokens", resource.tlsClientCertificateBoundAccessTokens.toString())
-            field("API versions", resource.apiVersionsSupported?.map(::formatApiVersion).orEmpty())
-            field("Documentation", resource.resourceDocumentation)
-            field("Policy", resource.resourcePolicyUri)
-            field("ToS", resource.resourceTosUri)
-            field("Signed metadata", resource.signedMetadata)
-        }
-        if (authServer != null) {
-            section("Authorization Server") {
-                field("Issuer", authServer.issuer)
-                field("Authorization endpoint", authServer.authorizationEndpoint)
-                field("Token endpoint", authServer.tokenEndpoint)
-                field("Nonce endpoint", authServer.nonceEndpoint)
-                field("OpenID providers endpoint", authServer.openidProvidersEndpoint)
-                field("JWKS URI", authServer.jwksUri)
-                field("Scopes supported", authServer.scopesSupported.orEmpty())
-                field("Response types", authServer.responseTypesSupported.orEmpty())
-                field("Response modes", authServer.responseModesSupported.orEmpty())
-                field("Grant types", authServer.grantTypesSupported.orEmpty())
-                field("Token auth methods", authServer.tokenEndpointAuthMethodsSupported.orEmpty())
-                field("Token auth signing algs", authServer.tokenEndpointAuthSigningAlgValuesSupported.orEmpty())
-                field("Code challenge methods", authServer.codeChallengeMethodsSupported.orEmpty())
-                field("UI locales", authServer.uiLocalesSupported.orEmpty())
-                field("API versions", authServer.apiVersionsSupported?.map(::formatApiVersion).orEmpty())
-                field("Documentation", authServer.serviceDocumentation)
-            }
+            OutputFormat.TEXT, OutputFormat.RAW -> echo(
+                renderResultText(
+                    CommandResult(
+                        operation = "discover",
+                        ok = authServer != null,
+                        endpoint = resource.resource,
+                        scopes = resource.scopesSupported.orEmpty(),
+                        authServer = authServer?.issuer,
+                        status = null,
+                        detail = if (authServer == null) "no authorization server advertised" else null,
+                    ),
+                    colorize,
+                ),
+            )
         }
     }
 
@@ -144,10 +114,4 @@ class DiscoverCommand : ZetaProfileCommand(name = "discover") {
             explicitNulls = false
         }
     }
-}
-
-private fun formatApiVersion(v: ApiVersion): String {
-    val docs = v.documentationUri?.takeIf { it.isNotBlank() }
-    val base = "${v.version} (${v.status.name.lowercase()})"
-    return if (docs != null) "$base — $docs" else base
 }

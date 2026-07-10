@@ -10,14 +10,11 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.cli.ZetaProfileCommand
 import de.gematik.zeta.cli.client.originOf
-import de.gematik.zeta.cli.sdk.NoopSubjectTokenProvider
-import de.gematik.zeta.cli.sdk.buildZetaSdkClient
+import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.zetaProfilePath
-import de.gematik.zeta.sdk.ZetaSdk.forget
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Files
 import kotlin.io.path.exists
-import kotlinx.coroutines.runBlocking
 
 private val log = KotlinLogging.logger {}
 
@@ -25,11 +22,9 @@ private val log = KotlinLogging.logger {}
  * `zeta forget [URL]` / `zeta forget --all` — wipe SDK state for one resource or the
  * entire profile. No network calls; pure storage mutation.
  *
- *  - **`zeta forget URL`**: drive `ZetaSdk.forget(client)` so the SDK clears its own
- *    bookkeeping for this resource. The client is built with [NoopSubjectTokenProvider]
- *    because forget never calls `createSubjectToken` — auth options are not required, even
- *    though `forget` is a write. Loud failure if the assumption breaks.
- *  - **`zeta forget --all`**: delete the entire profile storage file. No SDK build at all.
+ *  - **`zeta forget URL`**: drop every cached scope for this resource from the profile DB
+ *    (all `sdk_state` rows plus its resource-context registry entries). No SDK build, no network.
+ *  - **`zeta forget --all`**: delete the entire profile storage database. No SDK build at all.
  *
  * Confirmation: interactive prompt by default, suppressed by `--force`. In a non-TTY
  * shell (piped, scripted) without `--force` we refuse rather than block or assume yes —
@@ -76,28 +71,29 @@ class ForgetCommand : ZetaProfileCommand(name = "forget") {
         val resource = originOf(rawUrl)
         if (!confirm("Forget all cached state for $resource in profile '$profile'?")) return
 
-        log.info { "Forgetting $resource via SDK" }
-        val sdk = buildZetaSdkClient(
-            resource = resource,
-            scopes = emptyList(),
-            storagePath = zetaProfilePath(profile),
-            tokenProvider = NoopSubjectTokenProvider,
-            cliConfig = cliConfig,
-        )
-        runBlocking { sdk.forget().getOrThrow() }
+        val db = ProfileDb(zetaProfilePath(profile))
+        val scopes = db.contextsForFqdn(resource)
+        if (scopes.isEmpty()) {
+            echo("No cached state for $resource in profile '$profile'. Nothing to forget.")
+            return
+        }
+        log.info { "Forgetting $resource (${scopes.size} scope(s)) in profile $profile" }
+        scopes.forEach { db.removeContext(it) }
         echo("Forgot $resource (profile: $profile).")
     }
 
     private fun forgetAll() {
         val path = zetaProfilePath(profile)
         if (!path.exists()) {
-            echo("Profile '$profile' has no storage file at $path. Nothing to forget.")
+            echo("Profile '$profile' has no storage database at $path. Nothing to forget.")
             return
         }
         if (!confirm("Delete the entire profile storage at $path?")) return
 
         log.info { "Deleting profile storage at $path" }
         Files.delete(path)
+        // SQLite WAL leaves sidecar files next to the DB; remove them so nothing lingers.
+        listOf("-wal", "-shm").forEach { Files.deleteIfExists(path.resolveSibling("${path.fileName}$it")) }
         echo("Deleted $path.")
     }
 

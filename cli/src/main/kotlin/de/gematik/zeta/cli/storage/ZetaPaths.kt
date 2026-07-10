@@ -17,12 +17,11 @@ private const val ZETA_SUBDIR = "telematik/zeta"
 fun zetaConfigDir(): Path = xdgConfigHome().resolve(ZETA_SUBDIR)
 
 /**
- * Path to the JSON state file for a named profile.
+ * Path to the SQLite state database for a named profile.
  *
- * `<zetaConfigDir>/<profile>.storage.json`. The compound `.storage.json` suffix leaves
- * room for future non-storage JSON files (configuration, exports, transient state)
- * to coexist in the same directory without name collisions. Multiple profiles let
- * users separate state per Connector / per environment without colliding; pair with
- * the `.kon` profile name for a one-to-one mapping.
+ * `<zetaConfigDir>/<profile>.storage.db`. The compound `.storage.db` suffix leaves room for
+ * other files (configuration, exports, transient state) to coexist in the same directory
+ * without name collisions. Multiple profiles let users separate state per Connector / per
+ * environment without colliding; pair with the `.kon` profile name for a one-to-one mapping.
  */
-fun zetaProfilePath(profile: String): Path = zetaConfigDir().resolve("$profile.storage.json")
+fun zetaProfilePath(profile: String): Path = zetaConfigDir().resolve("$profile.storage.db")

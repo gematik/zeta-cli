@@ -65,7 +65,7 @@ zeta login https://popp.dev.poppservice.de \
 
 - `zeta http URL` — HTTP request to a Zeta-protected resource (curl-like).
 - `zeta ws URL` — WebSocket to a Zeta-protected resource, round-tripping JSON from stdin.
-- `zeta vsdm [POPP-TOKEN]` — read a patient's VSDM bundle straight from a PoPP token: derives the environment and insurer from the token, resolves the VSDM endpoint via the TI service-discovery catalog, and fetches the bundle (scope `vsdservice`). Token falls back to `ZETA_POPP_TOKEN`.
+- `zeta vsdm get [POPP-TOKEN]` — read a patient's VSDM bundle straight from a PoPP token: derives the environment and insurer from the token, resolves the VSDM endpoint via the TI service-discovery catalog, and fetches the bundle (scope `vsdservice`). Token falls back to `ZETA_POPP_TOKEN`; `--endpoint URL` overrides the catalog routing with an explicit VSDM endpoint (base URL only).
 
 **Konnektor & PoPP**
 
@@ -141,9 +141,9 @@ Available on every command.
 
 ### Profile
 
-State (registrations, tokens) is namespaced by profile. Persisted as `$XDG_CONFIG_HOME/telematik/zeta/<profile>.storage.json`.
+State (registrations, tokens) is kept in a per-profile SQLite database at `$XDG_CONFIG_HOME/telematik/zeta/<profile>.storage.db`, scoped internally per resource + scope-set.
 
-Available on: `discover`, `status`, `register`, `authenticate`, `login`, `logout`, `forget`, `http`, `ws`, `vsdm`, `popp …`.
+Available on: `discover`, `status`, `register`, `authenticate`, `login`, `logout`, `forget`, `http`, `ws`, `vsdm get`, `popp …`.
 
 | Option | Env var | Default |
 | --- | --- | --- |
@@ -151,7 +151,7 @@ Available on: `discover`, `status`, `register`, `authenticate`, `login`, `logout
 
 ### Authentication
 
-Required by: `register`, `authenticate`, `login`, `logout`, `http`, `ws`, `vsdm`, `popp …`.
+Required by: `register`, `authenticate`, `login`, `logout`, `http`, `ws`, `vsdm get`, `popp …`.
 
 Pick a method via `--auth-method`, then supply that method's options.
 
@@ -236,7 +236,7 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | Option | Env var | Default |
 | --- | --- | --- |
 | `--auth-db=<file>` | `ZETA_AUTH_DB` | `stress.db` |
-| `--auth-db-telematik-id=<tid>` | `ZETA_AUTH_DB_TELEMATIK_ID` | required — except `zeta vsdm`, which derives it from the token's `actorId` |
+| `--auth-db-telematik-id=<tid>` | `ZETA_AUTH_DB_TELEMATIK_ID` | required — except `zeta vsdm get`, which derives it from the token's `actorId` |
 
 ### Command-specific options
 
@@ -245,7 +245,7 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | Option | Env var | Default |
 | --- | --- | --- |
 | `-s, --scope=<name>` (repeatable, required) — `authenticate` / `login` only | `ZETA_SCOPE` | — |
-| `--reveal` — include redacted secrets in status output | `ZETA_REVEAL` | `false` |
+| `--reveal` — expose redacted secrets; on the action verbs also appends the full cached entry | `ZETA_REVEAL` | `false` |
 
 #### `zeta forget`
 
@@ -273,13 +273,14 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | `-s, --scope=<name>` (repeatable, **required**) | `ZETA_SCOPE` | — |
 | `-p, --popp-token=<token>` | `ZETA_POPP_TOKEN` | — |
 
-#### `zeta vsdm [POPP-TOKEN]`
+#### `zeta vsdm get [POPP-TOKEN]`
 
 | Option | Env var | Default |
 | --- | --- | --- |
 | `POPP-TOKEN` (positional, optional) | `ZETA_POPP_TOKEN` | — |
+| `--endpoint=<url>` | — | — (resolve via catalog) |
 
-Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
+The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
 
 #### `zeta popp connector [EGK_HANDLE]`
 
@@ -321,7 +322,7 @@ First hit wins — files are never merged. When `-f` is passed (or `ZETA_CONFIG`
 
 ```yaml
 # ~/.config/telematik/zeta/zeta-popp-ru.yaml
-profile: popp-ru                  # SDK state lands in popp-ru.storage.json
+profile: popp-ru                  # SDK state lands in popp-ru.storage.db
 auth-method: connector
 auth-connector-telematik-id: "${SMCB_TID_RU}"
 scope: [popp]
@@ -336,7 +337,7 @@ zeta http https://popp.dev.poppservice.de/some/api
 zeta popp connector
 ```
 
-Pair each scenario file with its own `profile:` so SDK state (registrations, tokens) is also isolated — `popp-ru` writes to `popp-ru.storage.json`, `popp-tu` writes to `popp-tu.storage.json`, no cross-contamination.
+Pair each scenario file with its own `profile:` so SDK state (registrations, tokens) is also isolated — `popp-ru` writes to `popp-ru.storage.db`, `popp-tu` writes to `popp-tu.storage.db`, no cross-contamination.
 
 Single file only — there is no docker-compose-style multi-`-f` merging today.
 
@@ -418,17 +419,18 @@ A sticky option (e.g. `--connector-config`) declared at a parent depth (`zeta --
 - Logs go to **stderr**; data goes to **stdout** — safe for shell pipelines.
 - Default log level is `warn`. Bump with `-v` (info), `-vv` (debug), `-vvv` (trace).
 - `-o json` emits parseable JSON without colour when stdout is piped. `-o raw` (for `http`) prints the body verbatim with no framing.
+- `discover`, `register`, `authenticate`, `login`, and `logout` print a compact result — a green `✓` / red `✗` verdict with the endpoint, scopes, auth server, and resulting status. The verdict is the operation's own success test, not just the raw status (e.g. `login` is `✓` once an access **or** refresh token exists). Add `--reveal` for the full cached entry, or use `zeta status` for the detailed view.
 - Colour follows TTY detection and respects `NO_COLOR` / `FORCE_COLOR`.
 
 ## SDK version
 
-The CLI is built against a single `zeta-sdk` version (`1.2.0`), pinned in
+The CLI is built against a single `zeta-sdk` version (`1.2.2`), pinned in
 `gradle/libs.versions.toml`. `zeta version` prints it:
 
 ```sh
 $ zeta version
-zeta-cli 0.8.2
-zeta-sdk 1.2.0
+zeta-cli 0.9.0
+zeta-sdk 1.2.2
 ```
 
 Override the pin at build time with `-PzetaSdkVersion=<tag>` (e.g. `latest` from mavenLocal).
@@ -474,7 +476,7 @@ just demo      # render demo.gif from demo.tape (requires vhs)
 
 ### Building against a different `zeta-sdk`
 
-By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.2.0`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
+By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.2.2`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
 
 ```sh
 # Use whatever you publishToMavenLocal'd as `latest`

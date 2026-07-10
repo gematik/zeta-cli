@@ -105,17 +105,20 @@ export ZETA_POPP_TOKEN="$(zeta popp connector --auth-method connector --auth-con
 
 ## 5. Call the VSDM service (TK)
 
-With `ZETA_POPP_TOKEN` exported from step 4, read the insured's VSD bundle. `zeta vsdm` derives
+With `ZETA_POPP_TOKEN` exported from step 4, read the insured's VSD bundle. `zeta vsdm get` derives
 the environment and the insurer's VSDM endpoint from the token, logs in against that resource on
 first use (same connector auth), adds the bearer token for the `vsdservice` scope, forwards the
 token as the `PoPP` header, and renders the returned FHIR bundle as JSON:
 
 ```sh
-zeta vsdm \
+zeta vsdm get \
   --auth-method connector \
   --auth-connector-card-iccsn "$SMCB_ICCSN" \
   -vv
 ```
+
+To bypass service-discovery routing and read from a specific VSDM endpoint, add
+`--endpoint https://vsdm-dev.example.de` (base URL only — the standard VSDM path is appended).
 
 This is where the *Techniker Krankenkasse* test eGK matters — it backs a working VSDM read.
 Without a PoPP token (argument or `ZETA_POPP_TOKEN`) the command has nothing to resolve; with one
