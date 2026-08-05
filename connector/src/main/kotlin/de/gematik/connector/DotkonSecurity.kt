@@ -5,11 +5,13 @@ import java.security.KeyStore
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import javax.naming.ldap.LdapName
 import javax.net.ssl.KeyManager
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
+import javax.security.auth.x500.X500Principal
 
 /**
  * Build the [X509TrustManager] implied by [dotkon].
@@ -56,6 +58,35 @@ fun Dotkon.toSslContext(): SSLContext {
         init(keys.toTypedArray(), arrayOf(trust), null)
     }
 }
+
+// dNSName / iPAddress GeneralName tags — the two subjectAltName kinds a TLS client matches on.
+private const val SAN_DNS = 2
+private const val SAN_IP = 7
+
+/**
+ * Verify [host] against a server [cert] the way a TLS client would, but with a legacy
+ * Common-Name fallback. Per RFC 6125 a present subjectAltName wins outright (the CN is
+ * ignored whenever any SAN exists); only a **SAN-less** cert falls back to matching the
+ * subject CN. That CN path is opt-in — it runs solely for a `.kon` that sets `expectedHost`,
+ * covering self-signed Konnektor certs (e.g. `CN=server`, no SAN) that predate SAN usage,
+ * which modern verifiers reject outright.
+ */
+fun verifyHostname(cert: X509Certificate, host: String): Boolean {
+    val sans = runCatching { cert.subjectAlternativeNames }.getOrNull()
+    if (!sans.isNullOrEmpty()) {
+        return sans.any { entry ->
+            val type = entry.getOrNull(0) as? Int
+            val value = entry.getOrNull(1) as? String
+            (type == SAN_DNS || type == SAN_IP) && value != null && value.equals(host, ignoreCase = true)
+        }
+    }
+    return commonName(cert.subjectX500Principal)?.equals(host, ignoreCase = true) == true
+}
+
+private fun commonName(principal: X500Principal): String? =
+    LdapName(principal.getName(X500Principal.RFC2253)).rdns
+        .firstOrNull { it.type.equals("CN", ignoreCase = true) }
+        ?.value?.toString()
 
 // ---- internals shared across engines --------------------------------------------------
 

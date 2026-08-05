@@ -4,12 +4,13 @@ import de.gematik.connector.Dotkon
 import de.gematik.connector.dotkonAuth
 import de.gematik.connector.toKeyManagers
 import de.gematik.connector.toTrustManager
+import de.gematik.connector.verifyHostname
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.engine.okhttp.OkHttpConfig
+import java.security.cert.X509Certificate
 import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 
 /**
@@ -34,10 +35,11 @@ import javax.net.ssl.SSLContext
  * the Konnektor's `ExternalAuthenticate` SOAP call.
  *
  * **SNI caveat:** OkHttp derives the SNI server name from the request URL's host. The
- * `expectedHost` field of [Dotkon] is wired into hostname *verification* here, but
- * cannot retarget the SNI hint without a custom socket factory. If you need SNI to
- * differ from the URL host, you'd need a different engine (Apache, or a custom
- * `SSLSocketFactory` that overrides `createSocket`).
+ * `expectedHost` field of [Dotkon] is wired into hostname *verification* here (matching
+ * SANs, then the subject CN for SAN-less self-signed Konnektor certs — see
+ * [verifyHostname]), but cannot retarget the SNI hint without a custom socket factory. If
+ * you need SNI to differ from the URL host, you'd need a different engine (Apache, or a
+ * custom `SSLSocketFactory` that overrides `createSocket`).
  */
 fun dotkonOkHttpClient(
     dotkon: Dotkon,
@@ -71,8 +73,12 @@ fun OkHttpConfig.dotkonTls(dotkon: Dotkon) {
             dotkon.insecureSkipVerify -> hostnameVerifier(HostnameVerifier { _, _ -> true })
             !dotkon.expectedHost.isNullOrBlank() -> {
                 val expected = dotkon.expectedHost
-                val default = HttpsURLConnection.getDefaultHostnameVerifier()
-                hostnameVerifier(HostnameVerifier { _, session -> default.verify(expected, session) })
+                hostnameVerifier(
+                    HostnameVerifier { _, session ->
+                        (session.peerCertificates.firstOrNull() as? X509Certificate)
+                            ?.let { verifyHostname(it, expected) } ?: false
+                    },
+                )
             }
         }
     }
