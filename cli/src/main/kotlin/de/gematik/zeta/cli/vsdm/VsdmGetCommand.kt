@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
+import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.catalog.CatalogException
 import de.gematik.zeta.catalog.Environment
@@ -27,7 +28,7 @@ import kotlinx.serialization.json.Json
 
 private val log = KotlinLogging.logger {}
 
-private const val VSDM_PATH = "/vsdservice/v1/vsdmbundle?profileVersion=1.0"
+private const val VSDM_PATH = "/vsdservice/v1/vsdmbundle"
 
 // Placeholder ETag: never matches, so the server always returns the full bundle (200). Real
 // conditional-request (If-None-Match) handling comes later.
@@ -65,6 +66,12 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         help = "Skip service-discovery routing and read from this VSDM endpoint. Base URL only " +
             "(scheme + host[:port]); any path is ignored — the standard VSDM path is appended.",
     )
+
+    private val profileVersion: String by option(
+        "--profile-version",
+        metavar = "VERSION",
+        help = "VSDM profile version requested from the endpoint (profileVersion query parameter).",
+    ).default("1.1")
 
     // Sign as the SMC-B that obtained the PoPP token (its actorId), so `--auth-db-telematik-id` is
     // never needed for `zeta vsdm get --auth-method db`.
@@ -107,7 +114,7 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
 
         val baseUrl = resolveBaseUrl(env, claims.insurerId)
 
-        val targetUrl = baseUrl.trimEnd('/') + VSDM_PATH
+        val targetUrl = baseUrl.trimEnd('/') + VSDM_PATH + "?profileVersion=$profileVersion"
         val resource = originOf(targetUrl)
 
         openSession(resource = resource, scopes = listOf("vsdservice")) { sdk, _ ->
