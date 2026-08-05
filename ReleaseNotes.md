@@ -1,6 +1,11 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.9.2
+### changes
+- Fix `.kon` `expectedHost` TLS verification: the option delegated to a deny-all JDK verifier and never matched
+- Verify the hostname against subjectAltNames, falling back to the subject CN for SAN-less self-signed Konnektor certs (e.g. `CN=server`)
+
 ## Release 0.9.1
 ### changes
 - Bump `zeta-sdk` dependency to 1.2.5
