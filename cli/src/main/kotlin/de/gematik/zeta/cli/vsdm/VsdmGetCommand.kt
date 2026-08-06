@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.catalog.CatalogException
 import de.gematik.zeta.catalog.Environment
@@ -15,7 +16,9 @@ import de.gematik.zeta.cli.client.POPP_HEADER_NAME
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
+import de.gematik.zeta.cli.client.parseHeaderOption
 import de.gematik.zeta.cli.output.renderJson
+import de.gematik.zeta.cli.output.renderXml
 import de.gematik.zeta.cli.state.claimString
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpResponse
 import de.gematik.zeta.stress.identity.PoppJwt
@@ -73,6 +76,15 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         help = "VSDM profile version requested from the endpoint (profileVersion query parameter).",
     ).default("1.1")
 
+    private val requestHeaders: List<String> by option(
+        "-H", "--header",
+        metavar = "NAME: VALUE",
+        envvar = "ZETA_VSDM_HEADER",
+        help = "Override or add an inner VSDM request header ('Name: Value'). Replaces the built-in " +
+            "Accept / If-None-Match / PoPP defaults by name (case-insensitive); does not affect the " +
+            "outer ASL (CBOR) transport. Repeatable. (env: ZETA_VSDM_HEADER)",
+    ).multiple()
+
     // Sign as the SMC-B that obtained the PoPP token (its actorId), so `--auth-db-telematik-id` is
     // never needed for `zeta vsdm get --auth-method db`.
     private var poppActorId: String? = null
@@ -122,11 +134,18 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
             try {
                 runBlocking {
                     log.info { "GET $targetUrl (scope vsdservice)" }
+                    // Ktor's header(...) appends, so a user override of e.g. Accept would send
+                    // two values — key by lower-cased name so an override replaces the default.
+                    val headers = LinkedHashMap<String, Pair<String, String>>()
+                    fun putHeader(name: String, value: String) { headers[name.lowercase()] = name to value }
+                    putHeader(HttpHeaders.Accept, "application/fhir+json")
+                    putHeader(HttpHeaders.IfNoneMatch, EMPTY_ETAG)
+                    putHeader(POPP_HEADER_NAME, token)
+                    requestHeaders.map(::parseHeaderOption).forEach { (n, v) -> putHeader(n, v) }
+
                     val response = client.request(targetUrl) {
                         method = HttpMethod.Get
-                        header(HttpHeaders.Accept, "application/fhir+json")
-                        header(HttpHeaders.IfNoneMatch, EMPTY_ETAG)
-                        header(POPP_HEADER_NAME, token)
+                        headers.values.forEach { (n, v) -> header(n, v) }
                     }
                     log.info { "response: HTTP ${response.status.value}" }
                     renderResponse(response)
@@ -170,20 +189,73 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
     }
 
     private suspend fun renderResponse(response: ZetaHttpResponse) {
-        if (response.status.value !in 200..299) {
-            log.warn { "VSDM request returned HTTP ${response.status.value} ${response.status.description}" }
+        val status = response.status.value
+        val contentType = response.contentType()
+        val bytes = response.bodyAsBytes()
+
+        // A non-2xx VSDM read is a failure, not a result — fail the command (non-zero exit)
+        // with the server's reason rather than silently printing the body and exiting 0.
+        if (status !in 200..299) {
+            val reason = readableBody(bytes)?.let { ": $it" }
+                ?: binaryNote(bytes, contentType)?.let { " ($it)" }
+                ?: ""
+            throw CliktError("VSDM request failed: HTTP $status ${response.status.description}$reason")
         }
-        val body = response.bodyAsText()
-        if (body.isEmpty()) {
-            echo("HTTP ${response.status.value} ${response.status.description} (empty body)")
+
+        if (bytes.isEmpty()) {
+            echo("HTTP $status ${response.status.description} (empty body)")
             return
         }
-        val element = runCatching { Json.parseToJsonElement(body) }.getOrNull()
-        if (element != null) {
-            echo(renderJson(element, colorize = colorize))
-        } else {
-            log.warn { "response body is not JSON; printing raw" }
-            echo(body)
+
+        if (looksLikeJson(contentType)) {
+            val text = bytes.decodeToString()
+            val element = runCatching { Json.parseToJsonElement(text) }.getOrNull()
+            if (element != null) {
+                echo(renderJson(element, colorize = colorize))
+                return
+            }
+            log.warn { "response Content-Type claims JSON but body is not parseable; printing raw" }
+            echo(text)
+            return
         }
+
+        if (isFhirXml(contentType)) {
+            echo(renderXml(bytes.decodeToString(), colorize = colorize))
+            return
+        }
+
+        // Non-JSON success body. VSDM serves the bundle as application/cbor under newer
+        // profiles; CBOR is not decoded here, so print the payload when it is actually text
+        // and otherwise describe it — never dump raw binary as mangled UTF-8.
+        echo(readableBody(bytes) ?: "<${binaryNote(bytes, contentType) ?: "empty body"}>")
+    }
+
+    private fun ZetaHttpResponse.contentType(): String =
+        headers.entries.firstOrNull { it.key.equals(HttpHeaders.ContentType, ignoreCase = true) }
+            ?.value
+            .orEmpty()
+
+    private fun looksLikeJson(contentType: String): Boolean =
+        contentType.contains("application/json", ignoreCase = true) ||
+            contentType.contains("+json", ignoreCase = true)
+
+    private fun isFhirXml(contentType: String): Boolean =
+        contentType.substringBefore(';').trim().equals("application/fhir+xml", ignoreCase = true)
+
+    /** The body as text when it decodes to printable characters (e.g. a plain error string), else null. */
+    private fun readableBody(bytes: ByteArray): String? {
+        if (bytes.isEmpty()) return null
+        val text = bytes.decodeToString()
+        val printable = text.none { it == '�' } &&
+            text.all { it == '\n' || it == '\r' || it == '\t' || !it.isISOControl() }
+        return if (printable) text.trim() else null
+    }
+
+    /** A one-line description of a non-text body (size + type), or null when empty. */
+    private fun binaryNote(bytes: ByteArray, contentType: String): String? {
+        if (bytes.isEmpty()) return null
+        val type = contentType.substringBefore(';').ifBlank { "binary" }
+        val cborHint = if (contentType.contains("cbor", ignoreCase = true)) "; CBOR decoding not supported" else ""
+        return "${bytes.size}-byte $type body$cborHint"
     }
 }

@@ -1,6 +1,13 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.9.3
+### changes
+- `zeta vsdm get` now fails (non-zero exit) with the server's reason on a non-2xx response, instead of silently printing the body and exiting 0
+- Render the VSDM response by its `content-type`: pretty-print JSON, show text bodies as text, and describe non-text bodies (e.g. `application/cbor`) instead of dumping mangled binary
+- Add `-H` / `--header` to `zeta vsdm get` to override or add inner-request headers (replaces the built-in `Accept` / `If-None-Match` / `PoPP` defaults by name)
+- Pretty-print `application/fhir+xml` VSDM responses (indented, syntax-highlighted on a TTY)
+
 ## Release 0.9.2
 ### changes
 - Fix `.kon` `expectedHost` TLS verification: the option delegated to a deny-all JDK verifier and never matched

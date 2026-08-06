@@ -279,8 +279,10 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | --- | --- | --- |
 | `POPP-TOKEN` (positional, optional) | `ZETA_POPP_TOKEN` | — |
 | `--endpoint=<url>` | — | — (resolve via catalog) |
+| `--profile-version=<version>` | — | `1.1` |
+| `-H, --header=<name: value>` | `ZETA_VSDM_HEADER` | — |
 
-The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
+The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). `--profile-version` sets the `profileVersion` query parameter sent to the endpoint (default `1.1`; pass `--profile-version 1.0` for the older profile). `-H, --header` overrides (or adds) headers on the inner VSDM request — it replaces the built-in `Accept` / `If-None-Match` / `PoPP` defaults by name (case-insensitive) and does not affect the outer ASL/CBOR transport. Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
 
 #### `zeta popp connector [EGK_HANDLE]`
 
