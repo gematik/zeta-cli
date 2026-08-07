@@ -23,6 +23,7 @@ import de.gematik.zeta.cli.lifecycle.RegisterCommand
 import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
+import de.gematik.zeta.cli.popp.PoppStandardCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import de.gematik.zeta.stress.stressCommand
@@ -114,17 +115,21 @@ fun main(args: Array<String>) {
                         ConnectorUseCommand(),
                         ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
                     ),
-                    PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand()),
+                    PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand(), PoppStandardCommand()),
                     stressCommand(),
                 )
                 .main(args)
             0
         } catch (e: Throwable) {
-            // Renders the message + stacktrace through Logback (so `-v`, NO_COLOR, the
-            // `zeta.stderr.pattern` formatting all apply) instead of the JVM's default uncaught
-            // handler. Without this branch the throwable would print *and then* the process
-            // would block on OkHttp's keepalive — much worse UX than an immediate exit 1.
-            log.error(e) { "Command failed" }
+            // Clikt's own errors (UsageError, CliktError, PrintHelpMessage, …) are handled inside
+            // `.main`; anything reaching here is an operational failure surfaced by a command
+            // (no reader, host unreachable, bad token, …). Show just the message — a stack trace
+            // is noise for these expected cases. The full trace stays available at DEBUG (`-vv`)
+            // for diagnosis. Routing through Logback keeps `-v`, NO_COLOR and the stderr pattern
+            // consistent, and returning (rather than letting it propagate) avoids the ~60s hang on
+            // OkHttp's non-daemon keepalive threads before the process can exit.
+            log.error { "Error: ${e.message ?: e.toString()}" }
+            log.debug(e) { "Command failed (stack trace)" }
             1
         }
     }

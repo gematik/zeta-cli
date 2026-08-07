@@ -50,6 +50,9 @@ dependencies {
 application {
     mainClass = "de.gematik.zeta.cli.MainKt"
     applicationName = "zeta"
+    // `zeta popp standard` uses javax.smartcardio (PC/SC), whose module java.smartcardio is not part
+    // of java.se and so isn't resolved by default for a classpath app — pull it in explicitly.
+    applicationDefaultJvmArgs = listOf("--add-modules", "java.smartcardio")
 }
 
 val generateBuildConfig by tasks.registering {
@@ -78,6 +81,10 @@ val generateBuildConfig by tasks.registering {
 
 kotlin {
     sourceSets["main"].kotlin.srcDir(generateBuildConfig)
+    // Resolve the java.smartcardio JDK module at compile time (see applicationDefaultJvmArgs).
+    compilerOptions {
+        freeCompilerArgs.add("-Xadd-modules=java.smartcardio")
+    }
 }
 
 tasks.named<Tar>("distTar") {

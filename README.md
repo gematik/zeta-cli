@@ -75,6 +75,7 @@ zeta login https://popp.dev.poppservice.de \
 - `zeta connector use <name>` — set the default `.kon` config for later commands.
 - `zeta popp connector` — get a PoPP token via the Konnektor's eGK flow.
 - `zeta popp kartos` — get a PoPP token via a kartos smartcard simulator.
+- `zeta popp standard` — get a PoPP token from a physical eGK the client reads directly (contact PC/SC card reader).
 
 **Tooling**
 
@@ -299,6 +300,16 @@ The `POPP-TOKEN` argument accepts the token itself or a path to a file holding o
 | --- | --- | --- |
 | `-i, --image=<path>` | `ZETA_POPP_KARTOS_IMAGE` | — |
 | `--kartos-bin=<path>` | `ZETA_KARTOS_BIN` | `kartos` on `PATH` |
+| `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
+
+#### `zeta popp standard`
+
+Drive the **Standard** flow (`cardConnectionType=*-standard`) against a **physically inserted eGK** that the client reads directly (`javax.smartcardio`) — no connector and no simulator. Each scenario APDU is transmitted straight to the card. Today this is a **contact** PC/SC card reader; contactless (PACE) and remote card terminals are future transports under the same `standard` verb. Requires a PC/SC stack (built in on macOS/Windows; `pcscd` on Linux).
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--reader=<name>` | `ZETA_POPP_READER` | the reader with a card inserted |
+| `--wait=<seconds>` | — | `0` (fail immediately when no card) |
 | `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
 
 **Note on repeatable options.** `--ca-cert`, `--header`, and `--scope` accept multiple values on the CLI (repeat the flag) and in `zeta.yaml` (YAML list), but their env var holds only a single value. Use the CLI flag or YAML when you need more than one.
