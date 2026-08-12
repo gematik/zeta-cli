@@ -282,8 +282,30 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | `--endpoint=<url>` | — | — (resolve via catalog) |
 | `--profile-version=<version>` | — | `1.1` |
 | `-H, --header=<name: value>` | `ZETA_VSDM_HEADER` | — |
+| `-i, --include` | `ZETA_VSDM_INCLUDE` | off |
 
 The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). `--profile-version` sets the `profileVersion` query parameter sent to the endpoint (default `1.1`; pass `--profile-version 1.0` for the older profile). `-H, --header` overrides (or adds) headers on the inner VSDM request — it replaces the built-in `Accept` / `If-None-Match` / `PoPP` defaults by name (case-insensitive) and does not affect the outer ASL/CBOR transport. Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
+
+**Automation output.** The default output prints just the bundle. `-i, --include` instead prints the whole response as an HTTP message — the status line, one header per line, a blank line, then the body — so a single pipe carries the response headers (`ETag`, the VSDM `PZ` / Prüfziffer, …) alongside the bundle:
+
+```
+HTTP/1.1 200 OK
+ETag: "a1b2c3"
+PZ: <pruefziffer>
+Content-Type: application/fhir+json
+
+{ "resourceType": "Bundle", … }
+```
+
+Parse it in bash by splitting on the first blank line — read a header, or take the body:
+
+```sh
+resp=$(zeta vsdm get … -i)
+etag=$(printf '%s\n' "$resp" | sed -n 's/^ETag: //Ip')          # a header value
+pz=$(printf '%s\n'   "$resp" | sed -n 's/^PZ: //Ip')            # the Prüfziffer
+body=$(printf '%s\n' "$resp" | sed '1,/^$/d')                   # everything after the blank line
+printf '%s\n' "$body" | jq .                                    # the FHIR bundle
+```
 
 #### `zeta popp connector [EGK_HANDLE]`
 

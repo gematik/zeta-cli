@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.catalog.CatalogException
@@ -17,6 +18,7 @@ import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.client.parseHeaderOption
+import de.gematik.zeta.cli.http.logInnerAslResponse
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderXml
 import de.gematik.zeta.cli.state.claimString
@@ -85,6 +87,15 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
             "outer ASL (CBOR) transport. Repeatable. (env: ZETA_VSDM_HEADER)",
     ).multiple()
 
+    // Automation-friendly output: dump the full response like curl -i (status line, headers, blank
+    // line, body) so a pipe carries the headers (ETag, PZ, …) alongside the body. Mirrors `zeta http -i`.
+    private val include: Boolean by option(
+        "-i", "--include",
+        envvar = "ZETA_VSDM_INCLUDE",
+        help = "Print the response as an HTTP message: status line, headers, a blank line, then the " +
+            "body. Lets a script read ETag / PZ alongside the bundle. (env: ZETA_VSDM_INCLUDE)",
+    ).flag(default = false)
+
     // Sign as the SMC-B that obtained the PoPP token (its actorId), so `--auth-db-telematik-id` is
     // never needed for `zeta vsdm get --auth-method db`.
     private var poppActorId: String? = null
@@ -148,6 +159,16 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
                         headers.values.forEach { (n, v) -> header(n, v) }
                     }
                     log.info { "response: HTTP ${response.status.value}" }
+                    // The wire logger only sees the encrypted ASL envelope; surface the decrypted
+                    // inner response too, so `-vv` shows it like the (already-logged) inner request.
+                    if (!response.isPlainResponse()) {
+                        logInnerAslResponse(
+                            response.status.value,
+                            response.status.description,
+                            response.headers,
+                            response.bodyAsBytes(),
+                        )
+                    }
                     renderResponse(response)
                 }
             } finally {
@@ -200,6 +221,13 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
                 ?: binaryNote(bytes, contentType)?.let { " ($it)" }
                 ?: ""
             throw CliktError("VSDM request failed: HTTP $status ${response.status.description}$reason")
+        }
+
+        // `-i`: emit the whole thing as an HTTP message (status line, headers, blank line, body) so a
+        // pipe carries the headers alongside the body. The body is left raw — a faithful response.
+        if (include) {
+            echo(httpResponseText(status, response.status.description, response.headers, bytes))
+            return
         }
 
         if (bytes.isEmpty()) {
