@@ -1,6 +1,13 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.10.0
+### changes
+- Add `zeta popp standard` — retrieve a PoPP token from a physical eGK the client reads directly, via a contact PC/SC card reader (`javax.smartcardio`); contactless/PACE and remote terminals not yet supported
+- Expected command failures now print just their message (no stack trace); the full trace stays available at `-vv`
+- Add `-i` / `--include` to `zeta vsdm get` — print the response as an HTTP message (status line, headers, a blank line, then the body) so a pipeline can read `ETag` and the VSDM `PZ` (Prüfziffer) alongside the bundle
+- Log the decrypted inner ASL response at `-vv` for `zeta vsdm get` and `zeta http` — the wire log previously showed the inner ASL request but only the encrypted (undecryptable) response envelope
+
 ## Release 0.9.3
 ### changes
 - `zeta vsdm get` now fails (non-zero exit) with the server's reason on a non-2xx response, instead of silently printing the body and exiting 0

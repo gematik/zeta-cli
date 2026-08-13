@@ -94,6 +94,40 @@ object WireLogger : Logger {
 val wireLogLevel: LogLevel
     get() = if (wireLog.isDebugEnabled()) LogLevel.ALL else LogLevel.NONE
 
+/**
+ * Log a decrypted inner ASL response through the same `de.gematik.zeta.http.wire` logger as every
+ * other response. The SDK's Logging plugin only ever observes the encrypted ASL envelope, so the
+ * inner business response is otherwise invisible at `-vv` even though the inner request is shown.
+ *
+ * The response is reconstructed in the Ktor Logging plugin's own wire-dump shape and handed to
+ * [reformatHttpLog], so it renders identically to the surrounding request/response groups.
+ */
+internal fun logInnerAslResponse(
+    status: Int,
+    reason: String,
+    headers: Map<String, String>,
+    body: ByteArray,
+) {
+    if (!wireLog.isDebugEnabled()) return
+    wireLog.debug { reformatHttpLog(innerAslResponseWireDump(status, reason, headers, body)) }
+}
+
+/** The inner ASL response as a Ktor Logging-plugin wire dump, ready for [reformatHttpLog]. */
+internal fun innerAslResponseWireDump(
+    status: Int,
+    reason: String,
+    headers: Map<String, String>,
+    body: ByteArray,
+): String = buildString {
+    append("RESPONSE: ").append(status)
+    if (reason.isNotBlank()) append(' ').append(reason)
+    append("\nCOMMON HEADERS")
+    headers.forEach { (name, value) -> append("\n-> ").append(name).append(": ").append(value) }
+    val contentType = headers.entries.firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }?.value
+    append("\nBODY Content-Type: ").append(contentType ?: "null")
+    append("\nBODY START\n").append(body.decodeToString()).append("\nBODY END")
+}
+
 // Ktor's Logging plugin emits "METHOD: HttpMethod(value=GET)" — strip the wrapper.
 private val ktorMethodPattern = Regex("""value=(\w+)""")
 

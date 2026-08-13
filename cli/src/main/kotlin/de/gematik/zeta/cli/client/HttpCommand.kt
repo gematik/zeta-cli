@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
+import de.gematik.zeta.cli.http.logInnerAslResponse
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
@@ -99,6 +100,16 @@ class HttpCommand : ZetaSessionCommand("http") {
             try {
                 runBlocking {
                     val response = sendRequest(client, method, parsedHeaders, requestBody)
+                    // The wire logger only sees the encrypted ASL envelope; surface the decrypted
+                    // inner response too, so `-vv` shows it like the (already-logged) inner request.
+                    if (!response.isPlainResponse()) {
+                        logInnerAslResponse(
+                            response.status.value,
+                            response.status.description,
+                            response.headers,
+                            response.bodyAsBytes(),
+                        )
+                    }
                     printResponse(response)
                 }
             } finally {

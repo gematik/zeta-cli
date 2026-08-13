@@ -120,6 +120,16 @@ zeta vsdm get \
 To bypass service-discovery routing and read from a specific VSDM endpoint, add
 `--endpoint https://vsdm-dev.example.de` (base URL only — the standard VSDM path is appended).
 
+For automation, add `-i` to print the whole response as an HTTP message — status line, headers, a
+blank line, then the body — so the `ETag` and the VSDM `PZ` (Prüfziffer) come out alongside the
+bundle. Split it in bash on the first blank line:
+
+```sh
+resp=$(zeta vsdm get --auth-method connector --auth-connector-card-iccsn "$SMCB_ICCSN" -i)
+printf '%s\n' "$resp" | sed -n 's/^PZ: //Ip'    # the Prüfziffer header
+printf '%s\n' "$resp" | sed '1,/^$/d' | jq .    # the FHIR bundle (body after the blank line)
+```
+
 This is where the *Techniker Krankenkasse* test eGK matters — it backs a working VSDM read.
 Without a PoPP token (argument or `ZETA_POPP_TOKEN`) the command has nothing to resolve; with one
 whose `actorId` differs from the authenticated SMC-B, it warns but still reads.

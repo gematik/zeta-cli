@@ -75,6 +75,7 @@ zeta login https://popp.dev.poppservice.de \
 - `zeta connector use <name>` — set the default `.kon` config for later commands.
 - `zeta popp connector` — get a PoPP token via the Konnektor's eGK flow.
 - `zeta popp kartos` — get a PoPP token via a kartos smartcard simulator.
+- `zeta popp standard` — get a PoPP token from a physical eGK the client reads directly (contact PC/SC card reader).
 
 **Tooling**
 
@@ -281,8 +282,30 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | `--endpoint=<url>` | — | — (resolve via catalog) |
 | `--profile-version=<version>` | — | `1.1` |
 | `-H, --header=<name: value>` | `ZETA_VSDM_HEADER` | — |
+| `-i, --include` | `ZETA_VSDM_INCLUDE` | off |
 
 The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). `--profile-version` sets the `profileVersion` query parameter sent to the endpoint (default `1.1`; pass `--profile-version 1.0` for the older profile). `-H, --header` overrides (or adds) headers on the inner VSDM request — it replaces the built-in `Accept` / `If-None-Match` / `PoPP` defaults by name (case-insensitive) and does not affect the outer ASL/CBOR transport. Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
+
+**Automation output.** The default output prints just the bundle. `-i, --include` instead prints the whole response as an HTTP message — the status line, one header per line, a blank line, then the body — so a single pipe carries the response headers (`ETag`, the VSDM `PZ` / Prüfziffer, …) alongside the bundle:
+
+```
+HTTP/1.1 200 OK
+ETag: "a1b2c3"
+PZ: <pruefziffer>
+Content-Type: application/fhir+json
+
+{ "resourceType": "Bundle", … }
+```
+
+Parse it in bash by splitting on the first blank line — read a header, or take the body:
+
+```sh
+resp=$(zeta vsdm get … -i)
+etag=$(printf '%s\n' "$resp" | sed -n 's/^ETag: //Ip')          # a header value
+pz=$(printf '%s\n'   "$resp" | sed -n 's/^PZ: //Ip')            # the Prüfziffer
+body=$(printf '%s\n' "$resp" | sed '1,/^$/d')                   # everything after the blank line
+printf '%s\n' "$body" | jq .                                    # the FHIR bundle
+```
 
 #### `zeta popp connector [EGK_HANDLE]`
 
@@ -299,6 +322,16 @@ The `POPP-TOKEN` argument accepts the token itself or a path to a file holding o
 | --- | --- | --- |
 | `-i, --image=<path>` | `ZETA_POPP_KARTOS_IMAGE` | — |
 | `--kartos-bin=<path>` | `ZETA_KARTOS_BIN` | `kartos` on `PATH` |
+| `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
+
+#### `zeta popp standard`
+
+Drive the **Standard** flow (`cardConnectionType=*-standard`) against a **physically inserted eGK** that the client reads directly (`javax.smartcardio`) — no connector and no simulator. Each scenario APDU is transmitted straight to the card. Today this is a **contact** PC/SC card reader; contactless (PACE) and remote card terminals are future transports under the same `standard` verb. Requires a PC/SC stack (built in on macOS/Windows; `pcscd` on Linux).
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--reader=<name>` | `ZETA_POPP_READER` | the reader with a card inserted |
+| `--wait=<seconds>` | — | `0` (fail immediately when no card) |
 | `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
 
 **Note on repeatable options.** `--ca-cert`, `--header`, and `--scope` accept multiple values on the CLI (repeat the flag) and in `zeta.yaml` (YAML list), but their env var holds only a single value. Use the CLI flag or YAML when you need more than one.
