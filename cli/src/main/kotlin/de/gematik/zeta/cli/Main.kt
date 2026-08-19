@@ -24,6 +24,7 @@ import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
 import de.gematik.zeta.cli.popp.PoppStandardCommand
+import de.gematik.zeta.cli.serve.ServeCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
 import de.gematik.zeta.stress.stressCommand
@@ -116,6 +117,7 @@ fun main(args: Array<String>) {
                         ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
                     ),
                     PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand(), PoppStandardCommand()),
+                    ServeCommand(),
                     stressCommand(),
                 )
                 .main(args)

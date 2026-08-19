@@ -5,6 +5,7 @@ import de.gematik.zeta.cli.http.SdkLogBridge
 import de.gematik.zeta.cli.http.installSdkLogBridge
 import de.gematik.zeta.cli.http.wireLogLevel
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
+import kotlin.io.path.readText
 
 /**
  * Apply the CLI's shared HTTP options to a Zeta SDK [ZetaHttpClientBuilder]. Used at every
@@ -25,6 +26,9 @@ import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
  *   - `-k/--insecure` → disable server validation;
  *   - `--connect-timeout`/`--request-timeout` → forward to `ZetaHttpClientBuilder.timeouts(...)`;
  *   - `--proxy` (and `--proxy-user`/`--proxy-password`) → forward to `ZetaHttpClientBuilder.proxy(...)`;
+ *   - `--ca-cert FILE` (repeatable) → forward each PEM to `ZetaHttpClientBuilder.addCaPem(...)` so the
+ *     SDK's own discovery/registration/auth/ASL calls trust a private/internal CA, not just the CLI's
+ *     `zeta http`/`ws` client;
  *   - the curlie-style wire logger (via [SdkLogBridge]).
  *
  * SDK proxy caveats (as of `latest`):
@@ -36,14 +40,14 @@ import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
  *     OkHttp's `proxyAuthenticator`. Unauthenticated HTTP proxies and SOCKS work; HTTP
  *     proxies that require credentials will get a 407 from the SDK's internal calls.
  *
- * **Not** plumbed (intentionally):
- *   - `--ca-cert` (SDK builder has no hook for a custom trust manager).
  */
 internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(cliConfig: CliConfig): ZetaHttpClientBuilder {
     // Idempotent: every applyCliHttpDefaults() call ensures the bridge is installed before
     // the SDK fires any logging. `Log.setLogger` is global, so re-installing is harmless.
     installSdkLogBridge()
     disableServerValidation(cliConfig.insecure)
+    // addCaPem parses a whole PEM blob (root + intermediates in one --ca-cert file all count).
+    cliConfig.caCertFiles.forEach { addCaPem(it.readText()) }
     timeouts(
         connectMs = cliConfig.connectTimeout.inWholeMilliseconds,
         requestMs = cliConfig.requestTimeout.inWholeMilliseconds,

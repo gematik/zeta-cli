@@ -65,6 +65,31 @@ class ProfileDb(private val path: Path) {
             block(c)
         }
 
+    /**
+     * Generic key/value access into the `sdk_state` table under an arbitrary [context]. For
+     * CLI-owned data that belongs in the profile DB but isn't SDK state — e.g. the cached
+     * service-discovery catalog. Pick a [context] that can't collide with a
+     * [ResourceScope.storageKey] (which embeds a resource URL), so enumeration never sees it.
+     */
+    fun putState(context: String, key: String, value: String): Unit = withConnection { c ->
+        c.prepareStatement(
+            "INSERT OR REPLACE INTO sdk_state(context, key, value) VALUES (?, ?, ?)",
+        ).use { ps ->
+            ps.setString(1, context)
+            ps.setString(2, key)
+            ps.setString(3, value)
+            ps.executeUpdate()
+        }
+    }
+
+    fun getState(context: String, key: String): String? = withConnection { c ->
+        c.prepareStatement("SELECT value FROM sdk_state WHERE context = ? AND key = ?").use { ps ->
+            ps.setString(1, context)
+            ps.setString(2, key)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
     /** Register (or refresh) a resource scope so enumeration can find it later. */
     fun recordContext(scope: ResourceScope): Unit = withConnection { c ->
         c.prepareStatement(

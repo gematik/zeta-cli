@@ -98,4 +98,24 @@ class SoapDecodeException(
 class SoapFaultException(
     operation: String,
     val envelope: SoapEnvelope,
-) : ConnectorException("$operation reported a SOAP fault")
+) : ConnectorException(soapFaultMessage(operation, envelope)) {
+
+    /** The SOAP `faultstring` (the human-readable reason), extracted from the typed fault envelope if present. */
+    val faultstring: String? = soapFaultField(envelope, "getFaultstring")
+
+    /** The SOAP `faultcode`, if present. */
+    val faultcode: String? = soapFaultField(envelope, "getFaultcode")
+}
+
+private fun soapFaultMessage(operation: String, envelope: SoapEnvelope): String {
+    val detail = soapFaultField(envelope, "getFaultstring")?.takeIf { it.isNotBlank() }
+    return if (detail == null) "$operation reported a SOAP fault" else "$operation reported a SOAP fault: $detail"
+}
+
+// Every generated fault envelope shares the same body.fault.{faultstring,faultcode} shape; read it
+// reflectively so this one line stays generic across all envelope types without touching generated code.
+private fun soapFaultField(envelope: SoapEnvelope, getter: String): String? = runCatching {
+    val body = envelope.javaClass.getMethod("getBody").invoke(envelope)
+    val fault = body.javaClass.getMethod("getFault").invoke(body) ?: return null
+    fault.javaClass.getMethod(getter).invoke(fault) as? String
+}.getOrNull()

@@ -253,7 +253,11 @@ abstract class ZetaSessionCommand(
             cliConfig = cliConfig,
         ).also { log.debug { "Created Zeta SDK client" } }
 
-    private fun buildTokenProvider(): Pair<SubjectTokenProvider, ConnectorSession?> =
+    // `internal` (not `private`) so a long-running command in this module (e.g. `zeta serve`) can build
+    // the provider + connector session once and own their lifetime, instead of the per-action
+    // open/close in [openSession]. `internal` rather than `protected` because the return type's
+    // `ConnectorSession` is itself `internal`.
+    internal fun buildTokenProvider(): Pair<SubjectTokenProvider, ConnectorSession?> =
         when (val opts = auth) {
             is ConnectorAuthOptions -> {
                 // .kon parsing + HttpClient construction (cheap); SDS load + SMC-B enumeration

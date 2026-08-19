@@ -17,11 +17,15 @@ import de.gematik.zeta.cli.client.POPP_HEADER_NAME
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
+import de.gematik.zeta.cli.client.withAslExpiryRetry
 import de.gematik.zeta.cli.client.parseHeaderOption
 import de.gematik.zeta.cli.http.logInnerAslResponse
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderXml
 import de.gematik.zeta.cli.state.claimString
+import de.gematik.zeta.cli.storage.ProfileDb
+import de.gematik.zeta.cli.storage.ProfileDbCatalogStore
+import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpResponse
 import de.gematik.zeta.stress.identity.PoppJwt
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -32,8 +36,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 
 private val log = KotlinLogging.logger {}
-
-private const val VSDM_PATH = "/vsdservice/v1/vsdmbundle"
 
 // Placeholder ETag: never matches, so the server always returns the full bundle (200). Real
 // conditional-request (If-None-Match) handling comes later.
@@ -154,9 +156,11 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
                     putHeader(POPP_HEADER_NAME, token)
                     requestHeaders.map(::parseHeaderOption).forEach { (n, v) -> putHeader(n, v) }
 
-                    val response = client.request(targetUrl) {
-                        method = HttpMethod.Get
-                        headers.values.forEach { (n, v) -> header(n, v) }
+                    val response = withAslExpiryRetry {
+                        client.request(targetUrl) {
+                            method = HttpMethod.Get
+                            headers.values.forEach { (n, v) -> header(n, v) }
+                        }
                     }
                     log.info { "response: HTTP ${response.status.value}" }
                     // The wire logger only sees the encrypted ASL envelope; surface the decrypted
@@ -196,7 +200,9 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         }
 
         val catalog = try {
-            runBlocking { ServiceDiscoveryClient(cliConfig.httpClient).fetchCatalog(env) }
+            val store = ProfileDbCatalogStore(ProfileDb(zetaProfilePath(profile)))
+            val client = ServiceDiscoveryClient(cliConfig.httpClient, store)
+            runBlocking { client.fetchCatalog(env) }
         } catch (e: CatalogException) {
             throw CliktError(e.message ?: "service-discovery catalog fetch failed")
         }

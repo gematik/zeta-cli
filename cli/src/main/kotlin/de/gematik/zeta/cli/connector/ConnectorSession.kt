@@ -59,6 +59,9 @@ internal class ConnectorSession(
             }.also { cached = it }
         }
 
+    /** Whether the Konnektor client (its SDS) has been loaded yet — the connection is established lazily. */
+    fun isConnected(): Boolean = cached != null
+
     override fun close() {
         httpClient.close()
     }

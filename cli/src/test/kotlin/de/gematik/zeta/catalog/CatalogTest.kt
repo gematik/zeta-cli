@@ -83,4 +83,42 @@ class CatalogTest {
             runBlocking { ServiceDiscoveryClient(HttpClient(engine)).fetchCatalog(Environment.DEV) }
         }
     }
+
+    @Test
+    fun `fetchCatalog serves a fresh cache without a second network call`() {
+        val store = InMemoryCatalogStore()
+        var calls = 0
+        val engine = MockEngine {
+            calls++
+            respond(SAMPLE, HttpStatusCode.OK, headersOf(HttpHeaders.CacheControl, "public, max-age=3600"))
+        }
+        val client = ServiceDiscoveryClient(HttpClient(engine), store)
+
+        runBlocking { client.fetchCatalog(Environment.DEV) } // populates the cache
+        val second = runBlocking { client.fetchCatalog(Environment.DEV) } // served from the fresh cache
+
+        assertEquals(1, calls)
+        assertEquals("https://vsdm-dev.tk.de", second.vsdmBaseUrl("101575519"))
+    }
+
+    @Test
+    fun `fetchCatalog falls back to a stale cache when discovery is unavailable`() {
+        val store = InMemoryCatalogStore()
+        // Prime with max-age=0 so the entry is immediately stale and the next call must re-fetch.
+        val ok = MockEngine { respond(SAMPLE, HttpStatusCode.OK, headersOf(HttpHeaders.CacheControl, "max-age=0")) }
+        runBlocking { ServiceDiscoveryClient(HttpClient(ok), store).fetchCatalog(Environment.DEV) }
+
+        // Discovery is down: the stale cache is used with a warning instead of throwing.
+        val down = MockEngine { respond("boom", HttpStatusCode.ServiceUnavailable) }
+        val catalog = runBlocking { ServiceDiscoveryClient(HttpClient(down), store).fetchCatalog(Environment.DEV) }
+
+        assertEquals("dev", catalog.env)
+        assertEquals("https://vsdm-dev.tk.de", catalog.vsdmBaseUrl("101575519"))
+    }
+
+    private class InMemoryCatalogStore : CatalogStore {
+        private val slots = mutableMapOf<Environment, String>()
+        override fun read(env: Environment): String? = slots[env]
+        override fun write(env: Environment, value: String) { slots[env] = value }
+    }
 }
