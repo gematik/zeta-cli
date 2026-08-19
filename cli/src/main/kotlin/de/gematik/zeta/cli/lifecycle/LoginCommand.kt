@@ -9,8 +9,6 @@ import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.state.CommandResult
 import de.gematik.zeta.cli.state.hasUsableCredentials
-import de.gematik.zeta.cli.trace.Tracer
-import de.gematik.zeta.sdk.SdkStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 
@@ -53,26 +51,7 @@ class LoginCommand : ZetaSessionCommand(name = "login") {
         val resource = originOf(url)
         log.info { "Logging in to $resource with scopes $scopes" }
         openSession(resource = resource, scopes = scopes) { sdk, _ ->
-            val initial = runBlocking { sdk.status().getOrThrow() }
-
-            val ranRegister = initial == SdkStatus.NOT_REGISTERED
-            if (ranRegister) {
-                log.debug { "Status was NOT_REGISTERED — running discover() + register()" }
-                runBlocking {
-                    // sdk.register() requires discover()-populated AS metadata; discover() short-circuits if cached.
-                    sdk.discover().getOrThrow()
-                    sdk.register().getOrThrow()
-                }
-            }
-
-            val ranAuthenticate = initial != SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN
-            if (ranAuthenticate) {
-                log.debug { "Initial status was $initial — running authenticate()" }
-                runBlocking {
-                    Tracer.spanSuspend("sdk.authenticate") { sdk.authenticate().getOrThrow() }
-                }
-            }
-
+            val (ranRegister, ranAuthenticate) = runBlocking { ensureLoggedIn(sdk) }
             renderLogin(resource, ranRegister, ranAuthenticate)
         }
     }

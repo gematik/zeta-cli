@@ -29,6 +29,14 @@ dependencies {
     // `SocketException: Connection reset` against authenticating corporate proxies).
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.logging)
+    // `zeta serve` — the local daemon serves plaintext HTTP over a unix socket. CIO *server* is
+    // unaffected by the CIO *client* TLS limitation noted above (no TLS is terminated here); all
+    // outbound calls still go through the OkHttp client.
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     // Already on the runtime classpath via mordant-jvm-jna; declared here so we can call

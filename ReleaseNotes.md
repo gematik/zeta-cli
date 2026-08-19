@@ -1,6 +1,13 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.11.0
+### changes
+- Add `zeta serve` (**experimental**) — a warm-session local HTTP daemon for one TI environment. Listens on a unix domain socket by default (or `--port` for TCP), keeps Zeta sessions warm and proactively refreshes them before expiry, and exposes `GET /api/health`, `GET /api/zeta/status`, `GET /api/vsdm/read` (read a VSD bundle from a supplied PoPP token) and `GET /api/vsdm/popp-then-read` (mint a PoPP token via the Konnektor or a PC/SC reader, then read). The API surface may change without notice — see [docs/serve.md](docs/serve.md)
+- Cache the TI service-discovery catalog in the profile's storage database, honouring the response's `Cache-Control: max-age` — `zeta vsdm get` reuses a fresh catalog without a network call, and when service-discovery is unavailable it warns and falls back to the cached copy instead of failing
+- Surface the Konnektor's SOAP `faultstring` in error messages (e.g. after a failed `SecureSendAPDU`) instead of a generic "reported a SOAP fault"
+- When the ASL session expires on the server, the SDK returns a wrong `406 application/cbor` error even though the request was fine. `zeta vsdm get` and `zeta serve` now just try the read again — which sets up a new ASL session — so you get the real response instead of the error
+
 ## Release 0.10.0
 ### changes
 - Add `zeta popp standard` — retrieve a PoPP token from a physical eGK the client reads directly, via a contact PC/SC card reader (`javax.smartcardio`); contactless/PACE and remote terminals not yet supported

@@ -45,6 +45,26 @@ fun xdgConfigHome(): Path {
     return Path(System.getProperty("user.home"), ".config")
 }
 
+/**
+ * The base cache directory for transient runtime artefacts. Resolution mirrors [xdgConfigHome]:
+ * `$XDG_CACHE_HOME`, then `%LOCALAPPDATA%` on Windows, then `~/.cache`.
+ */
+fun xdgCacheHome(): Path {
+    System.getenv("XDG_CACHE_HOME")?.takeIf { it.isNotBlank() }?.let { return Path(it) }
+    if (isWindows) {
+        System.getenv("LOCALAPPDATA")?.takeIf { it.isNotBlank() }?.let { return Path(it) }
+    }
+    return Path(System.getProperty("user.home"), ".cache")
+}
+
+/**
+ * `$XDG_RUNTIME_DIR` when the platform sets it (Linux desktops), else null. The spec-correct home
+ * for per-user sockets/pipes: a private `0700` tmpfs directory cleared on logout. macOS and Windows
+ * typically leave it unset, so callers fall back to another location.
+ */
+fun xdgRuntimeDir(): Path? =
+    System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotBlank() }?.let { Path(it) }
+
 /** `$XDG_CONFIG_HOME/telematik/connectors/`. Created on demand by callers; not by this function. */
 fun connectorsConfigDir(): Path = xdgConfigHome().resolve(CONNECTORS_SUBDIR)
 

@@ -17,9 +17,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.Url
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 
 private val log = KotlinLogging.logger {}
 
@@ -74,16 +71,7 @@ class StatusCommand : ZetaProfileCommand(name = "status") {
 
     private fun renderProfile(entries: List<Entry>, path: Path) {
         when (cliConfig.outputFormat) {
-            OutputFormat.JSON -> echo(
-                renderJson(
-                    buildJsonObject {
-                        put("profile", JsonPrimitive(profile))
-                        put("path", JsonPrimitive(path.toString()))
-                        put("resources", buildJsonArray { entries.forEach { add(renderEntryJson(it, reveal)) } })
-                    },
-                    colorize = colorize,
-                ),
-            )
+            OutputFormat.JSON -> echo(renderJson(profileStatusJson(profile, path, entries, reveal), colorize = colorize))
 
             OutputFormat.TEXT, OutputFormat.RAW -> echo(profileText(entries, path))
         }
