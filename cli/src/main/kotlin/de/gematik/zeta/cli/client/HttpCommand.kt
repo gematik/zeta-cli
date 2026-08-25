@@ -6,6 +6,8 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.enum
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.http.logInnerAslResponse
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.trace.Tracer
@@ -87,10 +89,20 @@ class HttpCommand : ZetaSessionCommand("http") {
             "gematik ZETA spec (A_25669). (env: ZETA_POPP_TOKEN)",
     )
 
+    private val env: Environment by option(
+        "--env",
+        metavar = "ENV",
+        envvar = "ZETA_ENV",
+        help = "TI environment for the ASL trust anchor: dev (default), ref, test, or prod. " +
+            "Selects the prod vs non-prod ASL TSL — pass prod when the resource lives in prod. " +
+            "(env: ZETA_ENV)",
+    ).enum<Environment>(ignoreCase = true).default(Environment.DEV)
+
     override fun help(context: Context) =
         "Send an HTTP request to a Zeta-protected resource."
 
     override fun runCommand() {
+        cliConfig.aslProdEnvironment = env == Environment.PROD
         val poppHeader = poppToken?.let { listOf(POPP_HEADER_NAME to it) }.orEmpty()
         val parsedHeaders = poppHeader + requestHeaders.map(::parseHeaderOption)
         val method = resolveMethod()

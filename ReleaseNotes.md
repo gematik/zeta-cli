@@ -1,6 +1,12 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.11.1
+### changes
+- Add `--env {dev|ref|test|prod}` to `zeta http` and `zeta ws` (like `zeta serve`) to select the ASL trust-anchor environment — `--env prod` uses the production TSL, so requests to a prod resource no longer download the ref trust list by default
+- `zeta serve` now binds its socket and reports `ready` immediately, warming sessions in the background instead of blocking startup on every endpoint login — the daemon accepts requests at once, and `GET /api/health` reports warm-up progress (`warmup: { complete, warmed, total }`)
+- Forward `--ca-cert` to the SDK's own discovery/registration/auth/ASL calls (not just the `zeta http`/`ws` client), so a private/internal or staging CA is trusted end-to-end
+
 ## Release 0.11.0
 ### changes
 - Add `zeta serve` (**experimental**) — a warm-session local HTTP daemon for one TI environment. Listens on a unix domain socket by default (or `--port` for TCP), keeps Zeta sessions warm and proactively refreshes them before expiry, and exposes `GET /api/health`, `GET /api/zeta/status`, `GET /api/vsdm/read` (read a VSD bundle from a supplied PoPP token) and `GET /api/vsdm/popp-then-read` (mint a PoPP token via the Konnektor or a PC/SC reader, then read). The API surface may change without notice — see [docs/serve.md](docs/serve.md)
