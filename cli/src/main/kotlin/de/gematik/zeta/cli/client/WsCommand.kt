@@ -2,8 +2,11 @@ package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.enum
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -73,10 +76,20 @@ class WsCommand : ZetaSessionCommand("ws") {
             "gematik ZETA spec (A_25669). (env: ZETA_POPP_TOKEN)",
     )
 
+    private val env: Environment by option(
+        "--env",
+        metavar = "ENV",
+        envvar = "ZETA_ENV",
+        help = "TI environment for the ASL trust anchor: dev (default), ref, test, or prod. " +
+            "Selects the prod vs non-prod ASL TSL — pass prod when the resource lives in prod. " +
+            "(env: ZETA_ENV)",
+    ).enum<Environment>(ignoreCase = true).default(Environment.DEV)
+
     override fun help(context: Context) =
         "Open a WebSocket to a Zeta-protected resource and round-trip JSON messages from stdin."
 
     override fun runCommand() {
+        cliConfig.aslProdEnvironment = env == Environment.PROD
         // Build with popp first so an explicit `-H PoPP: …` later wins (last-write).
         val customHeaders = buildMap {
             poppToken?.let { put(POPP_HEADER_NAME, it) }

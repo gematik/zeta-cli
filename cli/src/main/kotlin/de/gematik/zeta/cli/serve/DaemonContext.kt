@@ -82,13 +82,25 @@ internal class DaemonContext(
 ) : Closeable {
     val requestMutex = Mutex()
 
+    /** Warm-sweep progress, surfaced by `/api/health`. `warmupTotal` is null until the catalog resolves. */
+    @Volatile
+    var warmupComplete = false
+
+    @Volatile
+    var warmupTotal: Int? = null
+
     private data class SdkKey(val resource: String, val scopes: List<String>)
 
     private val cache = ConcurrentHashMap<SdkKey, WarmSession>()
     private val locks = ConcurrentHashMap<SdkKey, Mutex>()
 
+    // Daemon-lifetime background scope: hosts the per-session token-refresh loops and the startup warm
+    // sweep. Cancelled first in close() so nothing runs mid-teardown.
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshJobs = ConcurrentHashMap<SdkKey, Job>()
+
+    /** Run the startup warm sweep off the ready path, on the daemon background scope. */
+    fun launchWarmup(block: suspend CoroutineScope.() -> Unit): Job = refreshScope.launch(block = block)
 
     /**
      * A warm session for (resource, scopes): a healthy cached one, or a freshly built + logged-in one.

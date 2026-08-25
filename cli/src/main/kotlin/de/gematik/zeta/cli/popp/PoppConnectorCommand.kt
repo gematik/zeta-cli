@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.enum
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
@@ -35,12 +36,20 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
         help = "eGK card handle. Auto-selected when exactly one eGK is visible to the Connector.",
     ).optional()
 
-    private val serviceUrl: String by option(
+    private val env: Environment by option(
+        "--env",
+        metavar = "ENV",
+        envvar = "ZETA_ENV",
+        help = "TI environment selecting the popp service: dev (default), ref, test, or prod. " +
+            "Overridden by --service-url. (env: ZETA_ENV)",
+    ).enum<Environment>(ignoreCase = true).default(Environment.DEV)
+
+    private val serviceUrlOverride: String? by option(
         "--service-url",
         metavar = "URL",
         envvar = "ZETA_POPP_SERVICE_URL",
-        help = "popp service WebSocket URL. (env: ZETA_POPP_SERVICE_URL)",
-    ).default(DEFAULT_SERVICE_URL)
+        help = "popp service WebSocket URL. Overrides --env. (env: ZETA_POPP_SERVICE_URL)",
+    )
 
     private val connectionType: ConnectionType by option(
         "--connection",
@@ -54,6 +63,7 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
         "Retrieve a PoPP token via the Connector / signed-scenario flow."
 
     override fun runCommand() {
+        val serviceUrl = serviceUrlOverride ?: poppServiceUrlFor(env)
         openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, authSession ->
             val poppSession = authSession ?: openConnectorSession(
                 konPath = cliConfig.resolveSelectedKonFile(),
@@ -76,10 +86,5 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 if (authSession == null) poppSession.close()
             }
         }
-    }
-
-    private companion object {
-        const val DEFAULT_SERVICE_URL =
-            "wss://popp.dev.poppservice.de/popp/practitioner/api/v1/token-generation-ehc"
     }
 }
