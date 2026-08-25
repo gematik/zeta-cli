@@ -3,16 +3,13 @@ package de.gematik.zeta.cli.popp
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.enum
 import com.github.ajalt.clikt.parameters.types.long
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
 import kotlinx.coroutines.runBlocking
-
-// Same popp dev service as `zeta popp kartos`; kept file-local rather than shared to avoid
-// coupling the two commands.
-private const val DEFAULT_SERVICE_URL =
-    "wss://popp.dev.poppservice.de/popp/practitioner/api/v1/token-generation-ehc"
 
 /**
  * `zeta popp standard` — drive the PoPP service through the **Standard** scenario
@@ -40,17 +37,26 @@ class PoppStandardCommand : ZetaSessionCommand(name = "standard") {
         help = "Seconds to wait for a card when none is present. Default: 0 (fail immediately).",
     ).long().default(0)
 
-    private val serviceUrl: String by option(
+    private val env: Environment by option(
+        "--env",
+        metavar = "ENV",
+        envvar = "ZETA_ENV",
+        help = "TI environment selecting the popp service: dev (default), ref, test, or prod. " +
+            "Overridden by --service-url. (env: ZETA_ENV)",
+    ).enum<Environment>(ignoreCase = true).default(Environment.DEV)
+
+    private val serviceUrlOverride: String? by option(
         "--service-url",
         metavar = "URL",
         envvar = "ZETA_POPP_SERVICE_URL",
-        help = "popp service WebSocket URL. (env: ZETA_POPP_SERVICE_URL)",
-    ).default(DEFAULT_SERVICE_URL)
+        help = "popp service WebSocket URL. Overrides --env. (env: ZETA_POPP_SERVICE_URL)",
+    )
 
     override fun help(context: Context) =
         "Retrieve a PoPP token via the Standard flow, reading a physical eGK in a contact card reader."
 
     override fun runCommand() {
+        val serviceUrl = serviceUrlOverride ?: poppServiceUrlFor(env)
         openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, _ ->
             val token = runBlocking {
                 runCardPoppFlow(sdk, reader, waitSeconds, serviceUrl) { applyCliHttpDefaults(cliConfig) }

@@ -4,6 +4,7 @@
 ## Release 0.11.1
 ### changes
 - Add `--env {dev|ref|test|prod}` to `zeta http` and `zeta ws` (like `zeta serve`) to select the ASL trust-anchor environment — `--env prod` uses the production TSL, so requests to a prod resource no longer download the ref trust list by default
+- Add `--env {dev|ref|test|prod}` to `zeta popp connector`/`standard`/`kartos` to pick the popp service by environment (e.g. `--env prod` → `wss://popp.prod.poppservice.de/…`) instead of spelling out `--service-url`; `--service-url` still overrides it
 - `zeta serve` now binds its socket and reports `ready` immediately, warming sessions in the background instead of blocking startup on every endpoint login — the daemon accepts requests at once, and `GET /api/health` reports warm-up progress (`warmup: { complete, warmed, total }`)
 - Forward `--ca-cert` to the SDK's own discovery/registration/auth/ASL calls (not just the `zeta http`/`ws` client), so a private/internal or staging CA is trusted end-to-end
 
