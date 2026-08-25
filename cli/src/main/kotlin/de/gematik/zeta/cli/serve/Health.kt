@@ -10,12 +10,17 @@ internal data class HealthDto(
     val status: String,
     val env: String,
     val poppCard: String?,
+    val warmup: WarmupDto,
     val sessions: List<SessionDto>,
     val connector: ConnectorDto,
 )
 
 @Serializable
 internal data class SessionDto(val resource: String, val scopes: List<String>)
+
+/** Startup warm-sweep progress. [total] is null until the catalog resolves; [warmed] is the open-session count. */
+@Serializable
+internal data class WarmupDto(val complete: Boolean, val warmed: Int, val total: Int?)
 
 /** Connector-session state. Non-secret `.kon` identity only — never credentials. */
 @Serializable
@@ -45,12 +50,14 @@ internal suspend fun handleHealth(call: ApplicationCall, ctx: DaemonContext) {
         )
     } ?: ConnectorDto(configured = false)
 
+    val sessions = ctx.openSessions()
     call.respond(
         HealthDto(
             status = "ok",
             env = ctx.env.name.lowercase(),
             poppCard = ctx.poppMint?.transport?.name?.lowercase(),
-            sessions = ctx.openSessions().map { SessionDto(it.resource, it.scopes) },
+            warmup = WarmupDto(complete = ctx.warmupComplete, warmed = sessions.size, total = ctx.warmupTotal),
+            sessions = sessions.map { SessionDto(it.resource, it.scopes) },
             connector = connector,
         ),
     )

@@ -45,7 +45,6 @@ import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 
 private val log = KotlinLogging.logger {}
@@ -206,17 +205,16 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         )
         val ctx = DaemonContext(cliConfig, zetaProfilePath(profile), tokenProvider, connectorSession, env, poppMint)
 
-        val summary = warmUp(ctx)
-
-        if (port != null) serveTcp(ctx, port!!, summary) else serveUnix(ctx, (socket ?: defaultSocketPath()).toAbsolutePath(), summary)
+        // Bind + report ready immediately; the warm sweep runs in the background (a request to a
+        // not-yet-warm endpoint builds its session lazily via the same warmSessionFor seam).
+        if (port != null) serveTcp(ctx, port!!) else serveUnix(ctx, (socket ?: defaultSocketPath()).toAbsolutePath())
     }
 
-    private data class WarmSummary(val warmed: Int, val total: Int) {
-        val deferred: Int get() = total - warmed
-    }
-
-    /** Parallel, best-effort login of the env's known endpoints; failures are deferred to lazy retry. */
-    private fun warmUp(ctx: DaemonContext): WarmSummary = runBlocking {
+    /**
+     * Parallel, best-effort login of the env's known endpoints, off the ready path. Failures are deferred
+     * to lazy retry on first use. Records progress on [ctx] for `/api/health` and logs completion.
+     */
+    private suspend fun warmUpInBackground(ctx: DaemonContext) {
         val path = zetaProfilePath(profile)
         val catalog = runCatching {
             ServiceDiscoveryClient(cliConfig.httpClient, ProfileDbCatalogStore(ProfileDb(path))).fetchCatalog(env)
@@ -226,6 +224,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
 
         val poppUrl = poppServiceUrlOverride ?: poppServiceUrlFor(env)
         val endpoints = warmEndpoints(catalog, poppUrl)
+        ctx.warmupTotal = endpoints.size
         log.info { "warming ${endpoints.size} endpoint(s) for env ${env.name.lowercase()}…" }
 
         val results = coroutineScope {
@@ -237,14 +236,16 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
                 }
             }.awaitAll()
         }
-        WarmSummary(warmed = results.count { it.isSuccess }, total = results.size)
+        val warmed = results.count { it.isSuccess }
+        ctx.warmupComplete = true
+        log.info { "warm-up complete: $warmed/${results.size} warmed (${results.size - warmed} lazy)" }
     }
 
-    private fun ready(bind: String, summary: WarmSummary): String =
-        "zeta serve ready (${summary.warmed}/${summary.total} warm, ${summary.deferred} lazy) — " +
-            "listening on $bind (env ${env.name.lowercase()}, profile $profile) — Ctrl-C to stop"
+    private fun ready(bind: String): String =
+        "zeta serve ready — listening on $bind (env ${env.name.lowercase()}, profile $profile) — " +
+            "warming sessions in background — Ctrl-C to stop"
 
-    private fun serveTcp(ctx: DaemonContext, bindPort: Int, summary: WarmSummary) {
+    private fun serveTcp(ctx: DaemonContext, bindPort: Int) {
         if (host !in LOOPBACK_HOSTS) {
             log.warn { "binding $host:$bindPort — the REST API is unauthenticated; exposing it beyond loopback is at your own risk" }
         }
@@ -256,11 +257,12 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
                 ctx.close()
             },
         )
-        echo(ready("http://$host:$bindPort", summary))
+        echo(ready("http://$host:$bindPort"))
+        ctx.launchWarmup { warmUpInBackground(ctx) }
         CountDownLatch(1).await() // hold the foreground; the shutdown hook cleans up on Ctrl-C
     }
 
-    private fun serveUnix(ctx: DaemonContext, sock: Path, summary: WarmSummary) {
+    private fun serveUnix(ctx: DaemonContext, sock: Path) {
         // AF_UNIX sun_path is ~104 bytes on macOS / 108 on Linux; fail early with a clear message.
         if (sock.toString().toByteArray().size >= 104) {
             throw UsageError("--socket path is too long for a unix socket (${sock.toString().length} chars, max ~103): $sock")
@@ -289,7 +291,8 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
                 ctx.close()
             },
         )
-        echo(ready(sock.toString(), summary))
+        echo(ready(sock.toString()))
+        ctx.launchWarmup { warmUpInBackground(ctx) }
         CountDownLatch(1).await() // hold the foreground; the shutdown hook cleans up on Ctrl-C
     }
 }
