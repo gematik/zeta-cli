@@ -64,6 +64,12 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
 
     override fun runCommand() {
         val serviceUrl = serviceUrlOverride ?: poppServiceUrlFor(env)
+        val config = PoppCardConfig(
+            transport = CardTransport.CONNECTOR,
+            serviceUrl = serviceUrl,
+            connection = connectionType,
+            egkHandle = egkHandleArg,
+        )
         openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, authSession ->
             val poppSession = authSession ?: openConnectorSession(
                 konPath = cliConfig.resolveSelectedKonFile(),
@@ -76,9 +82,7 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 // so we don't pre-flight an explicit sdk.authenticate() here — that variant
                 // skips discover/register and fails on cold profiles.
                 val token = runBlocking {
-                    runConnectorPoppFlow(sdk, poppSession, egkHandleArg, connectionType, serviceUrl) {
-                        applyCliHttpDefaults(cliConfig)
-                    }
+                    runPoppFlow(sdk, config, poppSession) { applyCliHttpDefaults(cliConfig) }
                 }
                 emitPoppToken(token, cliConfig.outputFormat, colorize)
             } finally {

@@ -13,70 +13,44 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val log = KotlinLogging.logger {}
 
-/** Smartcard connection type for the connector-driven PoPP scenario. */
-enum class ConnectionType(val popp: String) {
-    CONTACT("contact-connector"),
-    CONTACTLESS("contactless-connector"),
-}
-
 /**
  * Drive the PoPP **Connector** scenario once against an eGK visible to the Konnektor [session] and
- * return the minted token JWT. [egkHandle] selects the card; when null, auto-selects the single visible
- * eGK (throwing [UsageError] on zero or multiple, with the available handles listed). Shared by
- * `zeta popp connector` and `zeta serve --popp-card connector`. [wsBuilder] configures the WS HTTP
- * client (timeouts / TLS).
+ * return the minted token JWT.
  *
- * The Konnektor is touched for `StartCardSession` / `SecureSendAPDU` (per APDU round) / `StopCardSession`;
- * the APDU rounds are forwarded from [PoppClient] straight to `connector.secureSendApdu`.
+ * The Konnektor is touched for `StartCardSession` / `SecureSendAPDU` (per APDU round) /
+ * `StopCardSession`; the APDU rounds are forwarded from [PoppClient] straight to
+ * `connector.secureSendApdu`.
  */
 internal suspend fun runConnectorPoppFlow(
     sdk: ZetaSdkClient,
     session: ConnectorSession,
-    egkHandle: String?,
-    connectionType: ConnectionType,
-    serviceUrl: String,
+    config: PoppCardConfig,
     wsBuilder: ZetaHttpClientBuilder.() -> Unit,
-): String =
-    Tracer.spanSuspend("popp.flow", attrs = mapOf("scenario" to "connector")) {
-        val connector = session.connector()
-        val handle = resolveEgkHandle(connector, egkHandle)
-        val cardSessionId = session.traced("startCardSession") { connector.startCardSession(handle) }
-        log.info { "Connector card session $cardSessionId opened on eGK $handle" }
+): String {
+    val connector = session.connector()
+    val handle = resolveEgkHandle(connector, config.egkHandle)
+    val cardSessionId = session.traced("startCardSession") { connector.startCardSession(handle) }
+    log.info { "Connector card session $cardSessionId opened on eGK $handle" }
 
-        try {
-            // Capture the parent for ws.recv/send + secureSendApdu: we want those as siblings of
-            // popp.connect under popp.flow, not nested inside the long-lived popp.connect span.
-            val wsParent = Tracer.current()
-            Tracer.spanSuspend("popp.connect", attrs = mapOf("service_url" to serviceUrl)) {
-                var token: String? = null
-                sdk.ws(targetUrl = serviceUrl, builder = wsBuilder, customHeaders = null) {
-                    log.info { "popp WS connected: $serviceUrl" }
-                    val client = PoppClient(this, wsSpanParent = wsParent)
-                    val start = StartMessage(
-                        cardConnectionType = connectionType.popp,
-                        clientSessionId = cardSessionId,
-                    )
-                    token = client.runConnectorScenario(start) { signed ->
-                        session.tracedUnder(wsParent, "secureSendApdu") {
-                            connector.secureSendApdu(signed)
-                        }
-                    }
-                }
-                token ?: error("popp WebSocket closed without yielding a TokenMessage")
+    return try {
+        poppConnect(sdk, config, wsBuilder) { client, wsParent ->
+            client.runConnectorScenario(startMessage(config, cardSessionId)) { signed ->
+                session.tracedUnder(wsParent, "secureSendApdu") { connector.secureSendApdu(signed) }
             }
-        } finally {
-            // Best-effort cleanup: popp often closes the session itself when the flow completes, after
-            // which the Connector reports "Unbekannte Session ID" (Code 4288). Just note it and continue.
-            runCatching {
-                session.traced("stopCardSession") { connector.stopCardSession(cardSessionId) }
-            }.onFailure { e ->
-                log.debug {
-                    "stopCardSession($cardSessionId) failed (continuing): " +
-                        (e.message?.substringBefore('\n') ?: e::class.simpleName)
-                }
+        }
+    } finally {
+        // Best-effort cleanup: popp often closes the session itself when the flow completes, after
+        // which the Connector reports "Unbekannte Session ID" (Code 4288). Just note it and continue.
+        runCatching {
+            session.traced("stopCardSession") { connector.stopCardSession(cardSessionId) }
+        }.onFailure { e ->
+            log.debug {
+                "stopCardSession($cardSessionId) failed (continuing): " +
+                    (e.message?.substringBefore('\n') ?: e::class.simpleName)
             }
         }
     }
+}
 
 private suspend fun resolveEgkHandle(connector: ConnectorClient, egkHandle: String?): String {
     egkHandle?.let { return it }

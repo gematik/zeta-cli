@@ -23,6 +23,7 @@ import de.gematik.zeta.cli.lifecycle.RegisterCommand
 import de.gematik.zeta.cli.popp.PoppCommand
 import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
+import de.gematik.zeta.cli.popp.PoppReadersCommand
 import de.gematik.zeta.cli.popp.PoppStandardCommand
 import de.gematik.zeta.cli.serve.ServeCommand
 import de.gematik.zeta.cli.state.StatusCommand
@@ -116,7 +117,12 @@ fun main(args: Array<String>) {
                         ConnectorUseCommand(),
                         ConnectorGetCommand().subcommands(ConnectorGetCardsCommand()),
                     ),
-                    PoppCommand().subcommands(PoppConnectorCommand(), PoppKartosCommand(), PoppStandardCommand()),
+                    PoppCommand().subcommands(
+                        PoppConnectorCommand(),
+                        PoppKartosCommand(),
+                        PoppStandardCommand(),
+                        PoppReadersCommand(),
+                    ),
                     ServeCommand(),
                     stressCommand(),
                 )
