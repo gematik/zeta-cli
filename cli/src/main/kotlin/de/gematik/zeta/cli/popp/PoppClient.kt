@@ -63,8 +63,7 @@ internal class PoppClient(
 
                 is StandardScenarioMessage -> throw PoppProtocolException(
                     "UNEXPECTED_MESSAGE",
-                    "Server returned StandardScenarioMessage; this client only supports the " +
-                        "Connector flow (cardConnectionType=*-connector).",
+                    "Server answered a *-connector cardConnectionType with a StandardScenario message.",
                 )
 
                 is StartMessage,
@@ -102,8 +101,7 @@ internal class PoppClient(
 
                 is ConnectorScenarioMessage -> throw PoppProtocolException(
                     "UNEXPECTED_MESSAGE",
-                    "Server returned ConnectorScenarioMessage; this client only supports the " +
-                        "Standard flow (cardConnectionType=*-standard).",
+                    "Server answered a *-standard cardConnectionType with a ConnectorScenario message.",
                 )
 
                 is StartMessage,

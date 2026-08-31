@@ -1,6 +1,13 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.12.0
+### changes
+- `zeta popp standard` can now read a **contactless** eGK: `--connection contactless --can <digits>` opens a PACE channel with the card access number printed on the card, and every scenario APDU runs inside secure messaging. Readers that advertise PC/SC `FEATURE_EXECUTE_PACE` (class-3 "comfort" readers) do it in firmware — the CAN then never leaves the reader — otherwise the CLI runs PACE-ECDH-GM-AES-CBC-CMAC-128 itself
+- Add `zeta popp readers` — list the local PC/SC reader slots, whether each holds a card (probed by connecting, not by the unreliable `isCardPresent`), the card's ATR, and whether the reader runs PACE in firmware or leaves it to the CLI
+- Fix `zeta popp standard` failing with `SCARD_E_NO_SMARTCARD` while a card was in the reader: a dual-interface reader publishes one slot per interface, and some drivers report a phantom card on the idle one. Slot selection now trusts a successful connection instead of the driver's card-present flag, and warns when a second slot also holds a card (`--reader` pins one)
+- One card configuration and one flow entry point now back every PoPP path: `zeta popp connector|kartos|standard` and `zeta serve` describe the card the same way, and `--reader` / `--wait` / `--connection` are declared once
+
 ## Release 0.11.1
 ### changes
 - Add `--env {dev|ref|test|prod}` to `zeta http` and `zeta ws` (like `zeta serve`) to select the ASL trust-anchor environment — `--env prod` uses the production TSL, so requests to a prod resource no longer download the ref trust list by default

@@ -3,11 +3,12 @@ package de.gematik.zeta.cli.serve
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.UsageError
+import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.enum
 import com.github.ajalt.clikt.parameters.types.int
-import com.github.ajalt.clikt.parameters.types.long
 import com.github.ajalt.clikt.parameters.types.path
 import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.catalog.ServiceCatalog
@@ -16,7 +17,10 @@ import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.connector.xdgCacheHome
 import de.gematik.zeta.cli.connector.xdgRuntimeDir
+import de.gematik.zeta.cli.popp.CardReaderOptions
+import de.gematik.zeta.cli.popp.CardTransport
 import de.gematik.zeta.cli.popp.ConnectionType
+import de.gematik.zeta.cli.popp.PoppCardConfig
 import de.gematik.zeta.cli.popp.poppServiceUrlFor
 import de.gematik.zeta.cli.state.enumerateEntries
 import de.gematik.zeta.cli.state.profileStatusJson
@@ -118,36 +122,17 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         help = "PoPP service to warm. Defaults to the URL derived from --env. (env: ZETA_POPP_SERVICE_URL)",
     )
 
-    private val poppCard: PoppCardTransport by option(
+    private val poppCard: CardTransport by option(
         "--popp-card",
         metavar = "TRANSPORT",
         envvar = "ZETA_POPP_CARD",
         help = "Card transport for GET /api/vsdm/popp-then-read (PoPP): connector (eGK at the Konnektor, " +
             "requires --auth-method connector) or standard (eGK in a local PC/SC reader). Default: connector. " +
             "(env: ZETA_POPP_CARD)",
-    ).enum<PoppCardTransport>(ignoreCase = true).default(PoppCardTransport.CONNECTOR)
+    ).choice("connector" to CardTransport.CONNECTOR, "standard" to CardTransport.STANDARD)
+        .default(CardTransport.CONNECTOR)
 
-    private val poppConnection: ConnectionType by option(
-        "--popp-connection",
-        metavar = "TYPE",
-        envvar = "ZETA_POPP_CONNECTION",
-        help = "Connector card connection: contact or contactless (--popp-card connector only). Default: contact. " +
-            "(env: ZETA_POPP_CONNECTION)",
-    ).enum<ConnectionType>(ignoreCase = true).default(ConnectionType.CONTACT)
-
-    private val poppReader: String? by option(
-        "--popp-reader",
-        metavar = "NAME",
-        envvar = "ZETA_POPP_READER",
-        help = "PC/SC reader name substring for --popp-card standard. Default: the reader with a card inserted. " +
-            "(env: ZETA_POPP_READER)",
-    )
-
-    private val poppWait: Long by option(
-        "--popp-wait",
-        metavar = "SECONDS",
-        help = "Seconds to wait for a card in the reader (--popp-card standard). Default: 0 (fail immediately).",
-    ).long().default(0)
+    private val card by CardReaderOptions(prefix = "popp-")
 
     override fun help(context: Context) =
         "Run a warm-session REST daemon for one TI environment (unix socket by default, or --port for TCP)."
@@ -193,15 +178,26 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
 
         // Connector card minting reuses the auth Konnektor session (same SMC-B behind both), so it's only
         // available under --auth-method connector; connectorSession is non-null exactly then.
-        if (poppCard == PoppCardTransport.CONNECTOR && connectorSession == null) {
+        if (poppCard == CardTransport.CONNECTOR && connectorSession == null) {
             throw UsageError("--popp-card connector requires --auth-method connector; use --popp-card standard otherwise")
         }
-        val poppMint = PoppMintConfig(
+        // Reading a contactless eGK needs that card's CAN, and a daemon sees a different card on
+        // every request — there is no value it could hold. Konnektor-side contactless is fine: the
+        // Konnektor owns the card session there.
+        if (poppCard == CardTransport.STANDARD && card.connection == ConnectionType.CONTACTLESS) {
+            throw UsageError(
+                "--popp-connection contactless is not supported with --popp-card standard: each eGK " +
+                    "has its own CAN, so a daemon cannot hold one. Use `zeta popp standard --can …` " +
+                    "per card, or --popp-card connector.",
+            )
+        }
+        val poppMint = PoppCardConfig(
             transport = poppCard,
-            connection = poppConnection,
-            reader = poppReader,
-            waitSeconds = poppWait,
             serviceUrl = poppServiceUrlOverride ?: poppServiceUrlFor(env),
+            connection = card.connection,
+            reader = card.reader,
+            waitSeconds = card.waitSeconds,
+            readerOption = card.readerOptionName,
         )
         val ctx = DaemonContext(cliConfig, zetaProfilePath(profile), tokenProvider, connectorSession, env, poppMint)
 

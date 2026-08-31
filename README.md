@@ -75,7 +75,8 @@ zeta login https://popp.dev.poppservice.de \
 - `zeta connector use <name>` — set the default `.kon` config for later commands.
 - `zeta popp connector` — get a PoPP token via the Konnektor's eGK flow.
 - `zeta popp kartos` — get a PoPP token via a kartos smartcard simulator.
-- `zeta popp standard` — get a PoPP token from a physical eGK the client reads directly (contact PC/SC card reader).
+- `zeta popp standard` — get a PoPP token from a physical eGK the client reads directly over PC/SC (contact, or contactless via PACE).
+- `zeta popp readers` — list local PC/SC reader slots, the cards in them, and their PACE support.
 
 **Tooling**
 
@@ -326,13 +327,38 @@ printf '%s\n' "$body" | jq .                                    # the FHIR bundl
 
 #### `zeta popp standard`
 
-Drive the **Standard** flow (`cardConnectionType=*-standard`) against a **physically inserted eGK** that the client reads directly (`javax.smartcardio`) — no connector and no simulator. Each scenario APDU is transmitted straight to the card. Today this is a **contact** PC/SC card reader; contactless (PACE) and remote card terminals are future transports under the same `standard` verb. Requires a PC/SC stack (built in on macOS/Windows; `pcscd` on Linux).
+Drive the **Standard** flow (`cardConnectionType=*-standard`) against a **physical eGK** that the client reads directly (`javax.smartcardio`) — no connector and no simulator. Each scenario APDU is transmitted straight to the card. Requires a PC/SC stack (built in on macOS/Windows; `pcscd` on Linux).
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--reader=<name>` | `ZETA_POPP_READER` | the reader with a card inserted |
+| `--connection=contact\|contactless` | `ZETA_POPP_CONNECTION` | `contact` |
+| `--can=<digits>` | `ZETA_POPP_CAN` | — (required for `contactless`) |
+| `--reader=<name>` | `ZETA_POPP_READER` | the first slot holding a card (a warning names the others) |
 | `--wait=<seconds>` | — | `0` (fail immediately when no card) |
 | `--service-url=<url>` | `ZETA_POPP_SERVICE_URL` | popp dev service URL |
+
+**Picking a reader.** A reader can publish more than one slot (a dual-interface reader publishes one per interface), and some drivers report a phantom card on the idle slot — so `zeta` probes by connecting rather than trusting `isCardPresent`. Without `--reader` it uses the first slot that answers and logs a warning naming any other slot that also held a card. Run `zeta popp readers` to see the slots and pick a `--reader` substring:
+
+```
+$ zeta popp readers
+READER                                                   CARD  PACE      ATR
+Identive Identive CLOUD 4700 F Dual Interface Reader     no    software  -
+Identive Identive CLOUD 4700 F Dual Interface Reader 01  yes   software  3bd097ff81b1fe451f072b
+```
+
+`PACE` says which implementation a contactless card in that slot would use: `reader` when the reader advertises PC/SC `FEATURE_EXECUTE_PACE` and runs the protocol in firmware, `software` when `zeta` runs it, `-` when the reader would not answer the capability query.
+
+**Contactless (PACE).** A contactless eGK only answers inside a PACE channel, so `--connection contactless` needs the card's **CAN** — the digits printed on the card:
+
+```sh
+zeta popp standard --connection contactless --can 123456
+```
+
+`zeta serve` does not offer this: a daemon sees a different eGK on every request and each one has its own CAN, so `--popp-card standard` is contact-only there.
+
+The channel is opened by the reader itself where the reader supports it (class-3 "comfort" readers advertising PC/SC `FEATURE_EXECUTE_PACE` run the protocol in firmware, and the CAN never reaches the host). Otherwise `zeta` runs PACE-ECDH-GM-AES-CBC-CMAC-128 itself and wraps every scenario APDU in secure messaging. Both paths are transparent to the PoPP service beyond the `contactless-standard` `cardConnectionType`.
+
+Remote card terminals remain a future transport under the same `standard` verb.
 
 **Note on repeatable options.** `--ca-cert`, `--header`, and `--scope` accept multiple values on the CLI (repeat the flag) and in `zeta.yaml` (YAML list), but their env var holds only a single value. Use the CLI flag or YAML when you need more than one.
 

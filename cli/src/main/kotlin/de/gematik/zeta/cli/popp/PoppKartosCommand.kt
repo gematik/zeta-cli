@@ -10,7 +10,6 @@ import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.client.ZetaSessionCommand
 import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.client.originOf
-import de.gematik.zeta.sdk.ZetaSdkClient
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
 
@@ -62,16 +61,17 @@ class PoppKartosCommand : ZetaSessionCommand(name = "kartos") {
 
     override fun runCommand() {
         val serviceUrl = serviceUrlOverride ?: poppServiceUrlFor(env)
+        val config = PoppCardConfig(
+            transport = CardTransport.KARTOS,
+            serviceUrl = serviceUrl,
+            kartosImage = image,
+            kartosBin = executable,
+        )
         openSession(resource = originOf(serviceUrl), scopes = listOf("popp")) { sdk, _ ->
             // The Connector session (when present) isn't used in the Standard flow — kartos
             // executes the APDUs locally. ZetaSessionCommand will close it for us.
-            // sdk.ws() handles discover/register/authenticate on first call when needed.
-            val token = runPoppFlow(sdk, serviceUrl)
+            val token = runBlocking { runPoppFlow(sdk, config) { applyCliHttpDefaults(cliConfig) } }
             emitPoppToken(token, cliConfig.outputFormat, colorize)
         }
-    }
-
-    private fun runPoppFlow(sdk: ZetaSdkClient, serviceUrl: String): String = runBlocking {
-        runKartosPoppFlow(sdk, image, executable, serviceUrl) { applyCliHttpDefaults(cliConfig) }
     }
 }

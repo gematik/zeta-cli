@@ -7,9 +7,9 @@ import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.lifecycle.ensureLoggedIn
-import de.gematik.zeta.cli.popp.ConnectionType
-import de.gematik.zeta.cli.popp.runCardPoppFlow
-import de.gematik.zeta.cli.popp.runConnectorPoppFlow
+import de.gematik.zeta.cli.popp.CardTransport
+import de.gematik.zeta.cli.popp.PoppCardConfig
+import de.gematik.zeta.cli.popp.runPoppFlow
 import de.gematik.zeta.cli.sdk.buildZetaSdkClient
 import de.gematik.zeta.cli.state.hasUsableCredentials
 import de.gematik.zeta.cli.storage.ProfileDb
@@ -49,22 +49,6 @@ internal fun refreshDelayMs(expSec: Long, nowMs: Long, leadMs: Long): Long =
 /** A warm resource session: the SDK client plus its **one** reused HTTP client (built once). */
 internal class WarmSession(val sdk: ZetaSdkClient, val http: ZetaHttpClient)
 
-/** How the daemon mints PoPP tokens for `/api/vsdm/popp-then-read` — the card transport, chosen at startup. */
-internal enum class PoppCardTransport { CONNECTOR, STANDARD }
-
-/**
- * PoPP minting configuration. [transport] picks the card flow; [connection] applies to
- * [PoppCardTransport.CONNECTOR], [reader]/[waitSeconds] to [PoppCardTransport.STANDARD]. [serviceUrl] is
- * the env-derived PoPP WebSocket URL (already resolved in `ServeCommand`).
- */
-internal data class PoppMintConfig(
-    val transport: PoppCardTransport,
-    val connection: ConnectionType,
-    val reader: String?,
-    val waitSeconds: Long,
-    val serviceUrl: String,
-)
-
 /**
  * The daemon's warm state for one TI [env]: one auth [tokenProvider] + an optional warm Konnektor
  * [connectorSession] (present only for `--auth-method connector`), and a per-(resource, scopes) cache
@@ -78,7 +62,7 @@ internal class DaemonContext(
     private val tokenProvider: SubjectTokenProvider,
     val connectorSession: ConnectorSession?,
     val env: Environment,
-    val poppMint: PoppMintConfig? = null,
+    val poppMint: PoppCardConfig? = null,
 ) : Closeable {
     val requestMutex = Mutex()
 
@@ -184,17 +168,9 @@ internal class DaemonContext(
     suspend fun mintPoppToken(egkHandle: String?): String {
         val mint = poppMint ?: error("PoPP is not enabled")
         val popp = warmSessionFor(originOf(mint.serviceUrl), listOf("popp"))
-        return when (mint.transport) {
-            PoppCardTransport.CONNECTOR -> {
-                val session = connectorSession ?: error("connector card transport requires --auth-method connector")
-                runConnectorPoppFlow(popp.sdk, session, egkHandle, mint.connection, mint.serviceUrl) {
-                    applyCliHttpDefaults(cliConfig)
-                }
-            }
-            PoppCardTransport.STANDARD ->
-                runCardPoppFlow(popp.sdk, mint.reader, mint.waitSeconds, mint.serviceUrl) {
-                    applyCliHttpDefaults(cliConfig)
-                }
+        val session = connectorSession.takeIf { mint.transport == CardTransport.CONNECTOR }
+        return runPoppFlow(popp.sdk, mint.copy(egkHandle = egkHandle), session) {
+            applyCliHttpDefaults(cliConfig)
         }
     }
 

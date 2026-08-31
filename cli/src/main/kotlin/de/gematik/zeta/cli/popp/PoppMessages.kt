@@ -17,9 +17,8 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  * { "type": "Start", "version": "1.0.0", "cardConnectionType": "contact-connector", … }
  * ```
  *
- * Only the message variants we send or expect to receive in the **Connector** scenario are
- * modelled here. `StandardScenarioMessage` is included as a sentinel so we can fail
- * cleanly if the server picks the wrong flow for our `cardConnectionType`.
+ * Both scenarios are modelled: the server picks one from the `cardConnectionType` we send in
+ * [StartMessage] and drives it to a [TokenMessage].
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -44,9 +43,8 @@ internal data class ConnectorScenarioMessage(
 ) : PoppMessage
 
 /**
- * Sent by the server when the client used a `*-standard` `cardConnectionType`. We don't
- * support that branch yet; we model the type so the client can fail cleanly rather than
- * deserialise into "unknown".
+ * Sent by the server when the client used a `*-standard` `cardConnectionType`: the APDU rounds
+ * arrive unsigned, for the client to run against the card it holds itself.
  */
 @Serializable
 @SerialName("StandardScenario")
