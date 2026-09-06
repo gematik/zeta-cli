@@ -171,7 +171,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         }
         // Single-env daemon: the ASL prod/non-prod choice is fixed once here (each SDK client captures
         // it at build time), so there's no per-request mutation race.
-        cliConfig.aslProdEnvironment = env == Environment.PROD
+        cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
 
         // Build the identity once (fatal if the config is wrong: bad keystore, no card, unreadable DB).
         val (tokenProvider, connectorSession) = buildTokenProvider()
