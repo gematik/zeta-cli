@@ -1,8 +1,20 @@
-# ZETA command line client
+# Command line client for TI 2.0 Zero Trust services
 
 ![zeta CLI demo](demo.gif)
 
-Command-line client for resources protected by [ZETA Guard](https://github.com/gematik/zeta). Handles the full OAuth2 client lifecycle — dynamic client registration, SMC-B authentication via a gematik Konnektor or local PKCS#12 keystore, token refresh and revocation — and ships a curl-like HTTP client and a JSON-over-WebSocket client that transparently attach the bearer token to every request. Also obtains Proof-of-Patient-Presence (PoPP) tokens via Konnektor-driven eGK flows.
+Command-line client for the **Zero Trust services** of gematik's Telematikinfrastruktur 2.0. It
+covers what an application needs to reach one of them, end to end:
+
+- **[ZETA Guard](https://github.com/gematik/zeta)**, the Zero Trust layer in front of the services — the full OAuth2 client lifecycle (dynamic client registration, SMC-B authentication via a gematik Konnektor or a local PKCS#12 keystore, DPoP-bound tokens, refresh and revocation), plus the ASL transport the guard requires.
+- **PoPP** — Proof-of-Patient-Presence tokens from an eGK, read through a Konnektor, a local PC/SC reader, or a card simulator.
+- **VSDM 2.0** — reading a patient's Versichertenstammdaten, with conditional revalidation against the service.
+- **TI service discovery** — resolving an insurer's endpoint from the environment's catalog.
+- **Konnektor / TI-Gateway** — card and SDS operations against the box itself.
+
+On top of that it ships a curl-like HTTP client and a JSON-over-WebSocket client that attach the
+bearer token transparently, a local warm-session daemon, and a load-test harness.
+
+The binary is called `zeta` after ZETA Guard, which it started out as a client for.
 
 - [Quick start](#quick-start)
 - [Commands](#commands)
@@ -12,6 +24,15 @@ Command-line client for resources protected by [ZETA Guard](https://github.com/g
 - [SDK version](#sdk-version)
 - [Install](#install)
 - [Development](#development)
+
+### Guides
+
+| | |
+| --- | --- |
+| [Quick start](docs/quickstart.md) | End-to-end: configure the Konnektor, log in, read an SMC-B, get a PoPP token, read a VSDM bundle. |
+| [`zeta serve`](docs/serve.md) | The local warm-session daemon and its HTTP API. |
+| [`zeta stress`](docs/stress.md) | Load-testing ZETA Guard with a fleet of SMC-B clients. |
+| [`.kon` format](docs/kon-format.md) | The Konnektor configuration file. |
 
 ## Quick start
 
@@ -65,7 +86,8 @@ zeta login https://popp.dev.poppservice.de \
 
 - `zeta http URL` — HTTP request to a Zeta-protected resource (curl-like).
 - `zeta ws URL` — WebSocket to a Zeta-protected resource, round-tripping JSON from stdin.
-- `zeta vsdm get [POPP-TOKEN]` — read a patient's VSDM bundle straight from a PoPP token: derives the environment and insurer from the token, resolves the VSDM endpoint via the TI service-discovery catalog, and fetches the bundle (scope `vsdservice`). Token falls back to `ZETA_POPP_TOKEN`; `--endpoint URL` overrides the catalog routing with an explicit VSDM endpoint (base URL only).
+- `zeta vsdm get [POPP-TOKEN]` — read a patient's VSDM bundle straight from a PoPP token: derives the environment and insurer from the token, resolves the VSDM endpoint via the TI service-discovery catalog, and fetches the bundle (scope `vsdservice`). Token falls back to `ZETA_POPP_TOKEN`; `--endpoint URL` overrides the catalog routing with an explicit VSDM endpoint (base URL only). `--cache-db FILE` turns the mandatory `If-None-Match` into a real conditional request, so an unchanged record is revalidated instead of re-transferred.
+- `zeta vsdm cache {stats,purge}` — inspect or clear that cache file.
 
 **Konnektor & PoPP**
 
@@ -81,6 +103,7 @@ zeta login https://popp.dev.poppservice.de \
 **Tooling**
 
 - `zeta version` — print the CLI and `zeta-sdk` version.
+- `zeta serve` — run a local daemon holding warm sessions for one TI environment, with an HTTP API for VSDM reads and PoPP minting. See [docs/serve.md](docs/serve.md).
 - `zeta stress …` — load-test ZETA Guard with a fleet of SMC-B-backed clients. See [docs/stress.md](docs/stress.md).
 
 Examples for the less obvious ones:
@@ -284,8 +307,15 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | `--profile-version=<version>` | — | `1.1` |
 | `-H, --header=<name: value>` | `ZETA_VSDM_HEADER` | — |
 | `-i, --include` | `ZETA_VSDM_INCLUDE` | off |
+| `--cache-db=<file>` | `ZETA_CACHE_DB` | — (no caching) |
+| `--cache-max-entries=<n>` | `ZETA_CACHE_MAX_ENTRIES` | `10000` |
+| `--cache-max-age-days=<days>` | `ZETA_CACHE_MAX_AGE_DAYS` | `180` |
 
 The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). `--profile-version` sets the `profileVersion` query parameter sent to the endpoint (default `1.1`; pass `--profile-version 1.0` for the older profile). `-H, --header` overrides (or adds) headers on the inner VSDM request — it replaces the built-in `Accept` / `If-None-Match` / `PoPP` defaults by name (case-insensitive) and does not affect the outer ASL/CBOR transport. Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
+
+**Caching.** The VSDM service requires an `If-None-Match` header — the built-in default is an all-zero etag meaning "no known version", which never matches, so every read transfers the whole bundle. Point `--cache-db` at a file and the command instead sends the etag it stored for that patient record, and a `304` is answered from the cache. Nothing expires: the service decides on every read whether the copy still holds. The key is environment + endpoint + insurer (IKNR) + insurant (KVNR) + `profileVersion` + media type, all but the last two taken from the PoPP token.
+
+`--cache-db` names one cache file shared by every cached kind — VSDM bundles are the first. Today it therefore holds Versichertenstammdaten and the PoPP tokens they were read with, **unencrypted**, mode `0600` — pick its location deliberately, and note that a `cache-db:` key in `zeta.yaml` enables it just as the flag does. Deleting the file is always safe; `zeta vsdm cache stats` and `zeta vsdm cache purge` do it selectively. An explicit `-H 'If-None-Match: …'` bypasses the cache entirely: your condition goes up untouched and the response comes back untouched.
 
 **Automation output.** The default output prints just the bundle. `-i, --include` instead prints the whole response as an HTTP message — the status line, one header per line, a blank line, then the body — so a single pipe carries the response headers (`ETag`, the VSDM `PZ` / Prüfziffer, …) alongside the bundle:
 
@@ -297,6 +327,8 @@ Content-Type: application/fhir+json
 
 { "resourceType": "Bundle", … }
 ```
+
+On a cache hit the status line still reads `200` and the body is the cached bundle, while `ETag` and `PZ` come from the live response — the `PZ` is per-read and is never cached. Two headers name what happened: `middleware-cache: hit` and `middleware-upstream-status: 304`.
 
 Parse it in bash by splitting on the first blank line — read a header, or take the body:
 

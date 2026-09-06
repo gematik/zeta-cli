@@ -15,6 +15,8 @@ import de.gematik.zeta.cli.state.hasUsableCredentials
 import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.ProfileDbCatalogStore
 import de.gematik.zeta.cli.storage.SqliteSdkStorage
+import de.gematik.zeta.cli.cache.CacheDb
+import de.gematik.zeta.cli.vsdm.VsdmBundleCache
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.ZetaSdkClientExtension
 import de.gematik.zeta.sdk.authentication.AuthenticationStorageImpl
@@ -63,8 +65,16 @@ internal class DaemonContext(
     val connectorSession: ConnectorSession?,
     val env: Environment,
     val poppMint: PoppCardConfig? = null,
+    /** The shared cache file, or null when `--cache-db` was not given. Owned here, closed with the daemon. */
+    private val cacheDb: CacheDb? = null,
 ) : Closeable {
     val requestMutex = Mutex()
+
+    /** The VSDM bundles inside [cacheDb]; null when caching is off. */
+    val vsdmCache: VsdmBundleCache? = cacheDb?.let { VsdmBundleCache(it) }
+
+    /** Size of the cache file on disk, or null when caching is off. */
+    fun cacheFileBytes(): Long? = cacheDb?.fileBytes()
 
     /** Warm-sweep progress, surfaced by `/api/health`. `warmupTotal` is null until the catalog resolves. */
     @Volatile
@@ -187,6 +197,7 @@ internal class DaemonContext(
         cache.values.forEach { runCatching { ZetaSdkClientExtension.close(it.sdk) } }
         cache.clear()
         runCatching { connectorSession?.close() }
+        runCatching { cacheDb?.close() }
         runCatching { cliConfig.httpClient.close() }
     }
 }

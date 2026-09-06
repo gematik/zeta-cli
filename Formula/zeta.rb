@@ -1,5 +1,5 @@
 class Zeta < Formula
-  desc "Swiss-army-knife Zeta client and tools"
+  desc "Command-line client for TI 2.0 Zero Trust services (ZETA Guard, PoPP, VSDM)"
   homepage "https://github.com/gematik/zeta-cli"
   url "https://github.com/gematik/zeta-cli/releases/download/v0.7.0/zeta-0.7.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"

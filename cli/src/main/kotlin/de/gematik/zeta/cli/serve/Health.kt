@@ -2,6 +2,8 @@ package de.gematik.zeta.cli.serve
 
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 /** Simplified live-runtime view for `GET /api/health` — the open warm sessions + connector state. */
@@ -13,7 +15,12 @@ internal data class HealthDto(
     val warmup: WarmupDto,
     val sessions: List<SessionDto>,
     val connector: ConnectorDto,
+    val cache: CacheDto? = null,
 )
+
+/** Bundle-cache counters; absent when `--cache-db` was not given. */
+@Serializable
+internal data class CacheDto(val entries: Long, val oldestRevalidation: Long?, val fileBytes: Long)
 
 @Serializable
 internal data class SessionDto(val resource: String, val scopes: List<String>)
@@ -59,6 +66,11 @@ internal suspend fun handleHealth(call: ApplicationCall, ctx: DaemonContext) {
             warmup = WarmupDto(complete = ctx.warmupComplete, warmed = sessions.size, total = ctx.warmupTotal),
             sessions = sessions.map { SessionDto(it.resource, it.scopes) },
             connector = connector,
+            cache = ctx.vsdmCache?.let {
+                withContext(Dispatchers.IO) {
+                    CacheDto(it.entryCount(), it.oldestRevalidationEpochSec(), ctx.cacheFileBytes() ?: 0)
+                }
+            },
         ),
     )
 }

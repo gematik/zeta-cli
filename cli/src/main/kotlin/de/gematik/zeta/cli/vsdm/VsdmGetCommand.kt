@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import de.gematik.zeta.catalog.CatalogException
@@ -25,6 +26,8 @@ import de.gematik.zeta.cli.output.renderXml
 import de.gematik.zeta.cli.state.claimString
 import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.ProfileDbCatalogStore
+import de.gematik.zeta.cli.cache.CacheDb
+import de.gematik.zeta.cli.cache.CacheOptions
 import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpResponse
 import de.gematik.zeta.stress.identity.PoppJwt
@@ -32,16 +35,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 
 private val log = KotlinLogging.logger {}
 
-// Placeholder ETag: never matches, so the server always returns the full bundle (200). Real
-// conditional-request (If-None-Match) handling comes later.
-private const val EMPTY_ETAG = "\"0000000000000000000000000000000000000000000000000000000000000000\""
-
 private val JWT_SEGMENT = Regex("^[A-Za-z0-9_-]+$")
+
+/** Statuses that say "the record version you named is not one I can answer for". */
+private val VERSION_REJECTED = setOf(412, 428)
+
+private fun nowEpochSec(): Long = System.currentTimeMillis() / 1000
 
 /**
  * A compact JWT — three non-empty base64url segments (`header.payload.signature`). base64url has no
@@ -98,6 +103,8 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
             "body. Lets a script read ETag / PZ alongside the bundle. (env: ZETA_VSDM_INCLUDE)",
     ).flag(default = false)
 
+    private val cache by CacheOptions()
+
     // Sign as the SMC-B that obtained the PoPP token (its actorId), so `--auth-db-telematik-id` is
     // never needed for `zeta vsdm get --auth-method db`.
     private var poppActorId: String? = null
@@ -142,42 +149,75 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         val targetUrl = baseUrl.trimEnd('/') + VSDM_PATH + "?profileVersion=$profileVersion"
         val resource = originOf(targetUrl)
 
-        openSession(resource = resource, scopes = listOf("vsdservice")) { sdk, _ ->
-            val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }
-            try {
-                runBlocking {
-                    log.info { "GET $targetUrl (scope vsdservice)" }
-                    // Ktor's header(...) appends, so a user override of e.g. Accept would send
-                    // two values — key by lower-cased name so an override replaces the default.
-                    val headers = LinkedHashMap<String, Pair<String, String>>()
-                    fun putHeader(name: String, value: String) { headers[name.lowercase()] = name to value }
-                    putHeader(HttpHeaders.Accept, "application/fhir+json")
-                    putHeader(HttpHeaders.IfNoneMatch, EMPTY_ETAG)
-                    putHeader(POPP_HEADER_NAME, token)
-                    requestHeaders.map(::parseHeaderOption).forEach { (n, v) -> putHeader(n, v) }
+        val cacheFile = cache.db?.let { CacheDb(it) }
+        val cacheDb = cacheFile?.let { VsdmBundleCache(it) }
+        try {
+            openSession(resource = resource, scopes = listOf("vsdservice")) { sdk, _ ->
+                val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }
+                try {
+                    runBlocking {
+                        // Ktor's header(...) appends, so a user override of e.g. Accept would send
+                        // two values — key by lower-cased name so an override replaces the default.
+                        val headers = LinkedHashMap<String, Pair<String, String>>()
+                        fun putHeader(name: String, value: String) { headers[name.lowercase()] = name to value }
+                        putHeader(HttpHeaders.Accept, "application/fhir+json")
+                        putHeader(POPP_HEADER_NAME, token)
+                        requestHeaders.map(::parseHeaderOption).forEach { (n, v) -> putHeader(n, v) }
 
-                    val response = withAslExpiryRetry {
-                        client.request(targetUrl) {
-                            method = HttpMethod.Get
-                            headers.values.forEach { (n, v) -> header(n, v) }
+                        val cacheKey = normalizedContentType(headers[HttpHeaders.Accept.lowercase()]?.second)
+                            ?.let { cacheKeyFor(claims, env, originOf(baseUrl), profileVersion, it) }
+                        val stored = cacheKey?.let { k -> cacheDb?.lookup(k) }
+                        var decision = cacheDecision(
+                            clientIfNoneMatch = headers[HttpHeaders.IfNoneMatch.lowercase()]?.second,
+                            cachedEtag = stored?.etag,
+                            cacheControl = null,
+                            cacheEnabled = cacheDb != null && cacheKey != null,
+                        )
+
+                        suspend fun read(ifNoneMatch: String) = withAslExpiryRetry {
+                            putHeader(HttpHeaders.IfNoneMatch, ifNoneMatch)
+                            log.info { "GET $targetUrl (scope vsdservice)" }
+                            client.request(targetUrl) {
+                                method = HttpMethod.Get
+                                headers.values.forEach { (n, v) -> header(n, v) }
+                            }
                         }
-                    }
-                    log.info { "response: HTTP ${response.status.value}" }
-                    // The wire logger only sees the encrypted ASL envelope; surface the decrypted
-                    // inner response too, so `-vv` shows it like the (already-logged) inner request.
-                    if (!response.isPlainResponse()) {
-                        logInnerAslResponse(
-                            response.status.value,
-                            response.status.description,
-                            response.headers,
-                            response.bodyAsBytes(),
+
+                        var response = read(decision.ifNoneMatch ?: NO_KNOWN_VERSION_ETAG)
+                        // A version the service rejects would wedge this record for good, so drop it
+                        // and ask once more as if we held nothing.
+                        if (decision.intent == CacheIntent.SERVE_FROM_CACHE && response.status.value in VERSION_REJECTED) {
+                            log.warn { "service rejected the cached record version (HTTP ${response.status.value}); re-reading in full" }
+                            cacheKey?.let { cacheDb?.invalidate(it) }
+                            decision = CacheDecision(CacheIntent.FILL, NO_KNOWN_VERSION_ETAG)
+                            response = read(NO_KNOWN_VERSION_ETAG)
+                        }
+                        log.info { "response: HTTP ${response.status.value}" }
+                        // The wire logger only sees the encrypted ASL envelope; surface the decrypted
+                        // inner response too, so `-vv` shows it like the (already-logged) inner request.
+                        if (!response.isPlainResponse()) {
+                            logInnerAslResponse(
+                                response.status.value,
+                                response.status.description,
+                                response.headers,
+                                response.bodyAsBytes(),
+                            )
+                        }
+                        val served = recordResult(cacheDb, cacheKey, decision, stored, response, token)
+                        renderResponse(
+                            response,
+                            served,
+                            cacheKey?.contentType,
+                            cacheOutcome(decision.intent, response.status.value),
                         )
                     }
-                    renderResponse(response)
+                } finally {
+                    client.close()
                 }
-            } finally {
-                client.close()
             }
+        } finally {
+            cacheDb?.prune(nowEpochSec(), cache.maxEntries, cache.maxAgeDays)
+            cacheFile?.close()
         }
 
         // The person reading the VSD should be the one who proved patient presence: the access token's
@@ -215,29 +255,71 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         return resolved
     }
 
-    private suspend fun renderResponse(response: ZetaHttpResponse) {
-        val status = response.status.value
-        val contentType = response.contentType()
-        val bytes = response.bodyAsBytes()
+    /**
+     * Update the cache from the response and return the bundle to render — the stored one when a
+     * `304` confirmed the version we asked about, otherwise null and the response speaks for itself.
+     */
+    private suspend fun recordResult(
+        cache: VsdmBundleCache?,
+        key: VsdmCacheKey?,
+        decision: CacheDecision,
+        stored: CachedBundle?,
+        response: ZetaHttpResponse,
+        poppToken: String,
+    ): CachedBundle? {
+        if (cache == null || key == null) return null
+        val now = nowEpochSec()
+        when (response.status.value) {
+            in 200..299 -> {
+                val etag = response.header(HttpHeaders.ETag) ?: return null
+                cache.store(key, CachedBundle(etag, response.bodyAsBytes(), poppToken, now, now))
+            }
+
+            HTTP_NOT_MODIFIED -> cache.touch(key, now, poppToken)
+            404, 410 -> cache.invalidate(key)
+        }
+        return stored.takeIf { servesFromCache(decision.intent, response.status.value) }
+    }
+
+    private suspend fun renderResponse(
+        response: ZetaHttpResponse,
+        served: CachedBundle?,
+        servedContentType: String?,
+        cacheOutcome: String,
+    ) {
+        // A confirmed cached bundle is presented as the 200 the caller would have got without a
+        // cache: same body, live ETag and PZ, with the middleware-* headers naming the
+        // substitution. A bodyless 304 would break every script built on `-i`.
+        val status = if (served != null) 200 else response.status.value
+        val reason = if (served != null) "OK" else response.status.description
+        val contentType = if (served != null) servedContentType.orEmpty() else response.contentType()
+        val bytes = served?.body ?: response.bodyAsBytes()
 
         // A non-2xx VSDM read is a failure, not a result — fail the command (non-zero exit)
-        // with the server's reason rather than silently printing the body and exiting 0.
-        if (status !in 200..299) {
-            val reason = readableBody(bytes)?.let { ": $it" }
+        // with the server's reason rather than silently printing the body and exiting 0. A 304 is
+        // the successful answer to the conditional request: the version we named still holds.
+        if (status !in 200..299 && status != HttpStatusCode.NotModified.value) {
+            val detail = readableBody(bytes)?.let { ": $it" }
                 ?: binaryNote(bytes, contentType)?.let { " ($it)" }
                 ?: ""
-            throw CliktError("VSDM request failed: HTTP $status ${response.status.description}$reason")
+            throw CliktError("VSDM request failed: HTTP $status $reason$detail")
         }
 
         // `-i`: emit the whole thing as an HTTP message (status line, headers, blank line, body) so a
         // pipe carries the headers alongside the body. The body is left raw — a faithful response.
         if (include) {
-            echo(httpResponseText(status, response.status.description, response.headers, bytes))
+            val headers = buildMap {
+                putAll(response.headers)
+                served?.let { put(HttpHeaders.ContentType, contentType) }
+                put(MIDDLEWARE_CACHE_HEADER, cacheOutcome)
+                put(MIDDLEWARE_UPSTREAM_STATUS_HEADER, response.status.value.toString())
+            }
+            echo(httpResponseText(status, reason, headers, bytes))
             return
         }
 
         if (bytes.isEmpty()) {
-            echo("HTTP $status ${response.status.description} (empty body)")
+            echo("HTTP $status $reason (empty body)")
             return
         }
 
@@ -264,10 +346,10 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         echo(readableBody(bytes) ?: "<${binaryNote(bytes, contentType) ?: "empty body"}>")
     }
 
-    private fun ZetaHttpResponse.contentType(): String =
-        headers.entries.firstOrNull { it.key.equals(HttpHeaders.ContentType, ignoreCase = true) }
-            ?.value
-            .orEmpty()
+    private fun ZetaHttpResponse.header(name: String): String? =
+        headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+
+    private fun ZetaHttpResponse.contentType(): String = header(HttpHeaders.ContentType).orEmpty()
 
     private fun looksLikeJson(contentType: String): Boolean =
         contentType.contains("application/json", ignoreCase = true) ||

@@ -26,7 +26,9 @@ import de.gematik.zeta.cli.state.enumerateEntries
 import de.gematik.zeta.cli.state.profileStatusJson
 import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.ProfileDbCatalogStore
+import de.gematik.zeta.cli.cache.CacheDb
 import de.gematik.zeta.cli.storage.zetaProfilePath
+import de.gematik.zeta.cli.cache.CacheOptions
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -134,6 +136,8 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
 
     private val card by CardReaderOptions(prefix = "popp-")
 
+    private val cache by CacheOptions()
+
     override fun help(context: Context) =
         "Run a warm-session REST daemon for one TI environment (unix socket by default, or --port for TCP)."
 
@@ -160,6 +164,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             }
             get("/api/vsdm/read") { handleVsdmRead(call, ctx) }
             get("/api/vsdm/popp-then-read") { handleVsdmPoppThenRead(call, ctx) }
+            get("/api/popp/token") { handlePoppToken(call, ctx) }
             // Unmatched paths get a JSON 404 too (Ktor's default is plain text).
             route("{...}") { handle { respondError(call, HttpStatusCode.NotFound, "no such endpoint: ${call.request.uri}") } }
         }
@@ -199,7 +204,18 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             waitSeconds = card.waitSeconds,
             readerOption = card.readerOptionName,
         )
-        val ctx = DaemonContext(cliConfig, zetaProfilePath(profile), tokenProvider, connectorSession, env, poppMint)
+        // Opened before the context so a daemon told to cache never starts up silently not caching.
+        val cacheDb = cache.db?.let { CacheDb(it) }
+        val ctx = DaemonContext(
+            cliConfig,
+            zetaProfilePath(profile),
+            tokenProvider,
+            connectorSession,
+            env,
+            poppMint,
+            cacheDb,
+        )
+        ctx.vsdmCache?.prune(System.currentTimeMillis() / 1000, cache.maxEntries, cache.maxAgeDays)
 
         // Bind + report ready immediately; the warm sweep runs in the background (a request to a
         // not-yet-warm endpoint builds its session lazily via the same warmSessionFor seam).
