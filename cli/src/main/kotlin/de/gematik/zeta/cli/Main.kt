@@ -4,6 +4,9 @@ import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import de.gematik.zeta.cli.client.HttpCommand
 import de.gematik.zeta.cli.client.WsCommand
+import de.gematik.zeta.cli.vsdm.VsdmCacheCommand
+import de.gematik.zeta.cli.vsdm.VsdmCachePurgeCommand
+import de.gematik.zeta.cli.vsdm.VsdmCacheStatsCommand
 import de.gematik.zeta.cli.vsdm.VsdmCommand
 import de.gematik.zeta.cli.vsdm.VsdmGetCommand
 import de.gematik.zeta.cli.config.ConfigFileMissingException
@@ -110,7 +113,10 @@ fun main(args: Array<String>) {
                     ForgetCommand(),
                     HttpCommand(),
                     WsCommand(),
-                    VsdmCommand().subcommands(VsdmGetCommand()),
+                    VsdmCommand().subcommands(
+                        VsdmGetCommand(),
+                        VsdmCacheCommand().subcommands(VsdmCacheStatsCommand(), VsdmCachePurgeCommand()),
+                    ),
                     ConnectorCommand().subcommands(
                         ConnectorInspectCommand(),
                         ConnectorConfigsCommand(),

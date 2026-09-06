@@ -147,8 +147,12 @@ zeta http 'https://vsdm-dev.tk.de/vsdservice/v1/vsdmbundle?profileVersion=1.0' \
   -vv
 ```
 
-The all-zero `If-None-Match` ETag forces a full bundle (a matching ETag would return
-`304 Not Modified`).
+`If-None-Match` is mandatory — the VSDM service answers `428` without it. The all-zero value
+means "I hold no version of this record", so the service sends the whole bundle. Pass
+`--cache-db FILE` and `zeta vsdm get` keeps the version it was given and sends that instead, so
+an unchanged record answers `304` and is served from the cache. See the
+[caching notes](../README.md#zeta-vsdm-get-popp-token) — the file stores Versichertenstammdaten
+unencrypted.
 
 ## Notes
 

@@ -102,7 +102,7 @@ class HttpCommand : ZetaSessionCommand("http") {
         "Send an HTTP request to a Zeta-protected resource."
 
     override fun runCommand() {
-        cliConfig.aslProdEnvironment = env == Environment.PROD
+        cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
         val poppHeader = poppToken?.let { listOf(POPP_HEADER_NAME to it) }.orEmpty()
         val parsedHeaders = poppHeader + requestHeaders.map(::parseHeaderOption)
         val method = resolveMethod()

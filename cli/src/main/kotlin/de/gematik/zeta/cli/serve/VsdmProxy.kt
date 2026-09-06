@@ -7,8 +7,22 @@ import de.gematik.zeta.cli.client.POPP_HEADER_NAME
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.client.withAslExpiryRetry
 import de.gematik.zeta.cli.popp.PoppProtocolException
+import de.gematik.zeta.cli.vsdm.VsdmBundleCache
+import de.gematik.zeta.cli.vsdm.CacheDecision
+import de.gematik.zeta.cli.vsdm.CachedBundle
+import de.gematik.zeta.cli.vsdm.MIDDLEWARE_CACHE_HEADER
+import de.gematik.zeta.cli.vsdm.MIDDLEWARE_INSURANT_ID_HEADER
+import de.gematik.zeta.cli.vsdm.MIDDLEWARE_INSURER_ID_HEADER
+import de.gematik.zeta.cli.vsdm.MIDDLEWARE_UPSTREAM_STATUS_HEADER
 import de.gematik.zeta.cli.vsdm.VSDM_PATH
+import de.gematik.zeta.cli.vsdm.VsdmCacheKey
+import de.gematik.zeta.cli.vsdm.cacheDecision
+import de.gematik.zeta.cli.vsdm.cacheKeyFor
+import de.gematik.zeta.cli.vsdm.cacheOutcome
+import de.gematik.zeta.cli.vsdm.normalizedContentType
+import de.gematik.zeta.cli.vsdm.servesFromCache
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpResponse
+import de.gematik.zeta.stress.identity.PoppClaims
 import de.gematik.zeta.stress.identity.PoppJwt
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.header
@@ -22,7 +36,9 @@ import io.ktor.server.request.queryString
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import javax.smartcardio.CardException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -46,6 +62,11 @@ internal const val MIDDLEWARE_EGK_HEADER = "middleware-egk"
 
 private const val ERROR_SOURCE_MIDDLEWARE = "middleware"
 private const val ERROR_SOURCE_UPSTREAM = "upstream"
+
+// What the read is keyed on when the client leaves it to the service — the same defaults the VSDM
+// service applies, so a client that omits them shares cache entries with one that spells them out.
+private const val DEFAULT_PROFILE_VERSION = "1.1"
+private const val DEFAULT_ACCEPT = "application/fhir+json"
 
 // Inbound client headers the daemon owns and must not forward upstream: framing / hop-by-hop, plus the
 // transport auth the SDK's own client attaches (Authorization/Cookie).
@@ -73,6 +94,26 @@ internal fun forwardableUpstreamHeaders(headers: Headers): List<Pair<String, Str
             if (lower !in INBOUND_SKIP && !lower.startsWith("middleware-")) values.forEach { add(name to it) }
         }
     }
+
+/**
+ * The `middleware-*` metadata put on a forwarded read: who the bundle is about, which token proved
+ * presence, what the cache did, and what the service actually answered — the last one matters because
+ * a cache hit is reported to the client as `200` while upstream said `304`.
+ */
+internal fun middlewareResponseHeaders(
+    claims: PoppClaims,
+    poppToken: String,
+    cacheOutcome: String,
+    upstreamStatus: Int,
+): List<Pair<String, String>> = buildList {
+    add(MIDDLEWARE_POPP_HEADER to poppToken)
+    add(MIDDLEWARE_INSURER_ID_HEADER to claims.insurerId)
+    add(MIDDLEWARE_INSURANT_ID_HEADER to claims.patientId)
+    add(MIDDLEWARE_CACHE_HEADER to cacheOutcome)
+    add(MIDDLEWARE_UPSTREAM_STATUS_HEADER to upstreamStatus.toString())
+    // A forwarded upstream error is the VSDM service's, not the daemon's — attribute it so the client can tell.
+    if (upstreamStatus >= 400) add(MIDDLEWARE_ERROR_SOURCE_HEADER to ERROR_SOURCE_UPSTREAM)
+}
 
 /** `<base>/vsdservice/v1/vsdmbundle` with the client's query string forwarded verbatim. */
 internal fun upstreamVsdmUrl(baseUrl: String, queryString: String): String =
@@ -104,17 +145,58 @@ internal suspend fun handleVsdmRead(call: ApplicationCall, ctx: DaemonContext) {
         )
     val upstreamUrl = upstreamVsdmUrl(baseUrl, call.request.queryString())
     val resource = originOf(upstreamUrl)
+
+    ctx.requestMutex.withLock {
+        readAndForward(call, ctx, claims, baseUrl, upstreamUrl, resource, token, forwardPoppHeader = false)
+    }
+}
+
+/**
+ * The read itself, shared by both endpoints. Picks the conditional request per [cacheDecision], calls
+ * upstream, then either forwards the response verbatim or — when the daemon asked on its own behalf
+ * and got a `304` — serves the cached bundle as the `200` the client would otherwise have received.
+ *
+ * The caller holds [DaemonContext.requestMutex]: `popp-then-read` needs mint and read under one lock,
+ * and the mutex is not reentrant.
+ */
+private suspend fun readAndForward(
+    call: ApplicationCall,
+    ctx: DaemonContext,
+    claims: PoppClaims,
+    baseUrl: String,
+    upstreamUrl: String,
+    resource: String,
+    token: String,
+    forwardPoppHeader: Boolean,
+) {
+    val cache = ctx.vsdmCache
+    val profileVersion = call.request.queryParameters["profileVersion"] ?: DEFAULT_PROFILE_VERSION
+    val key = normalizedContentType(call.request.headers[HttpHeaders.Accept] ?: DEFAULT_ACCEPT)
+        ?.let { cacheKeyFor(claims, ctx.env, originOf(baseUrl), profileVersion, it) }
+    // JDBC blocks, and a Ktor handler runs on the engine's dispatcher — keep the driver off it.
+    val stored = key?.let { k -> cache?.let { withContext(Dispatchers.IO) { it.lookup(k) } } }
+    val decision = cacheDecision(
+        clientIfNoneMatch = call.request.headers[HttpHeaders.IfNoneMatch],
+        cachedEtag = stored?.etag,
+        cacheControl = call.request.headers[HttpHeaders.CacheControl],
+        cacheEnabled = cache != null && key != null,
+    )
+
+    // Client headers go up as-is; only If-None-Match may be substituted, and only when the client
+    // asked no conditional question of its own.
     val forward = forwardableUpstreamHeaders(call.request.headers)
+        .filterNot { it.first.equals(HttpHeaders.IfNoneMatch, ignoreCase = true) }
+        .filterNot { forwardPoppHeader && it.first.equals(POPP_HEADER_NAME, ignoreCase = true) }
 
     val response = try {
-        ctx.requestMutex.withLock {
-            val session = ctx.warmSessionFor(resource, listOf("vsdservice"))
-            log.info { "GET $upstreamUrl (scope vsdservice)" }
-            withAslExpiryRetry {
-                session.http.request(upstreamUrl) {
-                    method = HttpMethod.Get
-                    forward.forEach { (n, v) -> header(n, v) }
-                }
+        val session = ctx.warmSessionFor(resource, listOf("vsdservice"))
+        log.info { "GET $upstreamUrl (scope vsdservice)" }
+        withAslExpiryRetry {
+            session.http.request(upstreamUrl) {
+                method = HttpMethod.Get
+                forward.forEach { (n, v) -> header(n, v) }
+                decision.ifNoneMatch?.let { header(HttpHeaders.IfNoneMatch, it) }
+                if (forwardPoppHeader) header(POPP_HEADER_NAME, token)
             }
         }
     } catch (e: Exception) {
@@ -122,7 +204,36 @@ internal suspend fun handleVsdmRead(call: ApplicationCall, ctx: DaemonContext) {
         return respondError(call, HttpStatusCode.BadGateway, "VSDM read failed: ${e.message}")
     }
 
-    forwardResponse(call, response, token)
+    val served = recordCacheResult(cache, key, decision, stored, response, token)
+    forwardResponse(call, response, token, claims, served, key?.contentType, cacheOutcome(decision.intent, response.status.value))
+}
+
+/** Update the cache from [response]; return the stored bundle when it is the one to serve. */
+private suspend fun recordCacheResult(
+    cache: VsdmBundleCache?,
+    key: VsdmCacheKey?,
+    decision: CacheDecision,
+    stored: CachedBundle?,
+    response: ZetaHttpResponse,
+    poppToken: String,
+): CachedBundle? {
+    if (cache == null || key == null) return null
+    val now = System.currentTimeMillis() / 1000
+    withContext(Dispatchers.IO) {
+        when (response.status.value) {
+            in 200..299 -> {
+                val etag = response.headers.entries
+                    .firstOrNull { it.key.equals(HttpHeaders.ETag, ignoreCase = true) }?.value
+                if (etag != null) {
+                    cache.store(key, CachedBundle(etag, response.bodyAsBytes(), poppToken, now, now))
+                }
+            }
+
+            HttpStatusCode.NotModified.value -> cache.touch(key, now, poppToken)
+            HttpStatusCode.NotFound.value, HttpStatusCode.Gone.value -> cache.invalidate(key)
+        }
+    }
+    return stored.takeIf { servesFromCache(decision.intent, response.status.value) }
 }
 
 /**
@@ -140,23 +251,12 @@ internal suspend fun handleVsdmPoppThenRead(call: ApplicationCall, ctx: DaemonCo
         )
     }
     val egkHandle = call.request.headers[MIDDLEWARE_EGK_HEADER]
-    // The daemon owns the PoPP header here (it mints the token), so drop any client-supplied one.
-    val forward = forwardableUpstreamHeaders(call.request.headers)
-        .filterNot { it.first.equals(POPP_HEADER_NAME, ignoreCase = true) }
     val queryString = call.request.queryString()
 
     ctx.requestMutex.withLock {
-        val token = try {
-            ctx.mintPoppToken(egkHandle)
-        } catch (e: UsageError) {
-            return respondError(call, HttpStatusCode.Conflict, e.message ?: "no eGK available")
-        } catch (e: CardException) {
-            return respondError(call, HttpStatusCode.Conflict, e.message ?: "no card in reader")
-        } catch (e: PoppProtocolException) {
-            return respondError(call, HttpStatusCode.BadGateway, "PoPP failed: ${e.message}")
-        } catch (e: Exception) {
-            log.warn(e) { "PoPP failed" }
-            return respondError(call, HttpStatusCode.BadGateway, "PoPP failed: ${e.message}")
+        val token = when (val minted = mintPoppToken(ctx, egkHandle)) {
+            is MintResult.Ok -> minted.token
+            is MintResult.Failed -> return respondError(call, minted.status, minted.message)
         }
 
         val claims = PoppJwt.parse(token)
@@ -170,25 +270,37 @@ internal suspend fun handleVsdmPoppThenRead(call: ApplicationCall, ctx: DaemonCo
         val upstreamUrl = upstreamVsdmUrl(baseUrl, queryString)
         val resource = originOf(upstreamUrl)
 
-        val response = try {
-            val session = ctx.warmSessionFor(resource, listOf("vsdservice"))
-            log.info { "GET $upstreamUrl (scope vsdservice) [minted]" }
-            // Only the read is retried on ASL expiry — never the PoPP above (it opened a card session).
-            withAslExpiryRetry {
-                session.http.request(upstreamUrl) {
-                    method = HttpMethod.Get
-                    forward.forEach { (n, v) -> header(n, v) }
-                    header(POPP_HEADER_NAME, token)
-                }
-            }
-        } catch (e: Exception) {
-            log.warn(e) { "VSDM read failed for $resource" }
-            return respondError(call, HttpStatusCode.BadGateway, "VSDM read failed: ${e.message}")
-        }
-
-        forwardResponse(call, response, token)
+        // The daemon owns the PoPP header here (it minted the token), so any client-supplied one is
+        // dropped and replaced. Only the read is retried on ASL expiry — never the mint above, which
+        // opened a card session.
+        readAndForward(call, ctx, claims, baseUrl, upstreamUrl, resource, token, forwardPoppHeader = true)
     }
 }
+
+/** Outcome of a card-backed PoPP mint: the token, or the status and message to answer with. */
+internal sealed interface MintResult {
+    data class Ok(val token: String) : MintResult
+    data class Failed(val status: HttpStatusCode, val message: String) : MintResult
+}
+
+/**
+ * Mint a PoPP token via the startup-configured card transport. Shared by `GET /api/popp/token` and
+ * `GET /api/vsdm/popp-then-read`; the caller holds [DaemonContext.requestMutex], since the Konnektor
+ * and the card are single-session.
+ */
+internal suspend fun mintPoppToken(ctx: DaemonContext, egkHandle: String?): MintResult =
+    try {
+        MintResult.Ok(ctx.mintPoppToken(egkHandle))
+    } catch (e: UsageError) {
+        MintResult.Failed(HttpStatusCode.Conflict, e.message ?: "no eGK available")
+    } catch (e: CardException) {
+        MintResult.Failed(HttpStatusCode.Conflict, e.message ?: "no card in reader")
+    } catch (e: PoppProtocolException) {
+        MintResult.Failed(HttpStatusCode.BadGateway, "PoPP failed: ${e.message}")
+    } catch (e: Exception) {
+        log.warn(e) { "PoPP failed" }
+        MintResult.Failed(HttpStatusCode.BadGateway, "PoPP failed: ${e.message}")
+    }
 
 /**
  * Send an `ErrorDto` body tagged with `middleware-error-source: middleware` (a daemon-originated failure).
@@ -205,15 +317,28 @@ internal suspend fun respondError(call: ApplicationCall, status: HttpStatusCode,
     )
 }
 
-private suspend fun forwardResponse(call: ApplicationCall, response: ZetaHttpResponse, poppToken: String) {
-    val contentType = response.headers.entries
-        .firstOrNull { it.key.equals(HttpHeaders.ContentType, ignoreCase = true) }
-        ?.value?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+private suspend fun forwardResponse(
+    call: ApplicationCall,
+    response: ZetaHttpResponse,
+    poppToken: String,
+    claims: PoppClaims,
+    served: CachedBundle?,
+    servedContentType: String?,
+    cacheOutcome: String,
+) {
+    // Serving from cache answers a question the client did not ask conditionally, so it gets the 200
+    // it would have received without a cache: our body, and every header from the live 304 — the PZ
+    // in particular is per-read and must never come from the cache.
+    val upstreamContentType = response.headers.entries
+        .firstOrNull { it.key.equals(HttpHeaders.ContentType, ignoreCase = true) }?.value
+    val contentType = (served?.let { servedContentType } ?: upstreamContentType)
+        ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
     response.headers.forEach { (name, value) ->
         if (name.lowercase() !in RESPONSE_SKIP) runCatching { call.response.headers.append(name, value) }
     }
-    call.response.headers.append(MIDDLEWARE_POPP_HEADER, poppToken)
-    // A forwarded upstream error is the VSDM service's, not the daemon's — attribute it so the client can tell.
-    if (response.status.value >= 400) call.response.headers.append(MIDDLEWARE_ERROR_SOURCE_HEADER, ERROR_SOURCE_UPSTREAM)
-    call.respondBytes(response.bodyAsBytes(), contentType, response.status)
+    middlewareResponseHeaders(claims, poppToken, cacheOutcome, response.status.value)
+        .forEach { (name, value) -> call.response.headers.append(name, value) }
+
+    val status = if (served != null) HttpStatusCode.OK else response.status
+    call.respondBytes(served?.body ?: response.bodyAsBytes(), contentType, status)
 }

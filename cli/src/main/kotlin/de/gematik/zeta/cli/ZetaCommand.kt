@@ -18,5 +18,5 @@ class ZetaCommand(private val configPath: Path? = null) : ZetaCliktCommand(name 
         }
     }
 
-    override fun help(context: Context) = "Swiss-army-knife for ZETA"
+    override fun help(context: Context) = "Command-line client for TI 2.0 Zero Trust services"
 }

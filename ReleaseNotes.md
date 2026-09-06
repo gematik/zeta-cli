@@ -1,6 +1,17 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.13.0
+### changes
+- Add `--cache-db FILE` to `zeta vsdm get` and `zeta serve` — a shared SQLite cache that turns the mandatory `If-None-Match` into a real conditional request: the ETag the service last gave for a patient record is sent back, and an unchanged record answers `304` and is served from the cache instead of being re-transferred. Nothing expires — every read is revalidated against the service, so the cache can never hand out a stale record. Entries are keyed by environment, endpoint, insurer (IKNR), insurant (KVNR), `profileVersion` and media type; the reader's identity is deliberately not part of the key. Off unless the flag is given, and the file stores Versichertenstammdaten and PoPP tokens **unencrypted** — `--cache-max-entries` (10000) and `--cache-max-age-days` (180) bound it
+- In `zeta serve` the cache only substitutes an answer for a client that asked no conditional question of its own: a client that sends `If-None-Match` gets its own question asked upstream and its own answer back, and the all-zero etag remains the guaranteed way to force a full read. Without `--cache-db` the daemon behaves exactly as before, upstream `428` included
+- Add `zeta vsdm cache stats` and `zeta vsdm cache purge` — inspect the cache, or clear it by insurer / insurant, drop only the stored PoPP tokens (`--tokens`), or wipe it (`--all`)
+- Add `GET /api/popp/token` to `zeta serve` — mint a PoPP token without reading anything, for callers that want one proof of presence and then several reads
+- `zeta serve` responses now carry `middleware-insurer-id` and `middleware-insurant-id` (the IKNR and KVNR from the PoPP token, so a client need not decode it), plus `middleware-cache` (`hit` / `revalidated` / `miss` / `bypass` / `off`) and `middleware-upstream-status` (what the VSDM service actually answered — it differs from the response status on a cache hit)
+- `zeta vsdm get` no longer treats `304 Not Modified` as a failure: it is the successful answer to a conditional request, not an error
+- Fix `--asl-prod` being silently overridden by `--env` on `zeta http`, `zeta ws` and `zeta serve` — the environment option reset the flag to non-prod, so a prod request kept sending the `zeta-asl-nonpu-tracing` header and was rejected with ASL error 103
+- Bump `zeta-sdk` dependency to 1.3.0
+
 ## Release 0.12.0
 ### changes
 - `zeta popp standard` can now read a **contactless** eGK: `--connection contactless --can <digits>` opens a PACE channel with the card access number printed on the card, and every scenario APDU runs inside secure messaging. Readers that advertise PC/SC `FEATURE_EXECUTE_PACE` (class-3 "comfort" readers) do it in firmware — the CAN then never leaves the reader — otherwise the CLI runs PACE-ECDH-GM-AES-CBC-CMAC-128 itself

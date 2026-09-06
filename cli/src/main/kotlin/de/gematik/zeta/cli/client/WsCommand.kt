@@ -89,7 +89,7 @@ class WsCommand : ZetaSessionCommand("ws") {
         "Open a WebSocket to a Zeta-protected resource and round-trip JSON messages from stdin."
 
     override fun runCommand() {
-        cliConfig.aslProdEnvironment = env == Environment.PROD
+        cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
         // Build with popp first so an explicit `-H PoPP: …` later wins (last-write).
         val customHeaders = buildMap {
             poppToken?.let { put(POPP_HEADER_NAME, it) }
