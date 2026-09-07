@@ -6,6 +6,8 @@ import de.gematik.zeta.cli.cache.CacheDb
 import de.gematik.zeta.cli.cache.PlainBlobCodec
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermissions
+import java.sql.DriverManager
 import kotlin.io.path.writeText
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -178,7 +180,7 @@ class VsdmBundleCacheTest {
     fun `the sidecar records schema and cipher from the first open`(@TempDir dir: Path) {
         openCache(dir.resolve("c.db")).use { }
         val meta = Files.readString(dir.resolve("c.db.meta.json"))
-        assertTrue(meta.contains("\"schemaVersion\": 1"), meta)
+        assertTrue(meta.contains("\"schemaVersion\": 2"), meta)
         assertTrue(meta.contains("\"cipher\": \"none\""), meta)
     }
 
@@ -215,6 +217,47 @@ class VsdmBundleCacheTest {
             assertNull(db.lookup(key(actor = "actor-a")))
             assertNotNull(db.lookup(key(actor = "actor-b")), "the other tenant is untouched")
         }
+    }
+
+    @Test
+    fun `clearing tokens narrows to one identity like purge does`(@TempDir dir: Path) {
+        openCache(dir.resolve("c.db")).use { (_, db) ->
+            db.store(key(actor = "actor-a"), bundle(token = "popp-a"))
+            db.store(key(actor = "actor-b"), bundle(token = "popp-b"))
+
+            assertEquals(1, db.clearPoppTokens(actorId = "actor-a"))
+            assertNull(db.lookup(key(actor = "actor-a"))?.poppToken)
+            assertEquals("popp-b", db.lookup(key(actor = "actor-b"))?.poppToken)
+        }
+    }
+
+    @Test
+    fun `a cache written by another schema is recreated, not left silently broken`(@TempDir dir: Path) {
+        val file = dir.resolve("c.db")
+        openCache(file).use { (_, db) -> db.store(key(), bundle()) }
+        // What a build with a different table shape leaves behind: our file, someone else's schema.
+        DriverManager.getConnection("jdbc:sqlite:${file.toAbsolutePath()}").use { c ->
+            c.createStatement().use { it.execute("PRAGMA user_version=99") }
+        }
+
+        openCache(file).use { (_, db) ->
+            assertNull(db.lookup(key()))
+            db.store(key(), bundle())
+            assertNotNull(db.lookup(key()), "the recreated file is writable")
+        }
+    }
+
+    @Test
+    fun `the file and its WAL sidecars are owner-only`(@TempDir dir: Path) {
+        val file = dir.resolve("c.db")
+        openCache(file).use { (_, db) -> db.store(key(), bundle()) }
+        listOf(file, Path.of("$file-wal"), Path.of("$file-shm"))
+            .filter { Files.exists(it) }
+            .forEach { assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(it)), it.toString()) }
+        assertEquals(
+            "rw-------",
+            PosixFilePermissions.toString(Files.getPosixFilePermissions(dir.resolve("c.db.meta.json"))),
+        )
     }
 
     private class NamedCodec(override val name: String) : BlobCodec {

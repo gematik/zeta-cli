@@ -1,5 +1,11 @@
 package de.gematik.zeta.stress.db
 
+import de.gematik.zeta.cli.storage.ZETA_APPLICATION_ID
+import de.gematik.zeta.cli.storage.createSqliteFileOwnerOnly
+import de.gematik.zeta.cli.storage.readSqliteHeader
+import de.gematik.zeta.cli.storage.restrictSqliteFile
+import de.gematik.zeta.cli.storage.stampSqliteHeader
+import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
@@ -17,13 +23,17 @@ import java.util.concurrent.ArrayBlockingQueue
  * instead of surfacing as `SQLITE_BUSY`. Each virtual client already has an isolated key
  * namespace, so no cross-connection coordination is needed above the SQLite level.
  */
-class Db(path: Path, poolSize: Int = 32) : AutoCloseable {
+class Db(private val path: Path, poolSize: Int = 32) : AutoCloseable {
     private val url = "jdbc:sqlite:${path.toAbsolutePath()}"
     private val pool = ArrayBlockingQueue<Connection>(poolSize)
 
     init {
+        // The identity table holds raw SMC-B private keys: own the file before SQLite fills it, and
+        // keep its WAL sidecars closed too.
+        if (Files.notExists(path)) createSqliteFileOwnerOnly(path)
         repeat(poolSize) { pool.add(open()) }
         migrate()
+        restrictSqliteFile(path)
     }
 
     private fun open(): Connection =
@@ -62,6 +72,11 @@ class Db(path: Path, poolSize: Int = 32) : AutoCloseable {
     }
 
     private fun migrate() = withConnection { c ->
+        val (applicationId, _) = readSqliteHeader(c)
+        if (applicationId != 0 && applicationId != ZETA_APPLICATION_ID) {
+            error("$path is a SQLite database belonging to another application (application_id=$applicationId)")
+        }
+        stampSqliteHeader(c, SCHEMA_VERSION)
         c.createStatement().use { st ->
             st.execute(
                 """
@@ -132,5 +147,9 @@ class Db(path: Path, poolSize: Int = 32) : AutoCloseable {
         val drained = mutableListOf<Connection>()
         pool.drainTo(drained)
         drained.forEach { runCatching { it.close() } }
+    }
+
+    private companion object {
+        const val SCHEMA_VERSION = 1
     }
 }

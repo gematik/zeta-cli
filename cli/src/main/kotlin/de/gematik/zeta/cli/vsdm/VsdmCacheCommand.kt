@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.vsdm
 
+import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.options.flag
@@ -13,6 +14,7 @@ import de.gematik.zeta.cli.output.renderSections
 import de.gematik.zeta.cli.cache.CacheDb
 import java.nio.file.Path
 import java.time.Instant
+import kotlin.io.path.exists
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -30,8 +32,14 @@ internal abstract class CacheFileCommand(name: String) : ZetaCliktCommand(name =
         help = "The cache file to act on. (env: ZETA_CACHE_DB)",
     ).path(canBeFile = true, canBeDir = false).required()
 
-    protected fun <T> withCache(block: (CacheDb, VsdmBundleCache) -> T): T =
-        CacheDb(dbPath).use { db -> block(db, VsdmBundleCache(db)) }
+    /**
+     * Opening a [CacheDb] creates the file, which is right for a read but wrong for these verbs:
+     * `stats` on a mistyped path should say so, not leave an empty cache behind.
+     */
+    protected fun <T> withCache(block: (CacheDb, VsdmBundleCache) -> T): T {
+        if (!dbPath.exists()) throw CliktError("no cache at $dbPath")
+        return CacheDb(dbPath).use { db -> block(db, VsdmBundleCache(db)) }
+    }
 }
 
 @Serializable
@@ -82,9 +90,8 @@ internal class VsdmCachePurgeCommand : CacheFileCommand(name = "purge") {
     )
     private val insurer: String? by option("--insurer", metavar = "IKNR", help = "Only this insurer's entries.")
 
-    // --patient stays accepted: it is what 0.13.0 shipped.
     private val insurant: String? by option(
-        "--insurant", "--patient",
+        "--insurant",
         metavar = "KVNR",
         help = "Only this insurant's entries.",
     )
@@ -94,19 +101,33 @@ internal class VsdmCachePurgeCommand : CacheFileCommand(name = "purge") {
     ).flag(default = false)
     private val tokensOnly: Boolean by option(
         "--tokens",
-        help = "Clear only the stored PoPP tokens, keeping the bundles.",
+        help = "Clear only the stored PoPP tokens, keeping the bundles. Honours the filters above.",
+    ).flag(default = false)
+    private val force: Boolean by option(
+        "--force",
+        envvar = "ZETA_CACHE_PURGE_FORCE",
+        help = "Skip the interactive confirmation for --all. Required in non-interactive (scripted) " +
+            "mode. (env: ZETA_CACHE_PURGE_FORCE)",
     ).flag(default = false)
 
     override fun help(context: Context) = "Delete cached bundles, or just the stored PoPP tokens."
 
     override fun runCommand() {
-        if (tokensOnly) {
-            echo("cleared the PoPP token on ${withCache { _, bundles -> bundles.clearPoppTokens() }} entries")
-            return
-        }
-        if (actor == null && insurer == null && insurant == null && !all) {
+        val narrowed = actor != null || insurer != null || insurant != null
+        if (!narrowed && !all) {
             throw UsageError("narrow the purge with --actor / --insurer / --insurant, or pass --all to delete everything")
+        }
+        // Only an unnarrowed purge is the destructive one; a filtered delete names what it removes.
+        if (!narrowed && !confirmDestructive(purgeQuestion(), force)) return
+
+        if (tokensOnly) {
+            val cleared = withCache { _, bundles -> bundles.clearPoppTokens(actor, insurer, insurant) }
+            echo("cleared the PoPP token on $cleared entries")
+            return
         }
         echo("deleted ${withCache { _, bundles -> bundles.purge(actor, insurer, insurant) }} entries")
     }
+
+    private fun purgeQuestion(): String =
+        if (tokensOnly) "Clear every stored PoPP token in $dbPath?" else "Delete every cached bundle in $dbPath?"
 }

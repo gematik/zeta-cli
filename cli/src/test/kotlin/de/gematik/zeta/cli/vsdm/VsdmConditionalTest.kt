@@ -68,6 +68,16 @@ class VsdmConditionalTest {
     }
 
     @Test
+    fun `no-store also forbids writing the answer back, no-cache does not`() {
+        listOf("no-store", "No-Store", "max-age=0, no-store").forEach { directive ->
+            val d = cacheDecision(null, cachedEtag = stored, cacheControl = directive, cacheEnabled = true)
+            assertFalse(d.store, directive)
+        }
+        assertTrue(cacheDecision(null, cachedEtag = stored, cacheControl = "no-cache", cacheEnabled = true).store)
+        assertTrue(cacheDecision(null, cachedEtag = null, cacheControl = null, cacheEnabled = true).store)
+    }
+
+    @Test
     fun `outcome names what happened, and only a confirmed stored version is served`() {
         assertEquals("hit", cacheOutcome(CacheIntent.SERVE_FROM_CACHE, 304))
         assertEquals("miss", cacheOutcome(CacheIntent.SERVE_FROM_CACHE, 200))

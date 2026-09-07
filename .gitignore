@@ -9,5 +9,10 @@ CLAUDE.md
 CLAUDE.local.md
 stress.db*
 
+# never let a --cache-db land in a commit: it holds VSD bundles and PoPP tokens
+*.cache.db
+*.cache.db-*
+*.cache.db.meta.json
+
 # zeta-stress run reports
 reports/

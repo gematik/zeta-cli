@@ -103,6 +103,13 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
             "body. Lets a script read ETag / PZ alongside the bundle. (env: ZETA_VSDM_INCLUDE)",
     ).flag(default = false)
 
+    private val noCache: Boolean by option(
+        "--no-cache",
+        envvar = "ZETA_NO_CACHE",
+        help = "Read in full and keep nothing: ignore any cached version of this record and do not " +
+            "store the answer. Only meaningful with --cache-db. (env: ZETA_NO_CACHE)",
+    ).flag(default = false)
+
     private val cache by CacheOptions()
 
     // Sign as the SMC-B that obtained the PoPP token (its actorId), so `--auth-db-telematik-id` is
@@ -170,7 +177,7 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
                         var decision = cacheDecision(
                             clientIfNoneMatch = headers[HttpHeaders.IfNoneMatch.lowercase()]?.second,
                             cachedEtag = stored?.etag,
-                            cacheControl = null,
+                            cacheControl = if (noCache) "no-store" else null,
                             cacheEnabled = cacheDb != null && cacheKey != null,
                         )
 
@@ -273,10 +280,13 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         when (response.status.value) {
             in 200..299 -> {
                 val etag = response.header(HttpHeaders.ETag) ?: return null
-                cache.store(key, CachedBundle(etag, response.bodyAsBytes(), env, poppToken, now, now))
+                if (decision.store) {
+                    cache.store(key, CachedBundle(etag, response.bodyAsBytes(), env, poppToken, now, now))
+                }
             }
 
-            HTTP_NOT_MODIFIED -> cache.touch(key, now, poppToken)
+            HTTP_NOT_MODIFIED -> if (decision.store) cache.touch(key, now, poppToken)
+            // A record the service no longer serves must go even when this call may not write.
             404, 410 -> cache.invalidate(key)
         }
         return stored.takeIf { servesFromCache(decision.intent, response.status.value) }

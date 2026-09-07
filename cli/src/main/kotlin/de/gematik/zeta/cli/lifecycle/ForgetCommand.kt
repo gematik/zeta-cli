@@ -1,9 +1,7 @@
 package de.gematik.zeta.cli.lifecycle
 
-import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.UsageError
-import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
@@ -97,25 +95,5 @@ class ForgetCommand : ZetaProfileCommand(name = "forget") {
         echo("Deleted $path.")
     }
 
-    /**
-     * `--force` → always proceed. Non-interactive shell without `--force` → refuse loudly.
-     * Interactive: prompt, default No. Treat anything other than a leading 'y' (case-
-     * insensitive) as cancel.
-     */
-    private fun confirm(question: String): Boolean {
-        if (force) return true
-        if (!currentContext.terminal.terminalInfo.inputInteractive) {
-            throw CliktError(
-                "Refusing to wipe state in non-interactive mode without --force. " +
-                    "Re-run with --force to confirm.",
-            )
-        }
-        echo("$question [y/N] ", trailingNewline = false)
-        val response = readlnOrNull()?.trim()?.lowercase().orEmpty()
-        if (response != "y" && response != "yes") {
-            echo("Aborted.")
-            return false
-        }
-        return true
-    }
+    private fun confirm(question: String): Boolean = confirmDestructive(question, force)
 }

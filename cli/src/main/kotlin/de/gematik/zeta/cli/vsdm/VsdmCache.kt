@@ -125,8 +125,12 @@ enum class CacheIntent {
     OFF,
 }
 
-/** [intent] plus the `If-None-Match` value that goes upstream, which is never null once caching is on. */
-data class CacheDecision(val intent: CacheIntent, val ifNoneMatch: String?)
+/**
+ * [intent] plus the `If-None-Match` value that goes upstream, which is never null once caching is
+ * on, and whether the answer may be written back. [store] is false only for `no-store`: a caller
+ * that asked us not to keep the record must not find it on disk afterwards.
+ */
+data class CacheDecision(val intent: CacheIntent, val ifNoneMatch: String?, val store: Boolean = true)
 
 /**
  * The conditional-request rule, in one place.
@@ -147,7 +151,11 @@ fun cacheDecision(
     if (!cacheEnabled) return CacheDecision(CacheIntent.OFF, clientIfNoneMatch)
 
     val directives = cacheControl?.lowercase().orEmpty()
-    if ("no-cache" in directives || "no-store" in directives) {
+    if ("no-store" in directives) {
+        // no-store is about the disk, not just this answer: neither read from the cache nor write to it.
+        return CacheDecision(CacheIntent.BYPASS, clientIfNoneMatch ?: NO_KNOWN_VERSION_ETAG, store = false)
+    }
+    if ("no-cache" in directives) {
         return CacheDecision(CacheIntent.BYPASS, clientIfNoneMatch ?: NO_KNOWN_VERSION_ETAG)
     }
 

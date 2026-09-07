@@ -69,10 +69,16 @@ class VsdmBundleCache(
                         invalidate(key)
                         return@withConnection null
                     }
+                    val env = runCatching { Environment.valueOf(rs.getString("env")) }.getOrNull()
+                    if (env == null) {
+                        log.debug { "cache row carries an unknown environment '${rs.getString("env")}' — dropping it" }
+                        invalidate(key)
+                        return@withConnection null
+                    }
                     CachedBundle(
                         etag = rs.getString("etag"),
                         body = codec.decode(rs.getBytes("body")),
-                        env = Environment.valueOf(rs.getString("env")),
+                        env = env,
                         poppToken = rs.getString("popp_token"),
                         fetchedAtEpochSec = rs.getLong("fetched_at"),
                         revalidatedAtEpochSec = rs.getLong("revalidated_at"),
@@ -170,48 +176,62 @@ class VsdmBundleCache(
      * Returns the row count. Deleting the whole cache file does the same thing and is always safe —
      * this is for the targeted case, and `actorId` is what makes a shared file purgeable per tenant.
      */
-    fun purge(actorId: String? = null, insurerId: String? = null, insurantId: String? = null): Int = db.withConnection { c ->
-        val filters = buildList {
+    fun purge(actorId: String? = null, insurerId: String? = null, insurantId: String? = null): Int =
+        write("DELETE FROM vsdm_bundle", filters(actorId, insurerId, insurantId))
+            .also { if (it > 0) db.vacuum() }
+
+    /**
+     * Drop the stored PoPP tokens, keeping the bundles they were read with. Takes the same filters
+     * as [purge]: clearing one tenant's tokens must not touch another's.
+     */
+    fun clearPoppTokens(actorId: String? = null, insurerId: String? = null, insurantId: String? = null): Int =
+        write(
+            "UPDATE vsdm_bundle SET popp_token = NULL",
+            filters(actorId, insurerId, insurantId) + ("popp_token IS NOT NULL" to null),
+        )
+
+    override fun entryCount(): Long = count("SELECT COUNT(*) FROM vsdm_bundle")
+
+    /** How many SMC-B identities have entries here — the first question about a shared cache file. */
+    fun actorCount(): Long = count("SELECT COUNT(DISTINCT actor_id) FROM vsdm_bundle")
+
+    /** Epoch seconds of the least recently revalidated entry, or null when the section is empty. */
+    fun oldestRevalidationEpochSec(): Long? = runCatching {
+        db.withConnection { c ->
+            c.createStatement().use { st ->
+                st.executeQuery("SELECT MIN(revalidated_at) FROM vsdm_bundle").use { rs ->
+                    rs.next()
+                    rs.getLong(1).takeIf { !rs.wasNull() }
+                }
+            }
+        }
+    }.onFailure { log.warn { "VSDM cache read failed: ${it.message}" } }.getOrNull()
+
+    private fun filters(actorId: String?, insurerId: String?, insurantId: String?): List<Pair<String, String?>> =
+        buildList {
             actorId?.let { add("actor_id = ?" to it) }
             insurerId?.let { add("insurer_id = ?" to it) }
             insurantId?.let { add("insurant_id = ?" to it) }
         }
+
+    /** [statement] narrowed by [filters]; a filter with a null value carries no bind parameter. */
+    private fun write(statement: String, filters: List<Pair<String, String?>>): Int = db.withConnection { c ->
         val where = if (filters.isEmpty()) "" else " WHERE " + filters.joinToString(" AND ") { it.first }
-        c.prepareStatement("DELETE FROM vsdm_bundle$where").use { ps ->
-            filters.forEachIndexed { i, (_, value) -> ps.setString(i + 1, value) }
+        c.prepareStatement(statement + where).use { ps ->
+            var index = 1
+            filters.forEach { (_, value) -> value?.let { ps.setString(index++, it) } }
             ps.executeUpdate()
         }
-    }.also { if (it > 0) db.vacuum() }
-
-    /** Drop the stored PoPP tokens, keeping the bundles they were read with. */
-    fun clearPoppTokens(): Int = db.withConnection { c ->
-        c.createStatement().use {
-            it.executeUpdate("UPDATE vsdm_bundle SET popp_token = NULL WHERE popp_token IS NOT NULL")
-        }
     }
 
-    override fun entryCount(): Long = db.withConnection { c ->
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT COUNT(*) FROM vsdm_bundle").use { rs -> rs.next(); rs.getLong(1) }
-        }
-    }
-
-    /** How many SMC-B identities have entries here — the first question about a shared cache file. */
-    fun actorCount(): Long = db.withConnection { c ->
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT COUNT(DISTINCT actor_id) FROM vsdm_bundle").use { rs -> rs.next(); rs.getLong(1) }
-        }
-    }
-
-    /** Epoch seconds of the least recently revalidated entry, or null when the section is empty. */
-    fun oldestRevalidationEpochSec(): Long? = db.withConnection { c ->
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT MIN(revalidated_at) FROM vsdm_bundle").use { rs ->
-                rs.next()
-                rs.getLong(1).takeIf { !rs.wasNull() }
+    /** A counting query; like every read here it degrades to 0 rather than failing the caller. */
+    private fun count(sql: String): Long = runCatching {
+        db.withConnection { c ->
+            c.createStatement().use { st ->
+                st.executeQuery(sql).use { rs -> rs.next(); rs.getLong(1) }
             }
         }
-    }
+    }.onFailure { log.warn { "VSDM cache read failed: ${it.message}" } }.getOrDefault(0L)
 
     private companion object {
         const val SECONDS_PER_DAY = 86_400L

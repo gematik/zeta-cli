@@ -240,6 +240,7 @@ hygiene, not freshness.
 | the same etag the cache holds | yours | the `304`, verbatim | `revalidated` |
 | a different etag (all-zero included) | yours | the `304`, verbatim | `bypass` |
 | any, plus `Cache-Control: no-cache` | the all-zero etag | — | `bypass` |
+| any, plus `Cache-Control: no-store` | the all-zero etag | — | `bypass`, and nothing is written |
 
 A client that asked no conditional question gets a full `200`, because a `304` would refer to a
 version it never named. A client that did ask gets its own answer, untouched — so the all-zero
@@ -248,14 +249,19 @@ what the service really answered, which is the only visible difference on a hit.
 
 **The data.** `--cache-db` names one cache file that every cached kind shares — VSDM bundles are
 the first, others can be added without a new flag or a second file. Today it therefore holds
-Versichertenstammdaten and the PoPP tokens they were read with, **unencrypted**, mode `0600`, at a
-path you choose. Deleting it is always safe.
+Versichertenstammdaten and the PoPP tokens they were read with, **unencrypted**, mode `0600` (its
+`-wal`/`-shm` sidecars included), at a path you choose. Deleting it is always safe.
+`Cache-Control: no-store` is honoured on the way in as well as out: that read is neither answered
+from the cache nor written to it. See [What the CLI keeps on disk](storage.md) for how to pick the
+location.
 
-> A cache file written by 0.13.0 is not readable by 0.13.1 — the schema changed and there is no
-> migration. Delete it; nothing in it cannot be fetched again. `zeta vsdm cache
-stats --cache-db FILE` reports what it holds, `zeta vsdm cache purge --cache-db FILE
-[--insurer IKNR] [--patient KVNR] [--tokens] [--all]` clears it selectively. `GET /api/health`
-shows the counters.
+**Retention.** The daemon applies `--cache-max-entries` / `--cache-max-age-days` hourly, not only
+at startup, so a long-running daemon does not accumulate records past its own bounds.
+
+`zeta vsdm cache stats --cache-db FILE` reports what the file holds, `zeta vsdm cache purge
+--cache-db FILE [--actor TID] [--insurer IKNR] [--insurant KVNR] [--tokens] [--all]` clears it
+selectively — the filters apply to `--tokens` too, and an unnarrowed purge asks before it wipes.
+`GET /api/health` shows the counters.
 
 ## Header conventions
 

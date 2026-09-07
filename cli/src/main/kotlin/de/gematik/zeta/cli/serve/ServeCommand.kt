@@ -215,7 +215,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             poppMint,
             cacheDb,
         )
-        ctx.vsdmCache?.prune(System.currentTimeMillis() / 1000, cache.maxEntries, cache.maxAgeDays)
+        ctx.launchCachePrune(cache.maxEntries, cache.maxAgeDays)
 
         // Bind + report ready immediately; the warm sweep runs in the background (a request to a
         // not-yet-warm endpoint builds its session lazily via the same warmSessionFor seam).

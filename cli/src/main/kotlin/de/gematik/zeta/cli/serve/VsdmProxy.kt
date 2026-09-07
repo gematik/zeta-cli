@@ -171,7 +171,11 @@ private suspend fun readAndForward(
 ) {
     val cache = ctx.vsdmCache
     val profileVersion = call.request.queryParameters["profileVersion"] ?: DEFAULT_PROFILE_VERSION
+    // The whole query string goes upstream, but only profileVersion is part of the key. Anything
+    // else could vary the answer, so a request carrying one is read through rather than cached.
+    val keyable = call.request.queryParameters.names().all { it == "profileVersion" }
     val key = normalizedContentType(call.request.headers[HttpHeaders.Accept] ?: DEFAULT_ACCEPT)
+        ?.takeIf { keyable }
         ?.let { cacheKeyFor(claims, originOf(baseUrl), profileVersion, it) }
     // JDBC blocks, and a Ktor handler runs on the engine's dispatcher — keep the driver off it.
     val stored = key?.let { k -> cache?.let { withContext(Dispatchers.IO) { it.lookup(k) } } }
@@ -225,12 +229,13 @@ private suspend fun recordCacheResult(
             in 200..299 -> {
                 val etag = response.headers.entries
                     .firstOrNull { it.key.equals(HttpHeaders.ETag, ignoreCase = true) }?.value
-                if (etag != null) {
+                if (etag != null && decision.store) {
                     cache.store(key, CachedBundle(etag, response.bodyAsBytes(), env, poppToken, now, now))
                 }
             }
 
-            HttpStatusCode.NotModified.value -> cache.touch(key, now, poppToken)
+            HttpStatusCode.NotModified.value -> if (decision.store) cache.touch(key, now, poppToken)
+            // A record the service no longer serves must go even when this call may not write.
             HttpStatusCode.NotFound.value, HttpStatusCode.Gone.value -> cache.invalidate(key)
         }
     }

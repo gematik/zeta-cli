@@ -29,7 +29,11 @@ class ProfileDb(private val path: Path) {
 
     init {
         path.toAbsolutePath().parent?.let { if (!it.exists()) Files.createDirectories(it) }
+        // Tokens, client secrets and the SDK's own key material live in here — own the file before
+        // SQLite writes any of it, and keep the WAL sidecars just as closed.
+        if (!path.exists()) createSqliteFileOwnerOnly(path)
         withConnection { c ->
+            claimHeader(c)
             c.createStatement().use { st ->
                 st.executeUpdate(
                     """
@@ -53,6 +57,20 @@ class ProfileDb(private val path: Path) {
                 )
             }
         }
+        restrictSqliteFile(path)
+    }
+
+    /**
+     * Stamp the file as ours, and refuse one that belongs to another application rather than
+     * writing our tables into it. There are no versioned migrations here: unlike a cache this file
+     * holds the only copy of its state, so a schema this build does not know is not ours to discard.
+     */
+    private fun claimHeader(c: Connection) {
+        val (applicationId, _) = readSqliteHeader(c)
+        if (applicationId != 0 && applicationId != ZETA_APPLICATION_ID) {
+            error("$path is a SQLite database belonging to another application (application_id=$applicationId)")
+        }
+        stampSqliteHeader(c, SCHEMA_VERSION)
     }
 
     fun <T> withConnection(block: (Connection) -> T): T =
@@ -140,5 +158,9 @@ class ProfileDb(private val path: Path) {
             ps.setString(1, scope.storageKey)
             ps.executeUpdate()
         }
+    }
+
+    private companion object {
+        const val SCHEMA_VERSION = 1
     }
 }

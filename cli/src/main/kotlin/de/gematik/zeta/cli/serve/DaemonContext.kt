@@ -37,12 +37,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 private val log = KotlinLogging.logger {}
 
 private const val REFRESH_LEAD_MS = 5_000L
 private const val FALLBACK_POLL_MS = 30_000L
 private const val FAILURE_BACKOFF_MS = 5_000L
+private const val CACHE_PRUNE_INTERVAL_MS = 3_600_000L
 
 /** Milliseconds to sleep before waking to refresh: [leadMs] before the token's [expSec] expiry, floored at 0. */
 internal fun refreshDelayMs(expSec: Long, nowMs: Long, leadMs: Long): Long =
@@ -95,6 +97,24 @@ internal class DaemonContext(
 
     /** Run the startup warm sweep off the ready path, on the daemon background scope. */
     fun launchWarmup(block: suspend CoroutineScope.() -> Unit): Job = refreshScope.launch(block = block)
+
+    /**
+     * Keep the cache within its bounds for as long as the daemon runs. Pruning only at startup would
+     * leave a long-lived daemon holding personal data past `--cache-max-age-days` indefinitely — the
+     * bounds exist for exactly that reason, so they have to be applied on the clock, not on boot.
+     */
+    fun launchCachePrune(maxEntries: Int, maxAgeDays: Int): Job? {
+        val cache = vsdmCache ?: return null
+        return refreshScope.launch {
+            while (isActive) {
+                val removed = withContext(Dispatchers.IO) {
+                    cache.prune(System.currentTimeMillis() / 1000, maxEntries, maxAgeDays)
+                }
+                if (removed > 0) log.info { "cache prune removed $removed entr${if (removed == 1) "y" else "ies"}" }
+                delay(CACHE_PRUNE_INTERVAL_MS)
+            }
+        }
+    }
 
     /**
      * A warm session for (resource, scopes): a healthy cached one, or a freshly built + logged-in one.

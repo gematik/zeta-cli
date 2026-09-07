@@ -27,6 +27,7 @@ import de.gematik.zeta.stress.sdk.applyStressHttp
 import de.gematik.zeta.stress.scenario.ProfileYaml
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.isDirectory
@@ -69,6 +70,8 @@ class PoppImportCommand : StressBaseCommand(name = "import") {
     }
 }
 
+private val OWNER_ONLY_FILE = PosixFilePermissions.fromString("rw-------")
+
 class PoppExportCommand : StressBaseCommand(name = "export") {
     private val outDir: String by argument(name = "OUT_DIR", help = "Directory to write <insurant>-<telematik-id>.jwt files into.")
 
@@ -87,7 +90,10 @@ class PoppExportCommand : StressBaseCommand(name = "export") {
                 // Filenames are <insurant>-<telematik-id>; disambiguate the rare same-identity /
                 // same-patient / different-insurer collision by appending the insurer.
                 val base = "${r.patientId}-$id".let { if (used.add(it)) it else "$it-${r.insurerId}" }
-                Files.writeString(out.resolve("$base.jwt"), r.token)
+                val file = out.resolve("$base.jwt")
+                Files.writeString(file, r.token)
+                // A PoPP token proves a named patient was present — don't leave it world-readable.
+                runCatching { Files.setPosixFilePermissions(file, OWNER_ONLY_FILE) }
                 if (tty) System.err.print("\u001b[2K\rExporting… ${i + 1}/${rows.size}")
             }
             if (tty) System.err.println()
