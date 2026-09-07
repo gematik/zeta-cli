@@ -66,13 +66,39 @@ data class SubscribeResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -133,13 +159,39 @@ data class UnsubscribeResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -200,13 +252,39 @@ data class GetSubscriptionResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -267,13 +345,39 @@ data class GetResourceInformationResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -334,13 +438,39 @@ data class GetCardTerminalsResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -401,13 +531,39 @@ data class GetCardsResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -468,12 +624,38 @@ data class RenewSubscriptionsResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }

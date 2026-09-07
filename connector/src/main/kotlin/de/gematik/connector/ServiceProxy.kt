@@ -19,8 +19,9 @@ import kotlinx.serialization.serializer
  * the [endpoint] URL — safe to share or to rebuild ad-hoc from a [ServiceVersion].
  *
  * The proxy *does not* check HTTP status codes: SOAP 1.1 transports faults via HTTP 500
- * with a Fault envelope body. Callers should inspect the response via [SoapEnvelope.isFault]
- * (or use a convenience method on [ConnectorClient] that does this for them).
+ * with a Fault envelope body. It does check the body: a fault throws [SoapFaultException]
+ * from here, where the raw XML is still at hand and the Konnektor's own words can be read
+ * out of it — the decoded envelope no longer carries them (see [SoapFault]).
  */
 class ServiceProxy internal constructor(
     val httpClient: HttpClient,
@@ -36,6 +37,7 @@ class ServiceProxy internal constructor(
         request: Req,
         requestSerializer: KSerializer<Req>,
         responseSerializer: KSerializer<Res>,
+        label: String = operation.name,
     ): Res {
         check(endpoint.isNotBlank()) {
             "service ${service.name} version ${serviceVersion.version} has no endpoint"
@@ -50,15 +52,24 @@ class ServiceProxy internal constructor(
         }
         val responseText = response.bodyAsText()
 
-        return try {
+        val decoded = try {
             defaultXml.decodeFromString(responseSerializer, responseText)
         } catch (e: Exception) {
+            // A fault the generated types cannot express — a service that leaves out a field its own
+            // schema calls mandatory, say — is still a fault, and its text is what the caller needs.
+            SoapFault.parse(responseText)?.let { fault ->
+                throw SoapFaultException(label, fault, envelope = null, rawBody = responseText)
+            }
             throw SoapDecodeException(
                 "decoding ${operation.name} response from $endpoint: ${e.message}",
                 cause = e,
                 rawBody = responseText,
             )
         }
+        if (decoded.isFault()) {
+            throw SoapFaultException(label, SoapFault.parse(responseText), decoded, responseText)
+        }
+        return decoded
     }
 }
 
@@ -73,21 +84,8 @@ class ServiceProxy internal constructor(
 suspend inline fun <reified Req : SoapEnvelope, reified Res : SoapEnvelope> ServiceProxy.call(
     operation: SoapOperation,
     request: Req,
-): Res = call(operation, request, serializer(), serializer())
-
-/**
- * Throw if [this] is a SOAP fault envelope, otherwise return it untouched. Convenience
- * for the typical "extract response or surface fault" pattern at the convenience-method
- * layer.
- *
- * The fault detail (faultstring, faultcode, error detail) lives on the typed Fault
- * field of the envelope; cast and read it from the [SoapFaultException.envelope] when
- * caught.
- */
-fun <T : SoapEnvelope> T.requireSuccess(operation: String): T {
-    if (isFault()) throw SoapFaultException(operation, envelope = this)
-    return this
-}
+    label: String = operation.name,
+): Res = call(operation, request, serializer(), serializer(), label)
 
 class SoapDecodeException(
     message: String,
@@ -97,25 +95,22 @@ class SoapDecodeException(
 
 class SoapFaultException(
     operation: String,
-    val envelope: SoapEnvelope,
-) : ConnectorException(soapFaultMessage(operation, envelope)) {
+    /** The fault read off the wire; null only when the body could not be parsed at all. */
+    val fault: SoapFault?,
+    /** The decoded response, for a caller that wants the typed body — absent when it would not decode. */
+    val envelope: SoapEnvelope? = null,
+    /** The response body the fault arrived in, for anything [SoapFault] does not model. */
+    val rawBody: String? = null,
+) : ConnectorException(soapFaultMessage(operation, fault)) {
 
-    /** The SOAP `faultstring` (the human-readable reason), extracted from the typed fault envelope if present. */
-    val faultstring: String? = soapFaultField(envelope, "getFaultstring")
+    /** The SOAP `faultstring` — the Konnektor's human-readable reason. */
+    val faultstring: String? = fault?.faultstring
 
     /** The SOAP `faultcode`, if present. */
-    val faultcode: String? = soapFaultField(envelope, "getFaultcode")
+    val faultcode: String? = fault?.faultcode
 }
 
-private fun soapFaultMessage(operation: String, envelope: SoapEnvelope): String {
-    val detail = soapFaultField(envelope, "getFaultstring")?.takeIf { it.isNotBlank() }
+private fun soapFaultMessage(operation: String, fault: SoapFault?): String {
+    val detail = fault?.describe()
     return if (detail == null) "$operation reported a SOAP fault" else "$operation reported a SOAP fault: $detail"
 }
-
-// Every generated fault envelope shares the same body.fault.{faultstring,faultcode} shape; read it
-// reflectively so this one line stays generic across all envelope types without touching generated code.
-private fun soapFaultField(envelope: SoapEnvelope, getter: String): String? = runCatching {
-    val body = envelope.javaClass.getMethod("getBody").invoke(envelope)
-    val fault = body.javaClass.getMethod("getFault").invoke(body) ?: return null
-    fault.javaClass.getMethod(getter).invoke(fault) as? String
-}.getOrNull()

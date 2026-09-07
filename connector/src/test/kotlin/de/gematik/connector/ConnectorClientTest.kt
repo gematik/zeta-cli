@@ -94,6 +94,24 @@ class ConnectorClientTest {
         </soap:Envelope>
     """.trimIndent()
 
+    /** A fault whose gematik detail leaves out fields the schema marks mandatory. */
+    private val getCardsSparseFaultXml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Body>
+            <soap:Fault>
+              <faultcode>soap:Server</faultcode>
+              <faultstring>Technical Error</faultstring>
+              <detail>
+                <err:Error xmlns:err="http://ws.gematik.de/tel/error/v2.0" MessageID="urn:uuid:1" Timestamp="2026-09-07T10:00:00Z">
+                  <err:Trace><err:Code>4018</err:Code><err:ErrorText>Der Aufruf ist nicht zulaessig</err:ErrorText></err:Trace>
+                </err:Error>
+              </detail>
+            </soap:Fault>
+          </soap:Body>
+        </soap:Envelope>
+    """.trimIndent()
+
     private fun konnektor(soapHandler: () -> String): ConnectorClient = runBlocking {
         val engine = MockEngine { request ->
             when {
@@ -131,6 +149,18 @@ class ConnectorClientTest {
             runBlocking { client.getAllCards() }
         }
         assertTrue(ex.message!!.contains("GetCards"))
+        assertEquals("internal error", ex.faultstring)
+        assertTrue(ex.message!!.endsWith("reported a SOAP fault: internal error"), ex.message)
+    }
+
+    @Test
+    fun `a fault the generated types cannot decode is still reported as a fault`() = runBlocking {
+        val client = konnektor { getCardsSparseFaultXml }
+        val ex = assertThrows(SoapFaultException::class.java) {
+            runBlocking { client.getAllCards() }
+        }
+        assertEquals("Technical Error", ex.faultstring)
+        assertTrue(ex.message!!.contains("code 4018"), ex.message)
     }
 
     @Test

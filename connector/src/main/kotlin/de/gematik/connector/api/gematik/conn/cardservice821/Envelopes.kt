@@ -66,13 +66,39 @@ data class VerifyPinResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -133,13 +159,39 @@ data class ChangePinResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -200,13 +252,39 @@ data class UnblockPinResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -267,13 +345,39 @@ data class GetPinStatusResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -334,13 +438,39 @@ data class EnablePinResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -401,13 +531,39 @@ data class DisablePinResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -468,13 +624,39 @@ data class SecureSendAPDUResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -535,13 +717,39 @@ data class StartCardSessionResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
 
@@ -602,12 +810,38 @@ data class StopCardSessionResponseEnvelope(
   @Serializable
   data class Fault(
     @XmlElement(true)
+    @XmlSerialName(
+      "faultcode",
+      namespace = "",
+    )
     val faultcode: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultstring",
+      namespace = "",
+    )
     val faultstring: String = "",
     @XmlElement(true)
+    @XmlSerialName(
+      "faultactor",
+      namespace = "",
+    )
     val faultactor: String? = null,
     @XmlElement(true)
-    val detail: Error? = null,
+    @XmlSerialName(
+      "detail",
+      namespace = "",
+    )
+    val detail: Detail? = null,
+  )
+
+  @Serializable
+  data class Detail(
+    @XmlElement(true)
+    @XmlSerialName(
+      "Error",
+      namespace = "http://ws.gematik.de/tel/error/v2.0",
+    )
+    val error: Error? = null,
   )
 }
