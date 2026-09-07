@@ -38,6 +38,7 @@ internal abstract class CacheFileCommand(name: String) : ZetaCliktCommand(name =
 private data class CacheStatsOutput(
     val file: String,
     val entries: Long,
+    val actors: Long,
     val oldestRevalidation: String?,
     val bytes: Long,
 )
@@ -50,6 +51,7 @@ internal class VsdmCacheStatsCommand : CacheFileCommand(name = "stats") {
             CacheStatsOutput(
                 file = dbPath.toString(),
                 entries = bundles.entryCount(),
+                actors = bundles.actorCount(),
                 oldestRevalidation = bundles.oldestRevalidationEpochSec()?.let { Instant.ofEpochSecond(it).toString() },
                 bytes = db.fileBytes(),
             )
@@ -62,6 +64,7 @@ internal class VsdmCacheStatsCommand : CacheFileCommand(name = "stats") {
                     section("VSDM bundles") {
                         field("File", out.file)
                         field("Entries", out.entries.toString())
+                        field("Identities", out.actors.toString())
                         field("Oldest revalidation", out.oldestRevalidation ?: "—")
                         field("Size", "${out.bytes} bytes")
                     }
@@ -72,11 +75,22 @@ internal class VsdmCacheStatsCommand : CacheFileCommand(name = "stats") {
 }
 
 internal class VsdmCachePurgeCommand : CacheFileCommand(name = "purge") {
+    private val actor: String? by option(
+        "--actor",
+        metavar = "TID",
+        help = "Only the entries read by this SMC-B Telematik-ID.",
+    )
     private val insurer: String? by option("--insurer", metavar = "IKNR", help = "Only this insurer's entries.")
-    private val patient: String? by option("--patient", metavar = "KVNR", help = "Only this insurant's entries.")
+
+    // --patient stays accepted: it is what 0.13.0 shipped.
+    private val insurant: String? by option(
+        "--insurant", "--patient",
+        metavar = "KVNR",
+        help = "Only this insurant's entries.",
+    )
     private val all: Boolean by option(
         "--all",
-        help = "Every entry. Required when neither --insurer nor --patient narrows the purge.",
+        help = "Every entry. Required when no other filter narrows the purge.",
     ).flag(default = false)
     private val tokensOnly: Boolean by option(
         "--tokens",
@@ -90,9 +104,9 @@ internal class VsdmCachePurgeCommand : CacheFileCommand(name = "purge") {
             echo("cleared the PoPP token on ${withCache { _, bundles -> bundles.clearPoppTokens() }} entries")
             return
         }
-        if (insurer == null && patient == null && !all) {
-            throw UsageError("narrow the purge with --insurer / --patient, or pass --all to delete everything")
+        if (actor == null && insurer == null && insurant == null && !all) {
+            throw UsageError("narrow the purge with --actor / --insurer / --insurant, or pass --all to delete everything")
         }
-        echo("deleted ${withCache { _, bundles -> bundles.purge(insurer, patient) }} entries")
+        echo("deleted ${withCache { _, bundles -> bundles.purge(actor, insurer, insurant) }} entries")
     }
 }

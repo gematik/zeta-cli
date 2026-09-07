@@ -165,7 +165,7 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
                         requestHeaders.map(::parseHeaderOption).forEach { (n, v) -> putHeader(n, v) }
 
                         val cacheKey = normalizedContentType(headers[HttpHeaders.Accept.lowercase()]?.second)
-                            ?.let { cacheKeyFor(claims, env, originOf(baseUrl), profileVersion, it) }
+                            ?.let { cacheKeyFor(claims, originOf(baseUrl), profileVersion, it) }
                         val stored = cacheKey?.let { k -> cacheDb?.lookup(k) }
                         var decision = cacheDecision(
                             clientIfNoneMatch = headers[HttpHeaders.IfNoneMatch.lowercase()]?.second,
@@ -203,7 +203,7 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
                                 response.bodyAsBytes(),
                             )
                         }
-                        val served = recordResult(cacheDb, cacheKey, decision, stored, response, token)
+                        val served = recordResult(cacheDb, cacheKey, decision, stored, response, token, env)
                         renderResponse(
                             response,
                             served,
@@ -266,13 +266,14 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         stored: CachedBundle?,
         response: ZetaHttpResponse,
         poppToken: String,
+        env: Environment,
     ): CachedBundle? {
         if (cache == null || key == null) return null
         val now = nowEpochSec()
         when (response.status.value) {
             in 200..299 -> {
                 val etag = response.header(HttpHeaders.ETag) ?: return null
-                cache.store(key, CachedBundle(etag, response.bodyAsBytes(), poppToken, now, now))
+                cache.store(key, CachedBundle(etag, response.bodyAsBytes(), env, poppToken, now, now))
             }
 
             HTTP_NOT_MODIFIED -> cache.touch(key, now, poppToken)

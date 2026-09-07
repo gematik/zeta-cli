@@ -1,6 +1,13 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.13.1
+### changes
+- The VSDM bundle cache is now keyed by the reading SMC-B (`actorId`) as well, so several identities can share one `--cache-db` file: their entries sit side by side, `zeta vsdm cache stats` reports how many identities are in there, and `zeta vsdm cache purge --actor TID` clears one of them. This buys attribution and per-identity purging, **not** isolation — the file is still shared, so give each tenant its own where that matters
+- The environment is no longer part of the cache key; the VSDM endpoint already implies it. It is still stored on every row for when you read the file with `sqlite3`
+- Settle on **insurant** for the person the record is about, matching `middleware-insurant-id` and the VSDM vocabulary: the cache column is `insurant_id` and `zeta vsdm cache purge` takes `--insurant` (`--patient` keeps working). The PoPP token's own `patientId` claim is untouched — that is the wire name
+- **A cache file written by 0.13.0 must be deleted.** The schema changed and there is no migration: an old file keeps its old table, writes into it fail, and the cache silently stops working. Nothing in it cannot be fetched again
+
 ## Release 0.13.0
 ### changes
 - Add `--cache-db FILE` to `zeta vsdm get` and `zeta serve` — a shared SQLite cache that turns the mandatory `If-None-Match` into a real conditional request: the ETag the service last gave for a patient record is sent back, and an unchanged record answers `304` and is served from the cache instead of being re-transferred. Nothing expires — every read is revalidated against the service, so the cache can never hand out a stale record. Entries are keyed by environment, endpoint, insurer (IKNR), insurant (KVNR), `profileVersion` and media type; the reader's identity is deliberately not part of the key. Off unless the flag is given, and the file stores Versichertenstammdaten and PoPP tokens **unencrypted** — `--cache-max-entries` (10000) and `--cache-max-age-days` (180) bound it

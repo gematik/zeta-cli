@@ -216,12 +216,16 @@ The token is also in `middleware-popp`, and the two identifiers in `middleware-i
 Without `--cache-db` nothing is cached and the daemon behaves exactly as it always has, `428`
 included. With it, the daemon becomes a shared cache in front of the VSDM service.
 
-**What is cached.** One bundle per patient record: the key is the environment, the VSDM endpoint,
-the insurer (IKNR) and insurant (KVNR) from the PoPP token, the `profileVersion`, and the media
-type. The value is the service's `ETag` plus the body. Who read the record is deliberately *not*
-part of the key — the bundle version does not depend on the reader, and every hit still costs a
-live upstream call carrying the caller's own PoPP token. Do not share one cache file across
-tenants.
+**What is cached.** One bundle per patient record and reader: the key is the reading SMC-B
+(`actorId`), the VSDM endpoint, the insurer (IKNR) and insurant (KVNR) from the PoPP token, the
+`profileVersion`, and the media type. The value is the service's `ETag` plus the body. The
+environment is not keyed on — the endpoint already implies it.
+
+**Several identities in one file.** Keying on the reader means entries from different SMC-Bs sit
+side by side, are counted separately (`zeta vsdm cache stats` reports how many identities are in
+there), and are purgeable one at a time (`purge --actor TID`). It buys attribution, not
+isolation: the file is still shared, and anyone who can read it reads every bundle in it. Where
+tenants must not see each other's data, give each its own `--cache-db`.
 
 **Nothing expires.** There is no TTL: every request is revalidated conditionally, so the service
 always decides whether the copy still holds. `--cache-max-entries` and `--cache-max-age-days` are
@@ -245,7 +249,10 @@ what the service really answered, which is the only visible difference on a hit.
 **The data.** `--cache-db` names one cache file that every cached kind shares — VSDM bundles are
 the first, others can be added without a new flag or a second file. Today it therefore holds
 Versichertenstammdaten and the PoPP tokens they were read with, **unencrypted**, mode `0600`, at a
-path you choose. Deleting it is always safe. `zeta vsdm cache
+path you choose. Deleting it is always safe.
+
+> A cache file written by 0.13.0 is not readable by 0.13.1 — the schema changed and there is no
+> migration. Delete it; nothing in it cannot be fetched again. `zeta vsdm cache
 stats --cache-db FILE` reports what it holds, `zeta vsdm cache purge --cache-db FILE
 [--insurer IKNR] [--patient KVNR] [--tokens] [--all]` clears it selectively. `GET /api/health`
 shows the counters.

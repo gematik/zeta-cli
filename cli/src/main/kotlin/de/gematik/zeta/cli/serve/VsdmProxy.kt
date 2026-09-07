@@ -172,7 +172,7 @@ private suspend fun readAndForward(
     val cache = ctx.vsdmCache
     val profileVersion = call.request.queryParameters["profileVersion"] ?: DEFAULT_PROFILE_VERSION
     val key = normalizedContentType(call.request.headers[HttpHeaders.Accept] ?: DEFAULT_ACCEPT)
-        ?.let { cacheKeyFor(claims, ctx.env, originOf(baseUrl), profileVersion, it) }
+        ?.let { cacheKeyFor(claims, originOf(baseUrl), profileVersion, it) }
     // JDBC blocks, and a Ktor handler runs on the engine's dispatcher — keep the driver off it.
     val stored = key?.let { k -> cache?.let { withContext(Dispatchers.IO) { it.lookup(k) } } }
     val decision = cacheDecision(
@@ -204,7 +204,7 @@ private suspend fun readAndForward(
         return respondError(call, HttpStatusCode.BadGateway, "VSDM read failed: ${e.message}")
     }
 
-    val served = recordCacheResult(cache, key, decision, stored, response, token)
+    val served = recordCacheResult(cache, key, decision, stored, response, token, ctx.env)
     forwardResponse(call, response, token, claims, served, key?.contentType, cacheOutcome(decision.intent, response.status.value))
 }
 
@@ -216,6 +216,7 @@ private suspend fun recordCacheResult(
     stored: CachedBundle?,
     response: ZetaHttpResponse,
     poppToken: String,
+    env: Environment,
 ): CachedBundle? {
     if (cache == null || key == null) return null
     val now = System.currentTimeMillis() / 1000
@@ -225,7 +226,7 @@ private suspend fun recordCacheResult(
                 val etag = response.headers.entries
                     .firstOrNull { it.key.equals(HttpHeaders.ETag, ignoreCase = true) }?.value
                 if (etag != null) {
-                    cache.store(key, CachedBundle(etag, response.bodyAsBytes(), poppToken, now, now))
+                    cache.store(key, CachedBundle(etag, response.bodyAsBytes(), env, poppToken, now, now))
                 }
             }
 

@@ -9,33 +9,39 @@ import de.gematik.zeta.stress.identity.PoppClaims
  * An ETag names a version of a patient record, so the key is that record's business identity —
  * insurer plus insurant, from the PoPP token — not a hash of the response. [endpointOrigin] and
  * [profileVersion] separate records read from different services or profiles; [contentType]
- * separates serializations of the same version, which share an ETag but not a body.
+ * separates serializations of the same version, which share an ETag but not a body. A future
+ * profile version may well render the same record differently, so it stays in the key.
  *
- * The reader's identity (`actorId`, `patientProofTime`) is deliberately absent: the bundle
- * version does not depend on who read it, and every hit still costs a live upstream call that
- * carries the caller's own PoPP token. One cache file must therefore not be shared across
- * tenants.
+ * [actorId] scopes every entry to the SMC-B that read it, so several identities can share one
+ * cache file and still be counted and purged apart. It buys attribution, not isolation: the file
+ * itself is shared, and anyone who can read it reads every bundle in it. Give each tenant its own
+ * `--cache-db` where that matters.
+ *
+ * The environment is not part of the key — [endpointOrigin] already implies it, since each
+ * environment's catalog resolves to different hosts. Where it does not (an explicit `--endpoint`),
+ * it is the same server handing out the same ETags, so sharing is correct rather than wrong.
  */
 data class VsdmCacheKey(
-    val env: Environment,
+    val actorId: String,
     val endpointOrigin: String,
     val insurerId: String,
-    val patientId: String,
+    val insurantId: String,
     val profileVersion: String,
     val contentType: String,
 )
 
+// `insurantId` is the token's `patientId` claim: PoPP calls the person a patient because it
+// proves their presence, VSDM calls them the insurant whose master data this is.
 fun cacheKeyFor(
     claims: PoppClaims,
-    env: Environment,
     endpointOrigin: String,
     profileVersion: String,
     contentType: String,
 ): VsdmCacheKey = VsdmCacheKey(
-    env = env,
+    actorId = claims.actorId,
     endpointOrigin = endpointOrigin,
     insurerId = claims.insurerId,
-    patientId = claims.patientId,
+    insurantId = claims.patientId,
     profileVersion = profileVersion,
     contentType = contentType,
 )
@@ -52,10 +58,15 @@ fun normalizedContentType(raw: String?): String? {
     return first?.takeIf { it.isNotEmpty() && it != "*/*" && !it.endsWith("/*") }
 }
 
-/** A cached bundle plus what is needed to revalidate it and to reason about its age. */
+/**
+ * A cached bundle plus what is needed to revalidate it and to reason about its age. [env] is
+ * carried along rather than keyed on, so a row says which environment it came from when someone
+ * reads the file with `sqlite3`.
+ */
 data class CachedBundle(
     val etag: String,
     val body: ByteArray,
+    val env: Environment,
     val poppToken: String?,
     val fetchedAtEpochSec: Long,
     val revalidatedAtEpochSec: Long,
@@ -65,6 +76,7 @@ data class CachedBundle(
             other is CachedBundle &&
                 etag == other.etag &&
                 body.contentEquals(other.body) &&
+                env == other.env &&
                 poppToken == other.poppToken &&
                 fetchedAtEpochSec == other.fetchedAtEpochSec &&
                 revalidatedAtEpochSec == other.revalidatedAtEpochSec
@@ -73,6 +85,7 @@ data class CachedBundle(
     override fun hashCode(): Int {
         var result = etag.hashCode()
         result = 31 * result + body.contentHashCode()
+        result = 31 * result + env.hashCode()
         result = 31 * result + (poppToken?.hashCode() ?: 0)
         result = 31 * result + fetchedAtEpochSec.hashCode()
         result = 31 * result + revalidatedAtEpochSec.hashCode()
