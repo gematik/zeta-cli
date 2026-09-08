@@ -1,6 +1,7 @@
 package de.gematik.zeta.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.findObject
 import com.github.ajalt.clikt.core.findOrSetObject
@@ -181,6 +182,28 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
     }
 
     protected open fun runCommand(): Unit = Unit
+
+    /**
+     * Confirmation for a destructive verb. [force] → always proceed. Non-interactive shell without
+     * it → refuse loudly rather than block or assume yes; a script that means to wipe state opts in
+     * explicitly. Interactive: prompt, default No.
+     */
+    protected fun confirmDestructive(question: String, force: Boolean): Boolean {
+        if (force) return true
+        if (!currentContext.terminal.terminalInfo.inputInteractive) {
+            throw CliktError(
+                "Refusing to wipe state in non-interactive mode without --force. " +
+                    "Re-run with --force to confirm.",
+            )
+        }
+        echo("$question [y/N] ", trailingNewline = false)
+        val response = readlnOrNull()?.trim()?.lowercase().orEmpty()
+        if (response != "y" && response != "yes") {
+            echo("Aborted.")
+            return false
+        }
+        return true
+    }
 }
 
 private val invocationLog = KotlinLogging.logger("de.gematik.zeta.cli")

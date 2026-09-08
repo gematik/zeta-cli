@@ -6,6 +6,8 @@ import de.gematik.zeta.cli.cache.CacheDb
 import de.gematik.zeta.cli.cache.PlainBlobCodec
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermissions
+import java.sql.DriverManager
 import kotlin.io.path.writeText
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -33,13 +35,14 @@ class VsdmBundleCacheTest {
 
 
     private fun key(
-        patient: String = "X110411675",
+        insurant: String = "X110411675",
+        actor: String = "5-2-KHAUS-1",
         contentType: String = "application/fhir+json",
     ) = VsdmCacheKey(
-        env = Environment.DEV,
+        actorId = actor,
         endpointOrigin = "https://vsdm-dev.tk.de",
         insurerId = "101575519",
-        patientId = patient,
+        insurantId = insurant,
         profileVersion = "1.1",
         contentType = contentType,
     )
@@ -49,7 +52,7 @@ class VsdmBundleCacheTest {
         body: String = """{"resourceType":"Bundle"}""",
         token: String? = "popp-1",
         at: Long = 1_000,
-    ) = CachedBundle(etag, body.toByteArray(), token, at, at)
+    ) = CachedBundle(etag, body.toByteArray(), Environment.DEV, token, at, at)
 
     @Test
     fun `round trip returns the stored bundle`(@TempDir dir: Path) {
@@ -80,11 +83,11 @@ class VsdmBundleCacheTest {
         openCache(dir.resolve("c.db")).use { (_, db) ->
             db.store(key(), bundle(body = "json"))
             db.store(key(contentType = "application/fhir+xml"), bundle(body = "xml"))
-            db.store(key(patient = "X999"), bundle(body = "other"))
+            db.store(key(insurant = "X999"), bundle(body = "other"))
 
             assertArrayEquals("json".toByteArray(), db.lookup(key())!!.body)
             assertArrayEquals("xml".toByteArray(), db.lookup(key(contentType = "application/fhir+xml"))!!.body)
-            assertArrayEquals("other".toByteArray(), db.lookup(key(patient = "X999"))!!.body)
+            assertArrayEquals("other".toByteArray(), db.lookup(key(insurant = "X999"))!!.body)
             assertNull(db.lookup(key(contentType = "application/cbor")))
         }
     }
@@ -116,12 +119,12 @@ class VsdmBundleCacheTest {
     fun `prune drops rows past the retention age`(@TempDir dir: Path) {
         openCache(dir.resolve("c.db")).use { (_, db) ->
             val now = 1_000_000L
-            db.store(key(patient = "old"), bundle(at = now - 200 * 86_400))
-            db.store(key(patient = "fresh"), bundle(at = now - 86_400))
+            db.store(key(insurant = "old"), bundle(at = now - 200 * 86_400))
+            db.store(key(insurant = "fresh"), bundle(at = now - 86_400))
 
             assertEquals(1, db.prune(now, maxEntries = 100, maxAgeDays = 180))
-            assertNull(db.lookup(key(patient = "old")))
-            assertNotNull(db.lookup(key(patient = "fresh")))
+            assertNull(db.lookup(key(insurant = "old")))
+            assertNotNull(db.lookup(key(insurant = "fresh")))
         }
     }
 
@@ -129,13 +132,13 @@ class VsdmBundleCacheTest {
     fun `prune evicts the least recently revalidated rows above the bound`(@TempDir dir: Path) {
         openCache(dir.resolve("c.db")).use { (_, db) ->
             val now = 1_000_000L
-            (1..5).forEach { db.store(key(patient = "p$it"), bundle(at = now - it * 10)) }
+            (1..5).forEach { db.store(key(insurant = "p$it"), bundle(at = now - it * 10)) }
 
             assertEquals(2, db.prune(now, maxEntries = 3, maxAgeDays = 180))
-            assertNotNull(db.lookup(key(patient = "p1")))
-            assertNotNull(db.lookup(key(patient = "p3")))
-            assertNull(db.lookup(key(patient = "p4")), "oldest revalidation goes first")
-            assertNull(db.lookup(key(patient = "p5")))
+            assertNotNull(db.lookup(key(insurant = "p1")))
+            assertNotNull(db.lookup(key(insurant = "p3")))
+            assertNull(db.lookup(key(insurant = "p4")), "oldest revalidation goes first")
+            assertNull(db.lookup(key(insurant = "p5")))
         }
     }
 
@@ -177,27 +180,84 @@ class VsdmBundleCacheTest {
     fun `the sidecar records schema and cipher from the first open`(@TempDir dir: Path) {
         openCache(dir.resolve("c.db")).use { }
         val meta = Files.readString(dir.resolve("c.db.meta.json"))
-        assertTrue(meta.contains("\"schemaVersion\": 1"), meta)
+        assertTrue(meta.contains("\"schemaVersion\": 2"), meta)
         assertTrue(meta.contains("\"cipher\": \"none\""), meta)
     }
 
     @Test
     fun `purge narrows by insurer and insurant, and clears tokens on their own`(@TempDir dir: Path) {
         openCache(dir.resolve("c.db")).use { (_, db) ->
-            db.store(key(patient = "a"), bundle())
-            db.store(key(patient = "b"), bundle())
+            db.store(key(insurant = "a"), bundle())
+            db.store(key(insurant = "b"), bundle())
 
-            assertEquals(1, db.purge(patientId = "a"))
-            assertNull(db.lookup(key(patient = "a")))
-            assertNotNull(db.lookup(key(patient = "b")))
+            assertEquals(1, db.purge(insurantId = "a"))
+            assertNull(db.lookup(key(insurant = "a")))
+            assertNotNull(db.lookup(key(insurant = "b")))
 
             assertEquals(1, db.clearPoppTokens())
-            assertNull(db.lookup(key(patient = "b"))?.poppToken)
-            assertNotNull(db.lookup(key(patient = "b")), "the bundle itself survives")
+            assertNull(db.lookup(key(insurant = "b"))?.poppToken)
+            assertNotNull(db.lookup(key(insurant = "b")), "the bundle itself survives")
 
             assertEquals(1, db.purge())
             assertEquals(0, db.entryCount())
         }
+    }
+
+    @Test
+    fun `two identities reading the same record are kept and purged apart`(@TempDir dir: Path) {
+        openCache(dir.resolve("c.db")).use { (_, db) ->
+            db.store(key(actor = "actor-a"), bundle(body = "for a"))
+            db.store(key(actor = "actor-b"), bundle(body = "for b"))
+
+            assertEquals(2, db.entryCount(), "same record, two readers, two rows")
+            assertEquals(2, db.actorCount())
+            assertArrayEquals("for a".toByteArray(), db.lookup(key(actor = "actor-a"))!!.body)
+
+            assertEquals(1, db.purge(actorId = "actor-a"))
+            assertNull(db.lookup(key(actor = "actor-a")))
+            assertNotNull(db.lookup(key(actor = "actor-b")), "the other tenant is untouched")
+        }
+    }
+
+    @Test
+    fun `clearing tokens narrows to one identity like purge does`(@TempDir dir: Path) {
+        openCache(dir.resolve("c.db")).use { (_, db) ->
+            db.store(key(actor = "actor-a"), bundle(token = "popp-a"))
+            db.store(key(actor = "actor-b"), bundle(token = "popp-b"))
+
+            assertEquals(1, db.clearPoppTokens(actorId = "actor-a"))
+            assertNull(db.lookup(key(actor = "actor-a"))?.poppToken)
+            assertEquals("popp-b", db.lookup(key(actor = "actor-b"))?.poppToken)
+        }
+    }
+
+    @Test
+    fun `a cache written by another schema is recreated, not left silently broken`(@TempDir dir: Path) {
+        val file = dir.resolve("c.db")
+        openCache(file).use { (_, db) -> db.store(key(), bundle()) }
+        // What a build with a different table shape leaves behind: our file, someone else's schema.
+        DriverManager.getConnection("jdbc:sqlite:${file.toAbsolutePath()}").use { c ->
+            c.createStatement().use { it.execute("PRAGMA user_version=99") }
+        }
+
+        openCache(file).use { (_, db) ->
+            assertNull(db.lookup(key()))
+            db.store(key(), bundle())
+            assertNotNull(db.lookup(key()), "the recreated file is writable")
+        }
+    }
+
+    @Test
+    fun `the file and its WAL sidecars are owner-only`(@TempDir dir: Path) {
+        val file = dir.resolve("c.db")
+        openCache(file).use { (_, db) -> db.store(key(), bundle()) }
+        listOf(file, Path.of("$file-wal"), Path.of("$file-shm"))
+            .filter { Files.exists(it) }
+            .forEach { assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(it)), it.toString()) }
+        assertEquals(
+            "rw-------",
+            PosixFilePermissions.toString(Files.getPosixFilePermissions(dir.resolve("c.db.meta.json"))),
+        )
     }
 
     private class NamedCodec(override val name: String) : BlobCodec {

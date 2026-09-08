@@ -185,8 +185,7 @@ class ConnectorClient(
                             ),
                     )
                 val resp: GetCardsResponseEnvelope =
-                    proxy.call(Operations.GetCards, envelope)
-                resp.requireSuccess("GetCards($cardType)")
+                    proxy.call(Operations.GetCards, envelope, label = "GetCards($cardType)")
                 resp.body.getCardsResponse
                     ?.cards
                     ?.card
@@ -223,8 +222,11 @@ class ConnectorClient(
                     ),
             )
         val resp: ReadCardCertificateResponseEnvelope =
-            proxy.call(CertificateServiceOperations.ReadCardCertificate, envelope)
-        resp.requireSuccess("ReadCardCertificate(cardHandle=$cardHandle)")
+            proxy.call(
+                CertificateServiceOperations.ReadCardCertificate,
+                envelope,
+                label = "ReadCardCertificate(cardHandle=$cardHandle)",
+            )
         val info =
             resp.body.readCardCertificateResponse
                 ?.x509DataInfoList
@@ -275,8 +277,11 @@ class ConnectorClient(
                     ),
             )
         val resp: ExternalAuthenticateResponseEnvelope =
-            proxy.call(AuthSignatureOperations.ExternalAuthenticate, envelope)
-        resp.requireSuccess("ExternalAuthenticate(cardHandle=$cardHandle)")
+            proxy.call(
+                AuthSignatureOperations.ExternalAuthenticate,
+                envelope,
+                label = "ExternalAuthenticate(cardHandle=$cardHandle)",
+            )
         val sig =
             resp.body.externalAuthenticateResponse
                 ?.signatureObject
@@ -303,8 +308,12 @@ class ConnectorClient(
                     startCardSession = StartCardSession(context = context.toApiContext(), cardHandle = cardHandle),
                 ),
             )
-        val resp: StartCardSessionResponseEnvelope = proxy.call(CardServiceOperations.StartCardSession, envelope)
-        resp.requireSuccess("StartCardSession(cardHandle=$cardHandle)")
+        val resp: StartCardSessionResponseEnvelope =
+            proxy.call(
+                CardServiceOperations.StartCardSession,
+                envelope,
+                label = "StartCardSession(cardHandle=$cardHandle)",
+            )
         return resp.body.startCardSessionResponse?.sessionId
             ?.also { log.debug { "StartCardSession cardHandle=$cardHandle -> sessionId=$it" } }
             ?: error("StartCardSession: no SessionId in response")
@@ -324,8 +333,11 @@ class ConnectorClient(
                     stopCardSession = StopCardSession(sessionId = sessionId),
                 ),
             )
-        val resp: StopCardSessionResponseEnvelope = proxy.call(CardServiceOperations.StopCardSession, envelope)
-        resp.requireSuccess("StopCardSession(sessionId=$sessionId)")
+        proxy.call<StopCardSessionEnvelope, StopCardSessionResponseEnvelope>(
+            CardServiceOperations.StopCardSession,
+            envelope,
+            label = "StopCardSession(sessionId=$sessionId)",
+        )
     }
 
     /**
@@ -344,8 +356,8 @@ class ConnectorClient(
                     secureSendAPDU = SecureSendAPDU(signedScenario = signedScenario),
                 ),
             )
-        val resp: SecureSendAPDUResponseEnvelope = proxy.call(CardServiceOperations.SecureSendAPDU, envelope)
-        resp.requireSuccess("SecureSendAPDU")
+        val resp: SecureSendAPDUResponseEnvelope =
+            proxy.call(CardServiceOperations.SecureSendAPDU, envelope, label = "SecureSendAPDU")
         val apdus = resp.body.secureSendAPDUResponse
             ?.signedScenarioResponse
             ?.responseApduList
@@ -487,8 +499,7 @@ class ConnectorClient(
                     ),
             )
         val resp: GetResourceInformationResponseEnvelope =
-            proxy.call(Operations.GetResourceInformation, envelope)
-        resp.requireSuccess("GetResourceInformation")
+            proxy.call(Operations.GetResourceInformation, envelope, label = "GetResourceInformation")
         return resp.body.getResourceInformationResponse
             ?: error("GetResourceInformation: empty response body")
     }

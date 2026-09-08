@@ -1,5 +1,11 @@
 package de.gematik.zeta.cli.cache
 
+import de.gematik.zeta.cli.storage.ZETA_APPLICATION_ID
+import de.gematik.zeta.cli.storage.createSqliteFileOwnerOnly
+import de.gematik.zeta.cli.storage.isNotADatabase
+import de.gematik.zeta.cli.storage.readSqliteHeader
+import de.gematik.zeta.cli.storage.restrictSqliteFile
+import de.gematik.zeta.cli.storage.stampSqliteHeader
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Files
 import java.nio.file.Path
@@ -34,8 +40,9 @@ data class CacheDbMeta(
  * connection, so opening one per operation would make the switch expensive. For the same reason
  * this class is the only place that opens the file.
  *
- * A cache is disposable — nothing lives only here — so a file we cannot read is discarded and
- * recreated rather than migrated. A file without our marker is never touched.
+ * A cache is disposable — nothing lives only here — so a file we cannot read, or one written by a
+ * schema this build does not speak, is discarded and recreated rather than migrated. A file
+ * belonging to someone else, or one we merely cannot open right now, is never touched.
  */
 class CacheDb(
     private val path: Path,
@@ -51,13 +58,20 @@ class CacheDb(
     init {
         path.toAbsolutePath().parent?.let { Files.createDirectories(it) }
         if (!claimUsable()) recreate()
-        val fresh = Files.notExists(path)
+        val fresh = isBlank()
+        // Own the file before SQLite writes anything into it — a chmod afterwards leaves a window
+        // in which cached payloads sit there under the process umask.
+        if (fresh) createSqliteFileOwnerOnly(path)
         repeat(poolSize) { pool.add(open()) }
         if (fresh) stamp()
         writeMeta()
-        restrictPermissions()
-        log.warn {
-            "cache enabled: $path — cached payloads are stored unencrypted. Delete the file to discard them."
+        // The -wal exists only once a connection has opened the file in WAL mode.
+        restrictSqliteFile(path)
+        restrictMeta()
+        if (fresh) {
+            log.warn { "cache created at $path — cached payloads are stored unencrypted. Delete the file to discard them." }
+        } else {
+            log.info { "cache enabled: $path — cached payloads are stored unencrypted." }
         }
     }
 
@@ -81,7 +95,11 @@ class CacheDb(
         }
     }
 
-    /** Create a section's tables. Idempotent DDL only — there are no versioned migrations. */
+    /**
+     * Create a section's tables. Idempotent DDL only — there are no versioned migrations, so any
+     * change to a section's table shape means bumping [SCHEMA_VERSION]: that is what makes an
+     * older file get discarded instead of quietly failing every write into it.
+     */
     fun migrate(block: (Connection) -> Unit) = withConnection(block)
 
     /** Reclaim space freed by a delete; `auto_vacuum=INCREMENTAL` was set when the file was made. */
@@ -93,30 +111,47 @@ class CacheDb(
 
     override fun toString(): String = path.toString()
 
+    /** Absent, or present but empty — either way there is nothing in it yet to claim or keep. */
+    private fun isBlank(): Boolean =
+        Files.notExists(path) || runCatching { Files.size(path) }.getOrDefault(0L) == 0L
+
     /**
-     * True when the file is absent (nothing to claim) or carries our `application_id`. A file
-     * belonging to someone else raises rather than being silently discarded.
+     * True when the file can be used as it stands: nothing there yet, or our own database at the
+     * schema this build speaks. A file belonging to another application, or one we cannot open at
+     * all, raises rather than being silently discarded; ours at another schema returns false so the
+     * caller recreates it — a cache holds nothing that cannot be fetched again.
      */
     private fun claimUsable(): Boolean {
-        if (Files.notExists(path)) return true
-        val marker = runCatching {
-            DriverManager.getConnection(url).use { c ->
-                c.createStatement().use { st ->
-                    st.executeQuery("PRAGMA application_id").use { rs -> if (rs.next()) rs.getInt(1) else 0 }
-                }
+        if (isBlank()) return true
+        val header = runCatching { DriverManager.getConnection(url).use { readSqliteHeader(it) } }
+        val (applicationId, schema) = header.getOrElse { e ->
+            // Not a database at all: fall through to the sidecar, which decides whether it is ours
+            // to discard. Anything else (locked, busy, no permission) is transient — never delete.
+            if (!isNotADatabase(e)) {
+                throw IllegalStateException("$path cannot be opened as a cache: ${e.message}", e)
             }
-        }.getOrNull()
-        if (marker == APPLICATION_ID) return true
-        if (marker != null && marker != 0) {
-            error("$path is a SQLite database belonging to another application (application_id=$marker)")
+            return claimBySidecar()
         }
+        if (applicationId == ZETA_APPLICATION_ID) {
+            if (schema == SCHEMA_VERSION) return true
+            log.warn { "cache at $path was written by schema $schema, this build speaks $SCHEMA_VERSION" }
+            return false
+        }
+        if (applicationId != 0) {
+            error("$path is a SQLite database belonging to another application (application_id=$applicationId)")
+        }
+        return claimBySidecar()
+    }
+
+    /** For a file SQLite would not read: ours only if our sidecar says so, and then only to discard. */
+    private fun claimBySidecar(): Boolean {
         val ours = runCatching { json.decodeFromString<CacheDbMeta>(Files.readString(sidecar)) }.isSuccess
         if (!ours) error("$path exists but is not a readable zeta cache; move it aside or pick another --cache-db")
         return false
     }
 
     private fun recreate() {
-        log.warn { "cache at $path is unreadable — discarding and recreating it" }
+        log.warn { "cache at $path cannot be used by this build — discarding and recreating it" }
         listOf(path, Path.of("$path-wal"), Path.of("$path-shm"), sidecar).forEach {
             runCatching { Files.deleteIfExists(it) }
         }
@@ -124,11 +159,8 @@ class CacheDb(
 
     /** Header fields that can only be chosen while the database is still empty. */
     private fun stamp() = withConnection { c ->
-        c.createStatement().use { st ->
-            st.execute("PRAGMA auto_vacuum=INCREMENTAL")
-            st.execute("PRAGMA application_id=$APPLICATION_ID")
-            st.execute("PRAGMA user_version=$SCHEMA_VERSION")
-        }
+        c.createStatement().use { it.execute("PRAGMA auto_vacuum=INCREMENTAL") }
+        stampSqliteHeader(c, SCHEMA_VERSION)
     }
 
     /**
@@ -159,22 +191,25 @@ class CacheDb(
             .onFailure { log.warn { "could not write ${sidecar.fileName}: ${it.message}" } }
     }
 
-    private fun restrictPermissions() {
-        listOf(path, sidecar).forEach {
-            runCatching { Files.setPosixFilePermissions(it, PosixFilePermissions.fromString("rw-------")) }
-        }
+    private fun restrictMeta() {
+        runCatching { Files.setPosixFilePermissions(sidecar, PosixFilePermissions.fromString("rw-------")) }
     }
 
+    /**
+     * Fold the WAL back into the database before letting go of it: deleted rows are zeroed by
+     * `secure_delete`, but a WAL left behind still carries the pages they were deleted from.
+     */
     override fun close() {
         val drained = mutableListOf<Connection>()
         pool.drainTo(drained)
+        drained.firstOrNull()?.let { c ->
+            runCatching { c.createStatement().use { it.execute("PRAGMA wal_checkpoint(TRUNCATE)") } }
+        }
         drained.forEach { runCatching { it.close() } }
     }
 
     private companion object {
-        // "ZETA" as a big-endian ASCII quad, the conventional way to pick an application_id.
-        const val APPLICATION_ID = 0x5A455441
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
         const val CIPHER_NONE = "none"
     }
 }

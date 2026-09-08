@@ -87,7 +87,7 @@ zeta login https://popp.dev.poppservice.de \
 - `zeta http URL` — HTTP request to a Zeta-protected resource (curl-like).
 - `zeta ws URL` — WebSocket to a Zeta-protected resource, round-tripping JSON from stdin.
 - `zeta vsdm get [POPP-TOKEN]` — read a patient's VSDM bundle straight from a PoPP token: derives the environment and insurer from the token, resolves the VSDM endpoint via the TI service-discovery catalog, and fetches the bundle (scope `vsdservice`). Token falls back to `ZETA_POPP_TOKEN`; `--endpoint URL` overrides the catalog routing with an explicit VSDM endpoint (base URL only). `--cache-db FILE` turns the mandatory `If-None-Match` into a real conditional request, so an unchanged record is revalidated instead of re-transferred.
-- `zeta vsdm cache {stats,purge}` — inspect or clear that cache file.
+- `zeta vsdm cache {stats,purge}` — inspect or clear that cache file. See [docs/storage.md](docs/storage.md) for everything the CLI keeps on disk.
 
 **Konnektor & PoPP**
 
@@ -307,15 +307,16 @@ Signs with an SMC-B identity from a `zeta-stress` identity database (SQLite, bui
 | `--profile-version=<version>` | — | `1.1` |
 | `-H, --header=<name: value>` | `ZETA_VSDM_HEADER` | — |
 | `-i, --include` | `ZETA_VSDM_INCLUDE` | off |
+| `--no-cache` | `ZETA_NO_CACHE` | off |
 | `--cache-db=<file>` | `ZETA_CACHE_DB` | — (no caching) |
 | `--cache-max-entries=<n>` | `ZETA_CACHE_MAX_ENTRIES` | `10000` |
 | `--cache-max-age-days=<days>` | `ZETA_CACHE_MAX_AGE_DAYS` | `180` |
 
 The `POPP-TOKEN` argument accepts the token itself or a path to a file holding one (auto-detected). Everything else is derived from the token: the environment (from the issuer), the insurer's VSDM endpoint (from the TI service-discovery catalog), the `vsdservice` scope, and — for `--auth-method db` — the signing identity (from the token's `actorId`). `--endpoint` overrides the catalog routing with an explicit VSDM endpoint (base URL only — scheme + host[:port], any path ignored). `--profile-version` sets the `profileVersion` query parameter sent to the endpoint (default `1.1`; pass `--profile-version 1.0` for the older profile). `-H, --header` overrides (or adds) headers on the inner VSDM request — it replaces the built-in `Accept` / `If-None-Match` / `PoPP` defaults by name (case-insensitive) and does not affect the outer ASL/CBOR transport. Supply a [profile](#profile) and an [auth method](#authentication) as for `zeta http`.
 
-**Caching.** The VSDM service requires an `If-None-Match` header — the built-in default is an all-zero etag meaning "no known version", which never matches, so every read transfers the whole bundle. Point `--cache-db` at a file and the command instead sends the etag it stored for that patient record, and a `304` is answered from the cache. Nothing expires: the service decides on every read whether the copy still holds. The key is environment + endpoint + insurer (IKNR) + insurant (KVNR) + `profileVersion` + media type, all but the last two taken from the PoPP token.
+**Caching.** The VSDM service requires an `If-None-Match` header — the built-in default is an all-zero etag meaning "no known version", which never matches, so every read transfers the whole bundle. Point `--cache-db` at a file and the command instead sends the etag it stored for that patient record, and a `304` is answered from the cache. Nothing expires: the service decides on every read whether the copy still holds. The key is the reading SMC-B (`actorId`) + endpoint + insurer (IKNR) + insurant (KVNR) + `profileVersion` + media type — so several identities can share one file, each with its own entries.
 
-`--cache-db` names one cache file shared by every cached kind — VSDM bundles are the first. Today it therefore holds Versichertenstammdaten and the PoPP tokens they were read with, **unencrypted**, mode `0600` — pick its location deliberately, and note that a `cache-db:` key in `zeta.yaml` enables it just as the flag does. Deleting the file is always safe; `zeta vsdm cache stats` and `zeta vsdm cache purge` do it selectively. An explicit `-H 'If-None-Match: …'` bypasses the cache entirely: your condition goes up untouched and the response comes back untouched.
+`--cache-db` names one cache file shared by every cached kind — VSDM bundles are the first. Today it therefore holds Versichertenstammdaten and the PoPP tokens they were read with, **unencrypted**, mode `0600` (its `-wal`/`-shm` sidecars included) — pick its location deliberately, and note that a `cache-db:` key in `zeta.yaml` enables it just as the flag does. Keying on the reader gives attribution and per-identity purging, not isolation — the file is shared, so give each tenant its own where that matters. Deleting the file is always safe; `zeta vsdm cache stats` and `zeta vsdm cache purge [--actor TID] [--insurer IKNR] [--insurant KVNR] [--tokens] [--all]` do it selectively. `--no-cache` reads in full and keeps nothing, and an explicit `-H 'If-None-Match: …'` bypasses the cache entirely: your condition goes up untouched and the response comes back untouched. [docs/storage.md](docs/storage.md) covers this file alongside everything else the CLI writes to disk.
 
 **Automation output.** The default output prints just the bundle. `-i, --include` instead prints the whole response as an HTTP message — the status line, one header per line, a blank line, then the body — so a single pipe carries the response headers (`ETag`, the VSDM `PZ` / Prüfziffer, …) alongside the bundle:
 

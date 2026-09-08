@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.vsdm
 
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.cache.BlobCodec
 import de.gematik.zeta.cli.cache.CacheDb
 import de.gematik.zeta.cli.cache.CacheSection
@@ -27,12 +28,13 @@ class VsdmBundleCache(
                 st.execute(
                     """
                     CREATE TABLE IF NOT EXISTS vsdm_bundle (
-                        env             TEXT NOT NULL,
+                        actor_id        TEXT NOT NULL,
                         endpoint_origin TEXT NOT NULL,
                         insurer_id      TEXT NOT NULL,
-                        patient_id      TEXT NOT NULL,
+                        insurant_id     TEXT NOT NULL,
                         profile_version TEXT NOT NULL,
                         content_type    TEXT NOT NULL,
+                        env             TEXT NOT NULL,
                         etag            TEXT NOT NULL,
                         body            BLOB NOT NULL,
                         codec           TEXT NOT NULL,
@@ -40,12 +42,12 @@ class VsdmBundleCache(
                         fetched_at      INTEGER NOT NULL,
                         revalidated_at  INTEGER NOT NULL,
                         hits            INTEGER NOT NULL DEFAULT 0,
-                        PRIMARY KEY (env, endpoint_origin, insurer_id, patient_id, profile_version, content_type)
+                        PRIMARY KEY (actor_id, endpoint_origin, insurer_id, insurant_id, profile_version, content_type)
                     )
                     """.trimIndent(),
                 )
                 st.execute("CREATE INDEX IF NOT EXISTS vsdm_bundle_by_age ON vsdm_bundle(revalidated_at)")
-                st.execute("CREATE INDEX IF NOT EXISTS vsdm_bundle_by_patient ON vsdm_bundle(insurer_id, patient_id)")
+                st.execute("CREATE INDEX IF NOT EXISTS vsdm_bundle_by_insurant ON vsdm_bundle(insurer_id, insurant_id)")
             }
         }
     }
@@ -54,8 +56,8 @@ class VsdmBundleCache(
         db.withConnection { c ->
             c.prepareStatement(
                 """
-                SELECT etag, body, codec, popp_token, fetched_at, revalidated_at FROM vsdm_bundle
-                 WHERE env = ? AND endpoint_origin = ? AND insurer_id = ? AND patient_id = ?
+                SELECT etag, body, codec, env, popp_token, fetched_at, revalidated_at FROM vsdm_bundle
+                 WHERE actor_id = ? AND endpoint_origin = ? AND insurer_id = ? AND insurant_id = ?
                    AND profile_version = ? AND content_type = ?
                 """.trimIndent(),
             ).use { ps ->
@@ -67,9 +69,16 @@ class VsdmBundleCache(
                         invalidate(key)
                         return@withConnection null
                     }
+                    val env = runCatching { Environment.valueOf(rs.getString("env")) }.getOrNull()
+                    if (env == null) {
+                        log.debug { "cache row carries an unknown environment '${rs.getString("env")}' — dropping it" }
+                        invalidate(key)
+                        return@withConnection null
+                    }
                     CachedBundle(
                         etag = rs.getString("etag"),
                         body = codec.decode(rs.getBytes("body")),
+                        env = env,
                         poppToken = rs.getString("popp_token"),
                         fetchedAtEpochSec = rs.getLong("fetched_at"),
                         revalidatedAtEpochSec = rs.getLong("revalidated_at"),
@@ -85,18 +94,19 @@ class VsdmBundleCache(
                 c.prepareStatement(
                     """
                     INSERT OR REPLACE INTO vsdm_bundle
-                        (env, endpoint_origin, insurer_id, patient_id, profile_version, content_type,
-                         etag, body, codec, popp_token, fetched_at, revalidated_at, hits)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        (actor_id, endpoint_origin, insurer_id, insurant_id, profile_version, content_type,
+                         env, etag, body, codec, popp_token, fetched_at, revalidated_at, hits)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """.trimIndent(),
                 ).use { ps ->
                     key.bind(ps)
-                    ps.setString(7, entry.etag)
-                    ps.setBytes(8, codec.encode(entry.body))
-                    ps.setString(9, codec.name)
-                    ps.setString(10, entry.poppToken)
-                    ps.setLong(11, entry.fetchedAtEpochSec)
-                    ps.setLong(12, entry.revalidatedAtEpochSec)
+                    ps.setString(7, entry.env.name)
+                    ps.setString(8, entry.etag)
+                    ps.setBytes(9, codec.encode(entry.body))
+                    ps.setString(10, codec.name)
+                    ps.setString(11, entry.poppToken)
+                    ps.setLong(12, entry.fetchedAtEpochSec)
+                    ps.setLong(13, entry.revalidatedAtEpochSec)
                     ps.executeUpdate()
                 }
             }
@@ -109,7 +119,7 @@ class VsdmBundleCache(
                 c.prepareStatement(
                     """
                     UPDATE vsdm_bundle SET revalidated_at = ?, hits = hits + 1, popp_token = COALESCE(?, popp_token)
-                     WHERE env = ? AND endpoint_origin = ? AND insurer_id = ? AND patient_id = ?
+                     WHERE actor_id = ? AND endpoint_origin = ? AND insurer_id = ? AND insurant_id = ?
                        AND profile_version = ? AND content_type = ?
                     """.trimIndent(),
                 ).use { ps ->
@@ -128,7 +138,7 @@ class VsdmBundleCache(
                 c.prepareStatement(
                     """
                     DELETE FROM vsdm_bundle
-                     WHERE env = ? AND endpoint_origin = ? AND insurer_id = ? AND patient_id = ?
+                     WHERE actor_id = ? AND endpoint_origin = ? AND insurer_id = ? AND insurant_id = ?
                        AND profile_version = ? AND content_type = ?
                     """.trimIndent(),
                 ).use { ps ->
@@ -162,44 +172,66 @@ class VsdmBundleCache(
     }.onFailure { log.warn { "VSDM cache prune failed: ${it.message}" } }.getOrDefault(0)
 
     /**
-     * Delete entries by insurer and/or insurant; with neither, everything. Returns the row count.
-     * Deleting the whole cache file does the same thing and is always safe — this is for the
-     * targeted case.
+     * Delete entries by reading identity, insurer and/or insurant; with none of them, everything.
+     * Returns the row count. Deleting the whole cache file does the same thing and is always safe —
+     * this is for the targeted case, and `actorId` is what makes a shared file purgeable per tenant.
      */
-    fun purge(insurerId: String? = null, patientId: String? = null): Int = db.withConnection { c ->
-        val filters = buildList {
-            insurerId?.let { add("insurer_id = ?" to it) }
-            patientId?.let { add("patient_id = ?" to it) }
-        }
-        val where = if (filters.isEmpty()) "" else " WHERE " + filters.joinToString(" AND ") { it.first }
-        c.prepareStatement("DELETE FROM vsdm_bundle$where").use { ps ->
-            filters.forEachIndexed { i, (_, value) -> ps.setString(i + 1, value) }
-            ps.executeUpdate()
-        }
-    }.also { if (it > 0) db.vacuum() }
+    fun purge(actorId: String? = null, insurerId: String? = null, insurantId: String? = null): Int =
+        write("DELETE FROM vsdm_bundle", filters(actorId, insurerId, insurantId))
+            .also { if (it > 0) db.vacuum() }
 
-    /** Drop the stored PoPP tokens, keeping the bundles they were read with. */
-    fun clearPoppTokens(): Int = db.withConnection { c ->
-        c.createStatement().use {
-            it.executeUpdate("UPDATE vsdm_bundle SET popp_token = NULL WHERE popp_token IS NOT NULL")
-        }
-    }
+    /**
+     * Drop the stored PoPP tokens, keeping the bundles they were read with. Takes the same filters
+     * as [purge]: clearing one tenant's tokens must not touch another's.
+     */
+    fun clearPoppTokens(actorId: String? = null, insurerId: String? = null, insurantId: String? = null): Int =
+        write(
+            "UPDATE vsdm_bundle SET popp_token = NULL",
+            filters(actorId, insurerId, insurantId) + ("popp_token IS NOT NULL" to null),
+        )
 
-    override fun entryCount(): Long = db.withConnection { c ->
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT COUNT(*) FROM vsdm_bundle").use { rs -> rs.next(); rs.getLong(1) }
-        }
-    }
+    override fun entryCount(): Long = count("SELECT COUNT(*) FROM vsdm_bundle")
+
+    /** How many SMC-B identities have entries here — the first question about a shared cache file. */
+    fun actorCount(): Long = count("SELECT COUNT(DISTINCT actor_id) FROM vsdm_bundle")
 
     /** Epoch seconds of the least recently revalidated entry, or null when the section is empty. */
-    fun oldestRevalidationEpochSec(): Long? = db.withConnection { c ->
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT MIN(revalidated_at) FROM vsdm_bundle").use { rs ->
-                rs.next()
-                rs.getLong(1).takeIf { !rs.wasNull() }
+    fun oldestRevalidationEpochSec(): Long? = runCatching {
+        db.withConnection { c ->
+            c.createStatement().use { st ->
+                st.executeQuery("SELECT MIN(revalidated_at) FROM vsdm_bundle").use { rs ->
+                    rs.next()
+                    rs.getLong(1).takeIf { !rs.wasNull() }
+                }
             }
         }
+    }.onFailure { log.warn { "VSDM cache read failed: ${it.message}" } }.getOrNull()
+
+    private fun filters(actorId: String?, insurerId: String?, insurantId: String?): List<Pair<String, String?>> =
+        buildList {
+            actorId?.let { add("actor_id = ?" to it) }
+            insurerId?.let { add("insurer_id = ?" to it) }
+            insurantId?.let { add("insurant_id = ?" to it) }
+        }
+
+    /** [statement] narrowed by [filters]; a filter with a null value carries no bind parameter. */
+    private fun write(statement: String, filters: List<Pair<String, String?>>): Int = db.withConnection { c ->
+        val where = if (filters.isEmpty()) "" else " WHERE " + filters.joinToString(" AND ") { it.first }
+        c.prepareStatement(statement + where).use { ps ->
+            var index = 1
+            filters.forEach { (_, value) -> value?.let { ps.setString(index++, it) } }
+            ps.executeUpdate()
+        }
     }
+
+    /** A counting query; like every read here it degrades to 0 rather than failing the caller. */
+    private fun count(sql: String): Long = runCatching {
+        db.withConnection { c ->
+            c.createStatement().use { st ->
+                st.executeQuery(sql).use { rs -> rs.next(); rs.getLong(1) }
+            }
+        }
+    }.onFailure { log.warn { "VSDM cache read failed: ${it.message}" } }.getOrDefault(0L)
 
     private companion object {
         const val SECONDS_PER_DAY = 86_400L
@@ -207,10 +239,10 @@ class VsdmBundleCache(
 }
 
 private fun VsdmCacheKey.bind(ps: PreparedStatement, offset: Int = 0) {
-    ps.setString(offset + 1, env.name)
+    ps.setString(offset + 1, actorId)
     ps.setString(offset + 2, endpointOrigin)
     ps.setString(offset + 3, insurerId)
-    ps.setString(offset + 4, patientId)
+    ps.setString(offset + 4, insurantId)
     ps.setString(offset + 5, profileVersion)
     ps.setString(offset + 6, contentType)
 }
