@@ -6,6 +6,15 @@ import de.gematik.zeta.cli.http.installSdkLogBridge
 import de.gematik.zeta.cli.http.wireLogLevel
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
 import kotlin.io.path.readText
+import kotlin.time.Duration.Companion.hours
+
+/**
+ * Upper bound on how long a validated OCSP/CRL response is reused. The SDK defaults to an hour,
+ * which costs a fresh responder round-trip on nearly every invocation of a CLI that runs for a
+ * second at a time. The cache is still capped by the response's own `nextUpdate`, so this only
+ * extends reuse for responses that would outlive it.
+ */
+private val REVOCATION_CACHE = 24.hours
 
 /**
  * Apply the CLI's shared HTTP options to a Zeta SDK [ZetaHttpClientBuilder]. Used at every
@@ -52,6 +61,7 @@ internal fun ZetaHttpClientBuilder.applyCliHttpDefaults(cliConfig: CliConfig): Z
         connectMs = cliConfig.connectTimeout.inWholeMilliseconds,
         requestMs = cliConfig.requestTimeout.inWholeMilliseconds,
     )
+    revocationCacheDuration(REVOCATION_CACHE.inWholeSeconds)
     logging(wireLogLevel)
     cliConfig.proxy?.let { proxy(it) }
     return this
