@@ -142,12 +142,15 @@ Notes:
 
 ## Metrics
 
-All series carry `env` and `endpoint` (the resource origin, e.g. `https://vsdm.example/`).
+All series carry `env`, `service` and `endpoint`. `service` is the slug dashboards should key on: the
+catalog's instance name for a VSDM service (the name its routing table points at, e.g. `vsdm-tk`),
+`popp` for the PoPP service, and the host name for an explicit `--endpoint`. `endpoint` is the resource
+origin (`https://vsdm.example/`).
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
 | `zeta_probe_duration_seconds` | histogram | `probe`, `step`, `result` | Wall time per step (`status`, `register`, `clear`, `authenticate`, `subject_token`, `verify`) and for the whole probe (`step="total"`). `result` is `ok`/`error` per step; `ok`/`error`/`timeout` for the total. |
-| `zeta_probe_runs_total` | counter | `probe`, `result`, `error_type`, `fallback` | Completed probes. `error_type` is the exception class (`timeout`, `no_tokens`, `IllegalStateException`, …), empty on success. |
+| `zeta_probe_runs_total` | counter | `probe`, `result`, `error_type`, `fallback` | Completed probes. `error_type` is the SDK's flow code when it reports one (`AUTHENTICATION_ERROR`, `REGISTRATION_FAILED_ERROR`, …), else `timeout`, `no_tokens`, or the exception class (`SocketException`); empty on success. |
 | `zeta_probe_up` | gauge | `probe` | `1` if the last probe of that kind against the endpoint succeeded, `0` otherwise. |
 | `zeta_probe_last_success_time_seconds` | gauge | `probe` | Unix time of the last successful probe of that kind. |
 | `zeta_probe_token_expiry_time_seconds` | gauge | — | Unix time at which the endpoint's current access token expires. |
@@ -172,13 +175,62 @@ Everything else the OpenTelemetry Java SDK understands works unchanged: `OTEL_EX
 `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER`.
 
 Each probe is one trace: a root span `zeta.probe.login` / `zeta.probe.refresh` (attributes
-`zeta.env`, `zeta.endpoint`, `zeta.scopes`, `zeta.result`, `zeta.fallback`, `zeta.registered`,
+`zeta.env`, `zeta.service`, `zeta.endpoint`, `zeta.scopes`, `zeta.result`, `zeta.fallback`, `zeta.registered`,
 `zeta.status.before` / `zeta.status.after`) with children `probe.status`, `probe.register`,
 `probe.clear`, `sdk.authenticate` → `sdk.subject_token`, and `probe.verify`. Failed steps carry the
 exception.
 
 The CLI's own `--trace` (the in-process span tree printed at exit) is refused by `zeta probe`: a
 process that never exits would grow that tree forever.
+
+## What the data looks like
+
+Both samples below are from a run against the `dev` catalog with a PKCS#12 identity.
+
+`GET :9464/metrics` (histogram buckets omitted):
+
+```
+target_info{deployment_environment_name="dev",service_name="zeta-probe",service_version="0.15.0",…} 1
+zeta_probe_targets{env="dev"} 5.0
+zeta_probe_up{env="dev",service="vsdm-3",endpoint="https://dienst.vsdd2.rudev.service-ti.de/",probe="login"} 1.0
+zeta_probe_up{env="dev",service="vsdm-3",endpoint="https://dienst.vsdd2.rudev.service-ti.de/",probe="refresh"} 1.0
+zeta_probe_up{env="dev",service="vsdm-1",endpoint="https://vsdm-dev.tk.de/",probe="login"} 0.0
+zeta_probe_up{env="dev",service="popp",endpoint="https://popp.dev.poppservice.de/",probe="refresh"} 1.0
+zeta_probe_runs_total{env="dev",service="vsdm-3",endpoint="…",probe="refresh",result="ok",error_type="",fallback="false"} 2.0
+zeta_probe_runs_total{env="dev",service="vsdm-3",endpoint="…",probe="refresh",result="ok",error_type="",fallback="true"} 1.0
+zeta_probe_runs_total{env="dev",service="vsdm-1",endpoint="…",probe="login",result="error",error_type="AUTHENTICATION_ERROR",fallback="false"} 2.0
+zeta_probe_runs_total{env="dev",service="vsdm-4",endpoint="…",probe="refresh",result="error",error_type="SocketException",fallback="false"} 2.0
+zeta_probe_duration_seconds_sum{env="dev",service="vsdm-3",endpoint="…",probe="login",step="subject_token",result="ok"} 0.013
+zeta_probe_duration_seconds_count{env="dev",service="vsdm-3",endpoint="…",probe="login",step="subject_token",result="ok"} 1
+zeta_probe_last_success_time_seconds{env="dev",service="vsdm-3",endpoint="…",probe="refresh"} 1.790350379E9
+zeta_probe_token_expiry_time_seconds{env="dev",service="vsdm-3",endpoint="…"} 1.790350679E9
+```
+
+One `login` trace as the collector's debug exporter shows it (resource `service.name=zeta-probe`,
+`service.version=0.15.0`, `deployment.environment.name=dev`; scope `de.gematik.zeta.cli.probe`):
+
+```
+zeta.probe.login        392 ms   zeta.service=vsdm-3  zeta.endpoint=https://dienst.vsdd2.rudev.service-ti.de/
+                                 zeta.scopes=vsdservice  zeta.result=ok  zeta.fallback=false  zeta.registered=false
+                                 zeta.status.before=REGISTERED_NO_VALID_TOKENS  zeta.status.after=HAS_ACCESS_AND_REFRESH_TOKEN
+├─ probe.status          73 ms
+├─ probe.clear           47 ms
+├─ sdk.authenticate     260 ms
+│  └─ sdk.subject_token   6 ms
+└─ probe.verify          11 ms
+```
+
+A failed one carries the error on both the root and the failing step:
+
+```
+zeta.probe.login        Status=Error "[AUTHENTICATION_ERROR] Client hat keine Berechtigung auf angef. Resource"
+                        zeta.service=vsdm-1  zeta.result=error  zeta.registered=true
+├─ probe.status
+├─ probe.register
+├─ probe.clear
+└─ sdk.authenticate     Status=Error  exception.type=java.lang.IllegalStateException  exception.message=[AUTHENTICATION_ERROR] …
+   └─ sdk.subject_token
+```
 
 ## Logging
 

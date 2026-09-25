@@ -3,14 +3,20 @@ package de.gematik.zeta.cli.probe
 import com.github.ajalt.clikt.core.UsageError
 import de.gematik.zeta.catalog.ServiceCatalog
 import de.gematik.zeta.cli.client.originOf
-import de.gematik.zeta.cli.serve.warmEndpoints
+import io.ktor.http.Url
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** One probed Zeta resource: its origin (RFC 8707 resource indicator) plus the scopes to request. */
-internal data class ProbeTarget(val resource: String, val scopes: List<String>) {
+/**
+ * One probed Zeta resource: its origin (RFC 8707 resource indicator), the scopes to request, and the
+ * [service] slug telemetry is keyed by — the catalog's instance name for a VSDM service (the name its
+ * routing table points at), `popp` for the PoPP service, the host name for an explicit `--endpoint`.
+ */
+internal data class ProbeTarget(val resource: String, val scopes: List<String>, val service: String) {
     val key: String get() = "$resource|${scopes.joinToString(",")}"
 }
+
+internal const val POPP_SERVICE = "popp"
 
 /**
  * Pair the i-th `--endpoint` with the i-th `--endpoint-scope`. There is no default scope: a resource's
@@ -28,9 +34,9 @@ internal fun pairEndpoints(urls: List<String>, scopes: List<String>): List<Pair<
 }
 
 /**
- * The target list: the env's catalog endpoints (VSDM instances + PoPP, via [warmEndpoints]) when
- * [includeCatalog], then the explicit [extras] as `(url, scope)`; each URL reduced to its resource
- * origin, duplicates dropped, catalog order first.
+ * The target list: the env's catalog VSDM instances (scope `vsdservice`, slug = instance name) and the
+ * PoPP service (scope `popp`) when [includeCatalog], then the explicit [extras] as `(url, scope)`; each
+ * URL reduced to its resource origin, duplicates dropped, catalog order first.
  */
 internal fun resolveTargets(
     catalog: ServiceCatalog?,
@@ -39,12 +45,17 @@ internal fun resolveTargets(
     extras: List<Pair<String, String>>,
 ): List<ProbeTarget> {
     val all = buildList {
-        if (includeCatalog) warmEndpoints(catalog, poppUrl).forEach { (resource, scopes) -> add(ProbeTarget(resource, scopes)) }
+        if (includeCatalog) {
+            catalog?.serviceInstances?.forEach { (name, instance) ->
+                if (instance.type == "vsdm") add(ProbeTarget(originOf(instance.url), listOf("vsdservice"), name))
+            }
+            add(ProbeTarget(originOf(poppUrl), listOf(POPP_SERVICE), POPP_SERVICE))
+        }
         extras.forEach { (url, scope) ->
             if ("://" !in url) throw UsageError("--endpoint $url is not an absolute URL (expected scheme://host[:port]/…)")
             val origin = runCatching { originOf(url) }
                 .getOrElse { throw UsageError("--endpoint $url is not a valid URL: ${it.message}") }
-            add(ProbeTarget(origin, listOf(scope)))
+            add(ProbeTarget(origin, listOf(scope), Url(origin).host))
         }
     }
     return all.distinctBy { it.key }

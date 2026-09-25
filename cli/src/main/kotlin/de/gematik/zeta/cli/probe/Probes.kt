@@ -123,6 +123,16 @@ internal const val STEP_TOTAL = "total"
 
 private class ProbeVerifyException(val code: String, message: String) : RuntimeException(message)
 
+private val SDK_ERROR_CODE = Regex("""^\[([A-Z_]+)]""")
+
+/**
+ * A bounded label for a failure: the SDK reports its flow errors as `IllegalStateException("[CODE] …")`,
+ * and that code (`AUTHENTICATION_ERROR`, `REGISTRATION_FAILED_ERROR`, …) says far more than the class
+ * name; everything else is labelled by exception class.
+ */
+internal fun errorTypeOf(error: Throwable): String =
+    error.message?.let { SDK_ERROR_CODE.find(it)?.groupValues?.get(1) } ?: error::class.simpleName ?: "Throwable"
+
 /**
  * Run one probe against one target, serialised per target so `login` and `refresh` never interleave on
  * the same token store. Every step is timed and recorded even when it fails; the clears in [STEP_CLEAR]
@@ -215,7 +225,7 @@ internal suspend fun runProbe(
             null -> null
             is TimeoutCancellationException -> "timeout"
             is ProbeVerifyException -> error.code
-            else -> error::class.simpleName ?: "Throwable"
+            else -> errorTypeOf(error)
         },
         errorMessage = error?.message,
         steps = steps,

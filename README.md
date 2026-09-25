@@ -542,13 +542,13 @@ A sticky option (e.g. `--connector-config`) declared at a parent depth (`zeta --
 
 ## SDK version
 
-The CLI is built against a single `zeta-sdk` version (`1.2.5`), pinned in
+The CLI is built against a single `zeta-sdk` version (`1.3.0`), pinned in
 `gradle/libs.versions.toml`. `zeta version` prints it:
 
 ```sh
 $ zeta version
 zeta-cli 0.9.0
-zeta-sdk 1.2.5
+zeta-sdk 1.3.0
 ```
 
 Override the pin at build time with `-PzetaSdkVersion=<tag>` (e.g. `latest` from mavenLocal).
@@ -594,7 +594,7 @@ just demo      # render demo.gif from demo.tape (requires vhs)
 
 ### Building against a different `zeta-sdk`
 
-By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.2.5`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
+By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.3.0`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
 
 ```sh
 # Use whatever you publishToMavenLocal'd as `latest`

@@ -220,7 +220,7 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
                 " — env ${env.name.lowercase()}, profile $profile, ${registry.current.size} target(s), " +
                 "login every ${describe(loginInterval)}, refresh every ${describe(refreshInterval)} — Ctrl-C to stop",
         )
-        registry.current.forEach { log.info { "target ${it.resource} scopes=${it.scopes}" } }
+        registry.current.forEach { log.info { "target ${it.service}: ${it.resource} scopes=${it.scopes}" } }
 
         scheduler.start(ProbeKind.LOGIN, loginInterval)
         scheduler.start(ProbeKind.REFRESH, refreshInterval)
@@ -230,7 +230,7 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
                 val (added, removed) = registry.update(resolveTargets(fresh, poppUrl, true, extras))
                 removed.forEach { sessions.evict(it); telemetry.forget(it) }
                 if (added.isNotEmpty() || removed.isNotEmpty()) {
-                    log.info { "catalog refresh: +${added.map { it.resource }} -${removed.map { it.resource }}" }
+                    log.info { "catalog refresh: +${added.map { it.service }} -${removed.map { it.service }}" }
                 }
             }
         }
@@ -247,7 +247,7 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
     private fun logOutcome(o: ProbeOutcome, lastResult: ConcurrentHashMap<String, ProbeResult>) {
         val key = "${o.kind.label}|${o.target.key}"
         val previous = lastResult.put(key, o.result)
-        val summary = "${o.kind.label} ${o.target.resource} ${o.result.label} in ${o.total} " +
+        val summary = "${o.kind.label} ${o.target.service} (${o.target.resource}) ${o.result.label} in ${o.total} " +
             o.steps.joinToString(" ", prefix = "[", postfix = "]") { "${it.step}=${it.duration}" }
         when {
             o.result != ProbeResult.OK -> log.warn { "$summary: ${o.errorType}${o.errorMessage?.let { ": $it" } ?: ""}" }

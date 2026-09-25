@@ -101,6 +101,7 @@ internal fun buildOpenTelemetry(opts: TelemetryOptions, version: String): Pair<O
 }
 
 private val ENV = AttributeKey.stringKey("env")
+private val SERVICE = AttributeKey.stringKey("service")
 private val ENDPOINT = AttributeKey.stringKey("endpoint")
 private val PROBE = AttributeKey.stringKey("probe")
 private val STEP = AttributeKey.stringKey("step")
@@ -108,7 +109,7 @@ private val RESULT = AttributeKey.stringKey("result")
 private val ERROR_TYPE = AttributeKey.stringKey("error_type")
 private val FALLBACK = AttributeKey.stringKey("fallback")
 
-private data class GaugeKey(val endpoint: String, val probe: String)
+private data class GaugeKey(val service: String, val endpoint: String, val probe: String)
 
 /**
  * The probe's instruments and spans on one [OpenTelemetry] instance. Gauges are observed from
@@ -130,7 +131,7 @@ internal class ProbeTelemetry(otel: OpenTelemetry, private val env: String, targ
 
     private val up = ConcurrentHashMap<GaugeKey, Long>()
     private val lastSuccess = ConcurrentHashMap<GaugeKey, Long>()
-    private val tokenExpiry = ConcurrentHashMap<String, Long>()
+    private val tokenExpiry = ConcurrentHashMap<GaugeKey, Long>()
 
     init {
         meter.gaugeBuilder("zeta.probe.up").ofLongs()
@@ -141,49 +142,48 @@ internal class ProbeTelemetry(otel: OpenTelemetry, private val env: String, targ
             .buildWithCallback { m -> lastSuccess.forEach { (k, v) -> m.record(v, k.attrs()) } }
         meter.gaugeBuilder("zeta.probe.token.expiry.time").ofLongs().setUnit("s")
             .setDescription("Unix time at which the endpoint's current access token expires")
-            .buildWithCallback { m -> tokenExpiry.forEach { (ep, v) -> m.record(v, Attributes.of(ENV, env, ENDPOINT, ep)) } }
+            .buildWithCallback { m -> tokenExpiry.forEach { (k, v) -> m.record(v, Attributes.of(ENV, env, SERVICE, k.service, ENDPOINT, k.endpoint)) } }
         meter.gaugeBuilder("zeta.probe.targets").ofLongs()
             .setDescription("Number of endpoints currently being probed")
             .buildWithCallback { m -> m.record(targetCount().toLong(), Attributes.of(ENV, env)) }
     }
 
-    private fun GaugeKey.attrs(): Attributes = Attributes.of(ENV, env, ENDPOINT, endpoint, PROBE, probe)
+    private fun GaugeKey.attrs(): Attributes = Attributes.of(ENV, env, SERVICE, service, ENDPOINT, endpoint, PROBE, probe)
 
     fun spanScope(kind: ProbeKind, target: ProbeTarget): ProbeSpanScope = OtelSpanScope(tracer, kind, target, env)
 
     fun record(outcome: ProbeOutcome) {
+        val service = outcome.target.service
         val endpoint = outcome.target.resource
         val probe = outcome.kind.label
         val result = outcome.result.label
+        fun stepAttrs(step: String, stepResult: String): Attributes = Attributes.builder()
+            .put(ENV, env).put(SERVICE, service).put(ENDPOINT, endpoint).put(PROBE, probe)
+            .put(STEP, step).put(RESULT, stepResult)
+            .build()
         outcome.steps.forEach { s ->
-            duration.record(
-                s.duration.toDouble(DurationUnit.SECONDS),
-                Attributes.of(ENV, env, ENDPOINT, endpoint, PROBE, probe, STEP, s.step, RESULT, if (s.ok) "ok" else "error"),
-            )
+            duration.record(s.duration.toDouble(DurationUnit.SECONDS), stepAttrs(s.step, if (s.ok) "ok" else "error"))
         }
-        duration.record(
-            outcome.total.toDouble(DurationUnit.SECONDS),
-            Attributes.of(ENV, env, ENDPOINT, endpoint, PROBE, probe, STEP, STEP_TOTAL, RESULT, result),
-        )
+        duration.record(outcome.total.toDouble(DurationUnit.SECONDS), stepAttrs(STEP_TOTAL, result))
         runs.add(
             1,
             Attributes.builder()
-                .put(ENV, env).put(ENDPOINT, endpoint).put(PROBE, probe).put(RESULT, result)
+                .put(ENV, env).put(SERVICE, service).put(ENDPOINT, endpoint).put(PROBE, probe).put(RESULT, result)
                 .put(ERROR_TYPE, outcome.errorType ?: "").put(FALLBACK, outcome.fallback.toString())
                 .build(),
         )
-        val key = GaugeKey(endpoint, probe)
+        val key = GaugeKey(service, endpoint, probe)
         val ok = outcome.result == ProbeResult.OK
         up[key] = if (ok) 1 else 0
         if (ok) lastSuccess[key] = System.currentTimeMillis() / 1000
-        outcome.tokenExpiryEpochSec?.let { tokenExpiry[endpoint] = it }
+        outcome.tokenExpiryEpochSec?.let { tokenExpiry[GaugeKey(service, endpoint, "")] = it }
     }
 
     /** Drop the gauge series of an evicted target so they stop being exported. */
     fun forget(target: ProbeTarget) {
         up.keys.removeIf { it.endpoint == target.resource }
         lastSuccess.keys.removeIf { it.endpoint == target.resource }
-        tokenExpiry.remove(target.resource)
+        tokenExpiry.keys.removeIf { it.endpoint == target.resource }
     }
 
     private companion object {
@@ -205,6 +205,7 @@ private class OtelSpanScope(
     private val root: Span = tracer.spanBuilder("zeta.probe.${kind.label}")
         .setNoParent()
         .setAttribute("zeta.env", env)
+        .setAttribute("zeta.service", target.service)
         .setAttribute("zeta.endpoint", target.resource)
         .setAttribute("zeta.scopes", target.scopes.joinToString(","))
         .setAttribute("zeta.probe", kind.label)

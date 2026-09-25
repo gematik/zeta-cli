@@ -114,7 +114,7 @@ class ProbesTest {
     fun `verify fails when authenticate leaves no usable tokens`() = runBlocking {
         val counting = CountingSubjectTokenProvider(FakeSigner())
         val sdk = NoTokenSdk(FakeSdk(FakeAuth(), counting))
-        val o = runProbe(ProbeKind.LOGIN, TargetSession(ProbeTarget("https://a/", listOf("s")), sdk, FakeAuth(), counting), 10.seconds)
+        val o = runProbe(ProbeKind.LOGIN, TargetSession(ProbeTarget("https://a/", listOf("s"), "a"), sdk, FakeAuth(), counting), 10.seconds)
 
         assertEquals(ProbeResult.ERROR, o.result)
         assertEquals("no_tokens", o.errorType)

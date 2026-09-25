@@ -11,10 +11,10 @@ import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProbeSchedulerTest {
-    private val a = ProbeTarget("https://a/", listOf("s"))
-    private val b = ProbeTarget("https://b/", listOf("s"))
-    private val c = ProbeTarget("https://c/", listOf("s"))
-    private val d = ProbeTarget("https://d/", listOf("s"))
+    private val a = ProbeTarget("https://a/", listOf("s"), "a")
+    private val b = ProbeTarget("https://b/", listOf("s"), "b")
+    private val c = ProbeTarget("https://c/", listOf("s"), "c")
+    private val d = ProbeTarget("https://d/", listOf("s"), "d")
 
     private fun outcome(kind: ProbeKind, target: ProbeTarget) = ProbeOutcome(
         kind, target, ProbeResult.OK, null, null, false, false, null, null, emptyList(), Duration.ZERO, null,

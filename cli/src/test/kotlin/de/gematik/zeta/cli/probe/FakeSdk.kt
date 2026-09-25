@@ -115,5 +115,5 @@ internal class FakeSigner : SubjectTokenProvider {
 internal fun fakeSession(
     sdk: FakeSdk,
     provider: CountingSubjectTokenProvider,
-    target: ProbeTarget = ProbeTarget("https://a/", listOf("s")),
+    target: ProbeTarget = ProbeTarget("https://a/", listOf("s"), "a"),
 ) = TargetSession(target, sdk, sdk.auth, provider)

@@ -44,9 +44,9 @@ class ProbeTargetsTest {
         )
         assertEquals(
             listOf(
-                ProbeTarget("https://vsdm-dev.tk.de/", listOf("vsdservice")),
-                ProbeTarget("https://popp.dev.poppservice.de/", listOf("popp")),
-                ProbeTarget("https://x.example:8443/", listOf("foo")),
+                ProbeTarget("https://vsdm-dev.tk.de/", listOf("vsdservice"), "vsdm-1"),
+                ProbeTarget("https://popp.dev.poppservice.de/", listOf("popp"), "popp"),
+                ProbeTarget("https://x.example:8443/", listOf("foo"), "x.example"),
             ),
             targets,
         )
@@ -61,7 +61,7 @@ class ProbeTargetsTest {
     @Test
     fun `no-catalog keeps only the extras`() {
         val targets = resolveTargets(catalog, poppUrl, includeCatalog = false, extras = listOf("https://a/" to "s1"))
-        assertEquals(listOf(ProbeTarget("https://a/", listOf("s1"))), targets)
+        assertEquals(listOf(ProbeTarget("https://a/", listOf("s1"), "a")), targets)
     }
 
     @Test
@@ -71,9 +71,9 @@ class ProbeTargetsTest {
 
     @Test
     fun `round robin wraps and survives list changes`() {
-        val a = ProbeTarget("https://a/", listOf("s"))
-        val b = ProbeTarget("https://b/", listOf("s"))
-        val c = ProbeTarget("https://c/", listOf("s"))
+        val a = ProbeTarget("https://a/", listOf("s"), "a")
+        val b = ProbeTarget("https://b/", listOf("s"), "b")
+        val c = ProbeTarget("https://c/", listOf("s"), "c")
         assertNull(nextTarget(emptyList(), null))
         assertEquals(a, nextTarget(listOf(a, b), null))
         assertEquals(b, nextTarget(listOf(a, b), a.key))
@@ -92,9 +92,9 @@ class ProbeTargetsTest {
 
     @Test
     fun `registry reports added and removed targets`() {
-        val a = ProbeTarget("https://a/", listOf("s"))
-        val b = ProbeTarget("https://b/", listOf("s"))
-        val c = ProbeTarget("https://c/", listOf("s"))
+        val a = ProbeTarget("https://a/", listOf("s"), "a")
+        val b = ProbeTarget("https://b/", listOf("s"), "b")
+        val c = ProbeTarget("https://c/", listOf("s"), "c")
         val registry = TargetRegistry(listOf(a, b))
         val (added, removed) = registry.update(listOf(b, c))
         assertEquals(listOf(c), added)

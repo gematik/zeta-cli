@@ -10,6 +10,15 @@ import org.junit.jupiter.api.Test
 
 class ProbeDurationTest {
     @Test
+    fun `error type prefers the SDK flow code over the exception class`() {
+        assertEquals("AUTHENTICATION_ERROR", errorTypeOf(IllegalStateException("[AUTHENTICATION_ERROR] Client hat keine Berechtigung")))
+        assertEquals("REGISTRATION_FAILED_ERROR", errorTypeOf(IllegalStateException("[REGISTRATION_FAILED_ERROR] Client authentication failed")))
+        assertEquals("IllegalStateException", errorTypeOf(IllegalStateException("token endpoint said no")))
+        assertEquals("SocketException", errorTypeOf(java.net.SocketException("Connection reset")))
+        assertEquals("RuntimeException", errorTypeOf(RuntimeException()))
+    }
+
+    @Test
     fun `accepts the compact forms and ISO`() {
         assertEquals(3.hours, parseProbeDuration("3h"))
         assertEquals(5.minutes, parseProbeDuration("5m"))

@@ -53,7 +53,7 @@ internal class ProbeScheduler(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
-                        log.error(e) { "probe ${kind.label} ${target.resource} crashed" }
+                        log.error(e) { "probe ${kind.label} ${target.service} crashed" }
                     }
                 }
                 delay(tickInterval(interval, list.size))
@@ -91,7 +91,7 @@ internal class SessionRegistry(private val build: (ProbeTarget) -> TargetSession
 
     suspend fun evict(target: ProbeTarget) {
         val session = sessions.remove(target.key) ?: return
-        session.mutex.withLock { runCatching { session.close() }.onFailure { log.debug(it) { "closing session ${target.resource}" } } }
+        session.mutex.withLock { runCatching { session.close() }.onFailure { log.debug(it) { "closing session ${target.service}" } } }
     }
 
     override fun close() {
