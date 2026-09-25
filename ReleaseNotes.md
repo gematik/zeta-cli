@@ -1,6 +1,11 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.15.0
+### changes
+- Add `zeta probe` — a permanently running prober for one TI environment. Every endpoint (the service-discovery catalog's VSDM instances and the PoPP service, plus explicit `--endpoint`/`--endpoint-scope` pairs) gets a `login` probe that forces a full SMC-B token exchange (default every 3h) and a `refresh` probe that forces the refresh grant (default every 5m). Probes are spread over the interval instead of fired in a burst: 20 endpoints on a 60s interval means one probe every 3s. Metrics are served for Prometheus on `:9464/metrics` (per-step latency histograms, outcome counters, up / last-success / token-expiry gauges); spans go out via OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` or `--otlp-endpoint` is set, with `OTEL_EXPORTER_OTLP_HEADERS` / `--otlp-header` for authentication and every other `OTEL_*` variable honoured. A refresh probe that the SDK silently turned into a full exchange is labelled `fallback="true"`. See [docs/probe.md](docs/probe.md)
+- Add a `Dockerfile` for the CLI with `zeta probe` as the default command; state lands under `/data` via `XDG_CONFIG_HOME`
+
 ## Release 0.14.0
 ### changes
 - Add `--cache-db FILE` to `zeta vsdm get` and `zeta serve` — a shared SQLite cache that turns the mandatory `If-None-Match` into a real conditional request: the ETag the service last gave for a patient record is sent back, and an unchanged record answers `304` and is served from the cache instead of being re-transferred. Nothing expires — every read is revalidated against the service, so the cache can never hand out a stale record. Entries are keyed by the reading SMC-B (`actorId`), endpoint, insurer (IKNR), insurant (KVNR), `profileVersion` and media type, so several identities can share one file and be counted and purged apart — attribution, **not** isolation: anyone who can read the file reads every bundle in it. Off unless the flag is given, and the file stores Versichertenstammdaten and PoPP tokens **unencrypted**, mode `0600` (its `-wal`/`-shm` sidecars included) — `--cache-max-entries` (10000) and `--cache-max-age-days` (180) bound it, and `zeta serve` now applies those bounds hourly rather than only at startup

@@ -28,6 +28,7 @@ import de.gematik.zeta.cli.popp.PoppConnectorCommand
 import de.gematik.zeta.cli.popp.PoppKartosCommand
 import de.gematik.zeta.cli.popp.PoppReadersCommand
 import de.gematik.zeta.cli.popp.PoppStandardCommand
+import de.gematik.zeta.cli.probe.ProbeCommand
 import de.gematik.zeta.cli.serve.ServeCommand
 import de.gematik.zeta.cli.state.StatusCommand
 import de.gematik.zeta.cli.term.StderrColors
@@ -130,6 +131,7 @@ fun main(args: Array<String>) {
                         PoppReadersCommand(),
                     ),
                     ServeCommand(),
+                    ProbeCommand(),
                     stressCommand(),
                 )
                 .main(args)

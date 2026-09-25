@@ -31,6 +31,7 @@ The binary is called `zeta` after ZETA Guard, which it started out as a client f
 | --- | --- |
 | [Quick start](docs/quickstart.md) | End-to-end: configure the Konnektor, log in, read an SMC-B, get a PoPP token, read a VSDM bundle. |
 | [`zeta serve`](docs/serve.md) | The local warm-session daemon and its HTTP API. |
+| [`zeta probe`](docs/probe.md) | The permanently running auth-flow prober: Prometheus metrics, OTLP traces, Docker. |
 | [`zeta stress`](docs/stress.md) | Load-testing ZETA Guard with a fleet of SMC-B clients. |
 | [`.kon` format](docs/kon-format.md) | The Konnektor configuration file. |
 
@@ -104,6 +105,7 @@ zeta login https://popp.dev.poppservice.de \
 
 - `zeta version` — print the CLI and `zeta-sdk` version.
 - `zeta serve` — run a local daemon holding warm sessions for one TI environment, with an HTTP API for VSDM reads and PoPP minting. See [docs/serve.md](docs/serve.md).
+- `zeta probe` — run forever, probing the login and token-refresh flows of one TI environment's endpoints on a schedule; serves Prometheus metrics and pushes OTLP traces. See [docs/probe.md](docs/probe.md).
 - `zeta stress …` — load-test ZETA Guard with a fleet of SMC-B-backed clients. See [docs/stress.md](docs/stress.md).
 
 Examples for the less obvious ones:
@@ -340,6 +342,28 @@ pz=$(printf '%s\n'   "$resp" | sed -n 's/^PZ: //Ip')            # the Prüfziffe
 body=$(printf '%s\n' "$resp" | sed '1,/^$/d')                   # everything after the blank line
 printf '%s\n' "$body" | jq .                                    # the FHIR bundle
 ```
+
+#### `zeta probe`
+
+A long-running service (see [docs/probe.md](docs/probe.md)); needs an `--auth-method`. Everything below is also settable through `zeta.yaml`.
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--env dev\|ref\|test\|prod` | `ZETA_ENV` | `dev` |
+| `--endpoint URL` (repeatable; env var: whitespace/comma list) | `ZETA_PROBE_ENDPOINTS` | — |
+| `--endpoint-scope SCOPE` (repeatable; i-th scope for the i-th endpoint, counts must match) | `ZETA_PROBE_ENDPOINT_SCOPES` | — |
+| `--no-catalog` | `ZETA_PROBE_NO_CATALOG` | off |
+| `--popp-service-url URL` | `ZETA_POPP_SERVICE_URL` | derived from `--env` |
+| `--login-interval DURATION` (`0`/`off` disables) | `ZETA_PROBE_LOGIN_INTERVAL` | `3h` |
+| `--refresh-interval DURATION` | `ZETA_PROBE_REFRESH_INTERVAL` | `5m` |
+| `--catalog-interval DURATION` | `ZETA_PROBE_CATALOG_INTERVAL` | `1h` |
+| `--probe-timeout DURATION` | `ZETA_PROBE_TIMEOUT` | `2m` |
+| `--metrics-host ADDR` / `--metrics-port PORT` | `ZETA_PROBE_METRICS_HOST` / `ZETA_PROBE_METRICS_PORT` | `0.0.0.0` / `9464` |
+| `--otlp-endpoint URL` | `OTEL_EXPORTER_OTLP_ENDPOINT` | — (traces off) |
+| `--otlp-header KEY=VALUE` (repeatable) | `OTEL_EXPORTER_OTLP_HEADERS` | — |
+| `--otlp-protocol http/protobuf\|grpc` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+
+Durations take `30s`, `5m`, `3h`, `1h30m` or ISO `PT3H`. Every other `OTEL_*` variable (certificates, mTLS, compression, resource attributes, sampler) is honoured unchanged.
 
 #### `zeta popp connector [EGK_HANDLE]`
 

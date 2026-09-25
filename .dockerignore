@@ -1,0 +1,15 @@
+.git
+.gradle
+.kotlin
+.idea
+build
+**/build
+*.kon
+*.p12
+*.db
+*.db-*
+*.cache.db*
+reports/
+README.pdf
+CLAUDE.md
+CLAUDE.local.md

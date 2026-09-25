@@ -51,8 +51,16 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.sqlite.jdbc)
     implementation(libs.commons.compress)
+    // `zeta probe`: metrics scraped from the OTel Prometheus exporter, spans pushed via OTLP over the
+    // OkHttp sender (no grpc-java). Autoconfigure makes every OTEL_* env var work unchanged in Docker.
+    implementation(platform(libs.opentelemetry.bom))
+    implementation(libs.opentelemetry.sdk.autoconfigure)
+    implementation(libs.opentelemetry.exporter.otlp)
+    implementation(libs.opentelemetry.exporter.prometheus)
     // MockEngine for testing the service-discovery catalog client without a real HTTP call.
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.opentelemetry.sdk.testing)
 }
 
 application {
