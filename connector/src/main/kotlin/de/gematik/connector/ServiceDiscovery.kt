@@ -11,6 +11,8 @@ import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import kotlin.time.measureTimedValue
 import kotlinx.serialization.Serializable
+import nl.adaptivity.xmlutil.XmlDeclMode
+import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
 import nl.adaptivity.xmlutil.serialization.XmlElement
 import nl.adaptivity.xmlutil.serialization.XmlSerialName
@@ -241,10 +243,12 @@ internal fun semverAsNumber(version: String): Int {
     return major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
 }
 
-// xmlutil 1.0 deprecates the pre-1.0 defaults; `XML.v1` changes them. The SOAP requests sent to real
-// Konnektors are only partly pinned by tests, so the switch waits for a check against hardware.
-@Suppress("DEPRECATION")
-internal val defaultXml: XML = XML.compat {
+// xmlutil 1.0 defaults would open every request with `<?xml version='1.1' ?>` and pretty-print it; these
+// three settings keep the bytes a Konnektor receives as they were (pinned by RequestEncodingTest).
+internal val defaultXml: XML = XML.v1 {
+    xmlDeclMode = XmlDeclMode.None
+    indentString = ""
+    xmlVersion = XmlVersion.XML10
     defaultPolicy {
         autoPolymorphic = false
         ignoreUnknownChildren()
