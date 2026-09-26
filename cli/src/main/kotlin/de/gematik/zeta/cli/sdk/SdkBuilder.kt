@@ -37,6 +37,7 @@ internal fun buildZetaSdkClient(
     storagePath: Path,
     tokenProvider: SubjectTokenProvider,
     cliConfig: CliConfig,
+    aslProdEnvironment: Boolean = cliConfig.aslProdEnvironment,
 ): ZetaSdkClient =
     Tracer.span(
         "sdk.init",
@@ -59,7 +60,7 @@ internal fun buildZetaSdkClient(
                     AuthConfig(
                         scopes = scopes,
                         exp = 30,
-                        aslProdEnvironment = cliConfig.aslProdEnvironment,
+                        aslProdEnvironment = aslProdEnvironment,
                         subjectTokenProvider = tokenProvider,
                         attestation = AttestationConfig.software(),
                         requiredRoleOid = OID_ZETA_GUARD,

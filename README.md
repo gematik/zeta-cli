@@ -31,7 +31,7 @@ The binary is called `zeta` after ZETA Guard, which it started out as a client f
 | --- | --- |
 | [Quick start](docs/quickstart.md) | End-to-end: configure the Konnektor, log in, read an SMC-B, get a PoPP token, read a VSDM bundle. |
 | [`zeta serve`](docs/serve.md) | The local warm-session daemon and its HTTP API. |
-| [`zeta probe`](docs/probe.md) | The permanently running auth-flow prober: Prometheus metrics, OTLP traces, Docker. |
+| [`zeta probe`](docs/probe.md) | The permanently running auth-flow prober: metrics and traces via OTLP, Docker. |
 | [`zeta stress`](docs/stress.md) | Load-testing ZETA Guard with a fleet of SMC-B clients. |
 | [`.kon` format](docs/kon-format.md) | The Konnektor configuration file. |
 
@@ -105,7 +105,7 @@ zeta login https://popp.dev.poppservice.de \
 
 - `zeta version` — print the CLI and `zeta-sdk` version.
 - `zeta serve` — run a local daemon holding warm sessions for one TI environment, with an HTTP API for VSDM reads and PoPP minting. See [docs/serve.md](docs/serve.md).
-- `zeta probe` — run forever, probing the login and token-refresh flows of one TI environment's endpoints on a schedule; serves Prometheus metrics and pushes OTLP traces. See [docs/probe.md](docs/probe.md).
+- `zeta probe` — run forever, probing the login and token-refresh flows of one or more TI environments' endpoints on a schedule; pushes metrics and traces via OTLP. See [docs/probe.md](docs/probe.md).
 - `zeta stress …` — load-test ZETA Guard with a fleet of SMC-B-backed clients. See [docs/stress.md](docs/stress.md).
 
 Examples for the less obvious ones:
@@ -349,21 +349,25 @@ A long-running service (see [docs/probe.md](docs/probe.md)); needs an `--auth-me
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--env dev\|ref\|test\|prod` | `ZETA_ENV` | `dev` |
-| `--endpoint URL` (repeatable; env var: whitespace/comma list) | `ZETA_PROBE_ENDPOINTS` | — |
+| `--probe-env ENV[,ENV…]` (one or more of `dev`, `ref`, `test`, `prod`; one identity for all) | `ZETA_PROBE_ENV` | `dev` |
+| `--endpoint URL` (repeatable; env var: whitespace/comma list; belongs to the first `--probe-env`) | `ZETA_PROBE_ENDPOINTS` | — |
 | `--endpoint-scope SCOPE` (repeatable; i-th scope for the i-th endpoint, counts must match) | `ZETA_PROBE_ENDPOINT_SCOPES` | — |
+| `--endpoint-name SLUG` (repeatable, positional like the scope; optional as a whole) | `ZETA_PROBE_ENDPOINT_NAMES` | host name |
+| `--endpoint-type TYPE` (repeatable, positional like the scope; optional as a whole) | `ZETA_PROBE_ENDPOINT_TYPES` | the slug |
+| `--type-label TYPE:KEY=VALUE` (repeatable; env var: list; labels every target of that type) | `ZETA_PROBE_TYPE_LABELS` | — |
 | `--no-catalog` | `ZETA_PROBE_NO_CATALOG` | off |
-| `--popp-service-url URL` | `ZETA_POPP_SERVICE_URL` | derived from `--env` |
+| `--popp-service-url URL` (single `--probe-env` only) | `ZETA_POPP_SERVICE_URL` | derived from the env |
 | `--login-interval DURATION` (`0`/`off` disables) | `ZETA_PROBE_LOGIN_INTERVAL` | `3h` |
 | `--refresh-interval DURATION` | `ZETA_PROBE_REFRESH_INTERVAL` | `5m` |
 | `--catalog-interval DURATION` | `ZETA_PROBE_CATALOG_INTERVAL` | `1h` |
+| `--backoff-max DURATION` (cap of the hold-off for failing targets; `0`/`off` disables) | `ZETA_PROBE_BACKOFF_MAX` | `1h` |
 | `--probe-timeout DURATION` | `ZETA_PROBE_TIMEOUT` | `2m` |
-| `--metrics-host ADDR` / `--metrics-port PORT` | `ZETA_PROBE_METRICS_HOST` / `ZETA_PROBE_METRICS_PORT` | `0.0.0.0` / `9464` |
-| `--otlp-endpoint URL` | `OTEL_EXPORTER_OTLP_ENDPOINT` | — (traces off) |
+| `--otlp-endpoint URL` (metrics and traces; OTLP/HTTP) | `OTEL_EXPORTER_OTLP_ENDPOINT` | required |
 | `--otlp-header KEY=VALUE` (repeatable) | `OTEL_EXPORTER_OTLP_HEADERS` | — |
-| `--otlp-protocol http/protobuf\|grpc` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `--otlp-protocol http/protobuf` (gRPC is not supported) | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `--health-host ADDR` / `--health-port PORT` (`/healthz`, `/readyz`; port `0` disables) | `ZETA_PROBE_HEALTH_HOST` / `ZETA_PROBE_HEALTH_PORT` | `0.0.0.0` / `8080` |
 
-Durations take `30s`, `5m`, `3h`, `1h30m` or ISO `PT3H`. Every other `OTEL_*` variable (certificates, mTLS, compression, resource attributes, sampler) is honoured unchanged.
+Durations take `30s`, `5m`, `3h`, `1h30m` or ISO `PT3H`. Metrics and traces are pushed via OTLP; `OTEL_METRIC_EXPORT_INTERVAL` sets the push interval (default 30000 ms), and every other `OTEL_*` variable (certificates, mTLS, compression, resource attributes, sampler) is honoured unchanged.
 
 #### `zeta popp connector [EGK_HANDLE]`
 

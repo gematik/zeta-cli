@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.probe
 
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.sdk.SdkStatus
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.authentication.AuthenticationStorage
@@ -115,5 +116,5 @@ internal class FakeSigner : SubjectTokenProvider {
 internal fun fakeSession(
     sdk: FakeSdk,
     provider: CountingSubjectTokenProvider,
-    target: ProbeTarget = ProbeTarget("https://a/", listOf("s"), "a"),
+    target: ProbeTarget = ProbeTarget(Environment.DEV, "https://a/", listOf("s"), "a", "a"),
 ) = TargetSession(target, sdk, sdk.auth, provider)

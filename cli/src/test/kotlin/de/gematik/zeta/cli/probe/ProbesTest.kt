@@ -1,5 +1,6 @@
 package de.gematik.zeta.cli.probe
 
+import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.sdk.SdkStatus
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -114,7 +115,7 @@ class ProbesTest {
     fun `verify fails when authenticate leaves no usable tokens`() = runBlocking {
         val counting = CountingSubjectTokenProvider(FakeSigner())
         val sdk = NoTokenSdk(FakeSdk(FakeAuth(), counting))
-        val o = runProbe(ProbeKind.LOGIN, TargetSession(ProbeTarget("https://a/", listOf("s"), "a"), sdk, FakeAuth(), counting), 10.seconds)
+        val o = runProbe(ProbeKind.LOGIN, TargetSession(ProbeTarget(Environment.DEV, "https://a/", listOf("s"), "a", "a"), sdk, FakeAuth(), counting), 10.seconds)
 
         assertEquals(ProbeResult.ERROR, o.result)
         assertEquals("no_tokens", o.errorType)

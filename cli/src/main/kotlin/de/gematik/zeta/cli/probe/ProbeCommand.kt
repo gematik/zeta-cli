@@ -9,7 +9,6 @@ import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.split
 import com.github.ajalt.clikt.parameters.types.choice
-import com.github.ajalt.clikt.parameters.types.enum
 import com.github.ajalt.clikt.parameters.types.int
 import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.catalog.ServiceCatalog
@@ -28,18 +27,24 @@ import de.gematik.zeta.sdk.storage.ResourceScope
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private val log = KotlinLogging.logger {}
 
 private val LIST_SPLIT = Regex("[,\\s]+")
+
+/** How late a loop may wake up, or how far past its timeout a probe may run, before liveness fails. */
+private val LIVENESS_GRACE = 60.seconds
 
 /** `3h`, `5m`, `90s`, `1h30m`, ISO `PT3H`; `0` / `off` mean disabled. */
 internal fun parseProbeDuration(raw: String): Duration {
@@ -52,27 +57,30 @@ internal fun parseProbeDuration(raw: String): Duration {
 }
 
 /**
- * `zeta probe` — a permanently running prober for one TI environment. Every target (the env's catalog
- * VSDM instances + PoPP service, plus explicit `--endpoint`s) gets a `login` probe (forced full token
- * exchange) and a `refresh` probe (forced refresh grant) on their own intervals, spread round-robin so
- * `n` targets on a `T` interval see one probe every `T/n`. Metrics are served for Prometheus on
- * `/metrics`; spans go out via OTLP when an endpoint is configured.
+ * `zeta probe` — a permanently running prober for one or more TI environments. Every target (each
+ * env's catalog VSDM instances + PoPP service, plus explicit `--endpoint`s) gets a `login` probe (forced
+ * full token exchange) and a `refresh` probe (forced refresh grant) on their own intervals, spread
+ * round-robin so `n` targets on a `T` interval see one probe every `T/n`; failing targets back off
+ * exponentially. Metrics and spans are pushed via OTLP; `/healthz` and `/readyz` serve an orchestrator.
  */
 class ProbeCommand : ZetaSessionCommand(name = "probe") {
-    private val env: Environment by option(
-        "--env",
-        metavar = "ENV",
-        envvar = "ZETA_ENV",
-        help = "TI environment to probe: dev (default), ref, test, or prod. Selects the service-discovery " +
-            "catalog, the PoPP service URL, and ASL prod/non-prod. (env: ZETA_ENV)",
-    ).enum<Environment>(ignoreCase = true).default(Environment.DEV)
+    private val envs: List<Environment> by option(
+        "--probe-env",
+        metavar = "ENVS",
+        envvar = "ZETA_PROBE_ENV",
+        help = "TI environment(s) to probe, comma-separated: dev (default), ref, test, prod. One auth identity " +
+            "serves all of them; each target gets its env's catalog, PoPP service URL and ASL prod/non-prod. " +
+            "(env: ZETA_PROBE_ENV)",
+    ).convert { raw -> runCatching { parseEnvironments(raw) }.getOrElse { fail(it.message ?: "invalid environment") } }
+        .default(listOf(Environment.DEV))
 
     private val endpointOpt: List<List<String>> by option(
         "--endpoint",
         metavar = "URL",
         envvar = "ZETA_PROBE_ENDPOINTS",
         help = "Additional Zeta-protected endpoint to probe (repeatable; the env var takes a whitespace- or " +
-            "comma-separated list). Each one needs a matching --endpoint-scope. (env: ZETA_PROBE_ENDPOINTS)",
+            "comma-separated list). Each one needs a matching --endpoint-scope; it belongs to the first --probe-env. " +
+            "(env: ZETA_PROBE_ENDPOINTS)",
     ).split(LIST_SPLIT).multiple()
 
     private val endpointScopeOpt: List<List<String>> by option(
@@ -81,6 +89,35 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
         envvar = "ZETA_PROBE_ENDPOINT_SCOPES",
         help = "OAuth scope for the --endpoint at the same position (repeatable; same list form in the env " +
             "var). Counts must match. (env: ZETA_PROBE_ENDPOINT_SCOPES)",
+    ).split(LIST_SPLIT).multiple()
+
+    private val endpointNameOpt: List<List<String>> by option(
+        "--endpoint-name",
+        metavar = "SLUG",
+        envvar = "ZETA_PROBE_ENDPOINT_NAMES",
+        help = "Stable service slug for the --endpoint at the same position (repeatable; same list form in the " +
+            "env var). Optional as a whole, but when given the count must match --endpoint. Default: the host name. " +
+            "(env: ZETA_PROBE_ENDPOINT_NAMES)",
+    ).split(LIST_SPLIT).multiple()
+
+    private val endpointTypeOpt: List<List<String>> by option(
+        "--endpoint-type",
+        metavar = "TYPE",
+        envvar = "ZETA_PROBE_ENDPOINT_TYPES",
+        help = "Service type of the --endpoint at the same position, the key --type-label uses (repeatable; " +
+            "same list form in the env var). Optional as a whole, but when given the count must match --endpoint. " +
+            "Default: the endpoint's slug. (env: ZETA_PROBE_ENDPOINT_TYPES)",
+    ).split(LIST_SPLIT).multiple()
+
+    private val typeLabelOpt: List<List<String>> by option(
+        "--type-label",
+        metavar = "TYPE:KEY=VALUE",
+        envvar = "ZETA_PROBE_TYPE_LABELS",
+        help = "Extra label on every metric series and span of every target of service type TYPE (vsdm, popp, " +
+            "or an --endpoint-type), e.g. vsdm:criticality=high (repeatable; the env var takes a whitespace- or " +
+            "comma-separated list). KEY must be a Prometheus label name and none of env, service, type, endpoint, " +
+            "probe, step, result, error_type, fallback. A type without targets is warned about, not refused. " +
+            "(env: ZETA_PROBE_TYPE_LABELS)",
     ).split(LIST_SPLIT).multiple()
 
     private val noCatalog: Boolean by option(
@@ -94,7 +131,8 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
         "--popp-service-url",
         metavar = "URL",
         envvar = "ZETA_POPP_SERVICE_URL",
-        help = "PoPP service to probe. Defaults to the URL derived from --env. (env: ZETA_POPP_SERVICE_URL)",
+        help = "PoPP service to probe; only with a single --probe-env. Defaults to the URL derived from the env. " +
+            "(env: ZETA_POPP_SERVICE_URL)",
     )
 
     private val loginInterval: Duration by durationOption(
@@ -112,30 +150,38 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
         "How often the service-discovery catalog is re-read to pick up new or removed endpoints. 0/off disables. Default: 1h.",
     ).default(1.hours)
 
+    private val backoffMax: Duration by durationOption(
+        "--backoff-max", "ZETA_PROBE_BACKOFF_MAX",
+        "Cap for the exponential hold-off of a failing target: after k consecutive failures its next probe of that " +
+            "kind waits min(interval * 2^k, cap). 0/off disables. Default: 1h.",
+    ).default(1.hours)
+
     private val probeTimeout: Duration by durationOption(
         "--probe-timeout", "ZETA_PROBE_TIMEOUT",
         "Upper bound for one probe run; a slower probe counts as a timeout. Default: 2m.",
     ).default(2.minutes)
 
-    private val metricsHost: String? by option(
-        "--metrics-host",
+    private val healthHost: String by option(
+        "--health-host",
         metavar = "ADDR",
-        envvar = "ZETA_PROBE_METRICS_HOST",
-        help = "Bind address of the Prometheus /metrics endpoint. Default: 0.0.0.0. (env: ZETA_PROBE_METRICS_HOST)",
-    )
+        envvar = "ZETA_PROBE_HEALTH_HOST",
+        help = "Bind address of the health endpoints (/healthz, /readyz). Default: 0.0.0.0. (env: ZETA_PROBE_HEALTH_HOST)",
+    ).default("0.0.0.0")
 
-    private val metricsPort: Int? by option(
-        "--metrics-port",
+    private val healthPort: Int by option(
+        "--health-port",
         metavar = "PORT",
-        envvar = "ZETA_PROBE_METRICS_PORT",
-        help = "Port of the Prometheus /metrics endpoint. Default: 9464. (env: ZETA_PROBE_METRICS_PORT)",
-    ).int()
+        envvar = "ZETA_PROBE_HEALTH_PORT",
+        help = "Port of the health endpoints; 0 disables them. Default: 8080. (env: ZETA_PROBE_HEALTH_PORT)",
+    ).int().default(8080)
 
     private val otlpEndpoint: String? by option(
         "--otlp-endpoint",
         metavar = "URL",
-        help = "OTLP endpoint to push spans to; traces are off without one. Equivalent to OTEL_EXPORTER_OTLP_ENDPOINT. " +
-            "Every other OTEL_* variable (headers, certificates, mTLS, compression, resource attributes) is honoured as-is.",
+        help = "OTLP/HTTP endpoint that metrics and traces are pushed to; required unless OTEL_EXPORTER_OTLP_ENDPOINT " +
+            "(or both OTEL_EXPORTER_OTLP_METRICS_ENDPOINT and _TRACES_ENDPOINT) is set. OTEL_METRIC_EXPORT_INTERVAL " +
+            "sets the push interval (default 30000 ms); every other OTEL_* variable (headers, certificates, mTLS, " +
+            "compression, resource attributes) is honoured as-is.",
     )
 
     private val otlpHeaders: List<String> by option(
@@ -148,46 +194,99 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
     private val otlpProtocol: String? by option(
         "--otlp-protocol",
         metavar = "PROTOCOL",
-        help = "OTLP transport: http/protobuf (default) or grpc. Equivalent to OTEL_EXPORTER_OTLP_PROTOCOL.",
-    ).choice("http/protobuf", "grpc")
+        help = "OTLP transport. Only http/protobuf is supported (the JDK HTTP sender has no gRPC). " +
+            "Equivalent to OTEL_EXPORTER_OTLP_PROTOCOL.",
+    ).choice(OTLP_PROTOCOL)
 
     override fun help(context: Context) =
-        "Continuously probe the auth flows of one TI environment's endpoints; serve Prometheus metrics, push OTLP traces."
+        "Continuously probe the auth flows of one or more TI environments' endpoints; push metrics and traces via OTLP."
 
     private fun durationOption(name: String, envvar: String, help: String) =
         option(name, metavar = "DURATION", envvar = envvar, help = "$help (env: $envvar)")
             .convert { raw -> runCatching { parseProbeDuration(raw) }.getOrElse { fail(it.message ?: "invalid duration") } }
+
+    private fun List<List<String>>.items(): List<String> = flatten().filter { it.isNotBlank() }
 
     override fun runCommand() {
         if (Tracer.enabled) {
             throw UsageError("--trace is not supported by zeta probe (its span tree would grow for the life of the process); use --otlp-endpoint")
         }
         if (probeTimeout <= Duration.ZERO) throw UsageError("--probe-timeout must be positive")
-        val extras = pairEndpoints(endpointOpt.flatten().filter { it.isNotBlank() }, endpointScopeOpt.flatten().filter { it.isNotBlank() })
+        val extras = pairEndpoints(endpointOpt.items(), endpointScopeOpt.items(), endpointNameOpt.items(), endpointTypeOpt.items())
+        val typeLabels = parseTypeLabels(typeLabelOpt.items())
         if (loginInterval <= Duration.ZERO && refreshInterval <= Duration.ZERO) {
             throw UsageError("both --login-interval and --refresh-interval are off; nothing to probe")
         }
+        if (poppServiceUrlOverride != null && envs.size > 1) throw UsageError("--popp-service-url needs exactly one --probe-env")
+        if (healthPort !in 0..65535) throw UsageError("--health-port must be between 0 and 65535")
+        val telemetryOptions = TelemetryOptions(envs.map { it.name.lowercase() }, otlpEndpoint, otlpHeaders, otlpProtocol)
+        validateOtelConfig(telemetryOptions, ::otelEnvLookup)
+        if (Environment.PROD in envs && envs.size > 1) {
+            log.warn { "prod is probed alongside non-prod environments with the same identity, HTTP client and profile" }
+        }
 
-        cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
         val storagePath = zetaProfilePath(profile)
-        val poppUrl = poppServiceUrlOverride ?: poppServiceUrlFor(env)
         val includeCatalog = !noCatalog
+        fun poppUrlFor(env: Environment) = poppServiceUrlOverride ?: poppServiceUrlFor(env)
+        val envList = envs.joinToString("+") { it.name.lowercase() }
+
+        val registry = TargetRegistry(emptyList())
+        val started = AtomicBoolean(false)
+        var liveness: () -> List<String> = { emptyList() }
+        val health = if (healthPort == 0) {
+            null
+        } else {
+            ProbeHealthServer(
+                healthHost,
+                healthPort,
+                notReadyReason = {
+                    when {
+                        !started.get() -> "starting"
+                        registry.current.isEmpty() -> "no targets"
+                        else -> null
+                    }
+                },
+                livenessProblem = { liveness().takeIf { it.isNotEmpty() }?.joinToString("; ") },
+            ).start()
+        }
 
         val (tokenProvider, connectorSession) = buildTokenProvider()
         val signingLock = Mutex().takeIf { connectorSession != null }
 
-        val catalog = if (includeCatalog) runBlocking { fetchCatalog(storagePath) } else null
-        val registry = TargetRegistry(resolveTargets(catalog, poppUrl, includeCatalog, extras))
-        if (registry.current.isEmpty()) throw UsageError("no targets to probe: pass --endpoint/--endpoint-scope or drop --no-catalog")
+        val backoff = BackoffPolicy(backoffMax) { kind -> if (kind == ProbeKind.LOGIN) loginInterval else refreshInterval }
+        val (otel, effective) = buildOpenTelemetry(telemetryOptions, BuildConfig.VERSION)
+        val telemetry = ProbeTelemetry(otel, { registry.current }, { backoff.entries() })
 
-        val (otel, effective) = buildOpenTelemetry(
-            TelemetryOptions(env.name.lowercase(), metricsHost, metricsPort, otlpEndpoint, otlpHeaders, otlpProtocol),
-            BuildConfig.VERSION,
+        val catalogStore = ProfileDbCatalogStore(ProfileDb(storagePath))
+        val catalogs = ConcurrentHashMap<Environment, ServiceCatalog>()
+        suspend fun fetchCatalog(env: Environment): ServiceCatalog? =
+            runCatching { ServiceDiscoveryClient(cliConfig.httpClient, catalogStore).fetchCatalog(env) }
+                .onSuccess { cachedCatalogFetchedAt(catalogStore, env)?.let { telemetry.recordCatalogFetchedAt(env, it) } }
+                .onFailure { log.warn { "service-discovery catalog fetch failed for ${env.name.lowercase()}: ${it.message}" } }
+                .getOrNull()
+        fun buildTargetList(): List<ProbeTarget> = mergeEnvTargets(
+            envs.map { env ->
+                resolveTargets(env, catalogs[env], poppUrlFor(env), includeCatalog, if (env == envs.first()) extras else emptyList(), typeLabels)
+            },
         )
-        val telemetry = ProbeTelemetry(otel, env.name.lowercase()) { registry.current.size }
+        val warnedTypes = ConcurrentHashMap.newKeySet<String>()
+        fun warnUnknownLabelTypes() {
+            (typeLabels.keys - registry.current.map { it.type }.toSet()).forEach { type ->
+                if (warnedTypes.add(type)) log.warn { "--type-label: no target of type '$type' (yet)" }
+            }
+        }
+
+        if (includeCatalog) runBlocking { envs.forEach { env -> fetchCatalog(env)?.let { catalogs[env] = it } } }
+        registry.update(buildTargetList())
+        if (registry.current.isEmpty()) throw UsageError("no targets to probe: pass --endpoint/--endpoint-scope or drop --no-catalog")
+        warnUnknownLabelTypes()
+
         val sessions = SessionRegistry { target ->
             val provider = CountingSubjectTokenProvider(tokenProvider, signingLock)
-            val sdk = buildZetaSdkClient(target.resource, target.scopes, storagePath, provider, cliConfig)
+            val sdk = buildZetaSdkClient(
+                target.resource, target.scopes, storagePath, provider, cliConfig,
+                aslProdEnvironment = cliConfig.aslProdEnvironment || target.env == Environment.PROD,
+            )
             val auth = ProfileStores(ResourceScope(target.resource, target.scopes), ProfileDb(storagePath)).authentication
             TargetSession(target, sdk, auth, provider)
         }
@@ -201,11 +300,15 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
                 logOutcome(outcome, lastResult)
             },
             scope = scope,
+            backoff = backoff,
         )
+
+        liveness = { scheduler.livenessProblems(System.currentTimeMillis(), LIVENESS_GRACE, probeTimeout + LIVENESS_GRACE) }
 
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 log.info { "zeta probe shutting down" }
+                health?.close()
                 scheduler.close()
                 sessions.close()
                 runCatching { connectorSession?.close() }
@@ -215,39 +318,43 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
         )
 
         echo(
-            "zeta probe ready — metrics on http://${effective.metricsHost}:${effective.metricsPort}/metrics" +
-                (effective.otlpEndpoint?.let { ", traces to $it" } ?: ", traces off") +
-                " — env ${env.name.lowercase()}, profile $profile, ${registry.current.size} target(s), " +
-                "login every ${describe(loginInterval)}, refresh every ${describe(refreshInterval)} — Ctrl-C to stop",
+            "zeta probe ready — metrics and traces to ${effective.otlpEndpoint} every ${effective.exportIntervalMs / 1000}s" +
+                (health?.let { ", health on http://$healthHost:${it.port}/healthz" } ?: ", health endpoints off") +
+                " — env $envList, profile $profile, ${registry.current.size} target(s), " +
+                "login every ${describe(loginInterval)}, refresh every ${describe(refreshInterval)}, " +
+                "backoff up to ${describe(backoffMax)} — Ctrl-C to stop",
         )
-        registry.current.forEach { log.info { "target ${it.service}: ${it.resource} scopes=${it.scopes}" } }
+        registry.current.forEach { log.info { "target ${it.envLabel}/${it.service} type=${it.type}: ${it.resource} scopes=${it.scopes}${labelsSuffix(it)}" } }
 
         scheduler.start(ProbeKind.LOGIN, loginInterval)
         scheduler.start(ProbeKind.REFRESH, refreshInterval)
         if (includeCatalog) {
-            scheduler.startPeriodic(catalogInterval) {
-                val fresh = fetchCatalog(storagePath) ?: return@startPeriodic
-                val (added, removed) = registry.update(resolveTargets(fresh, poppUrl, true, extras))
-                removed.forEach { sessions.evict(it); telemetry.forget(it) }
-                if (added.isNotEmpty() || removed.isNotEmpty()) {
-                    log.info { "catalog refresh: +${added.map { it.service }} -${removed.map { it.service }}" }
+            val refreshLock = Mutex()
+            envs.forEach { env ->
+                scheduler.startPeriodic("catalog refresh ${env.name.lowercase()}", catalogInterval) {
+                    val fresh = fetchCatalog(env) ?: return@startPeriodic
+                    catalogs[env] = fresh
+                    refreshLock.withLock {
+                        val (added, removed) = registry.update(buildTargetList())
+                        removed.forEach { sessions.evict(it); telemetry.forget(it); backoff.forget(it) }
+                        warnUnknownLabelTypes()
+                        if (added.isNotEmpty() || removed.isNotEmpty()) {
+                            log.info { "catalog refresh ${env.name.lowercase()}: +${added.map { it.service }} -${removed.map { it.service }}" }
+                        }
+                    }
                 }
             }
         }
+        started.set(true)
         CountDownLatch(1).await() // hold the foreground; the shutdown hook cleans up on SIGTERM / Ctrl-C
     }
 
-    private suspend fun fetchCatalog(storagePath: java.nio.file.Path): ServiceCatalog? =
-        runCatching {
-            ServiceDiscoveryClient(cliConfig.httpClient, ProfileDbCatalogStore(ProfileDb(storagePath))).fetchCatalog(env)
-        }.onFailure {
-            log.warn { "service-discovery catalog fetch failed for ${env.name.lowercase()}: ${it.message}" }
-        }.getOrNull()
+    private fun labelsSuffix(t: ProbeTarget) = if (t.labels.isEmpty()) "" else " labels=${t.labels}"
 
     private fun logOutcome(o: ProbeOutcome, lastResult: ConcurrentHashMap<String, ProbeResult>) {
         val key = "${o.kind.label}|${o.target.key}"
         val previous = lastResult.put(key, o.result)
-        val summary = "${o.kind.label} ${o.target.service} (${o.target.resource}) ${o.result.label} in ${o.total} " +
+        val summary = "${o.kind.label} ${o.target.envLabel}/${o.target.service} (${o.target.resource}) ${o.result.label} in ${o.total} " +
             o.steps.joinToString(" ", prefix = "[", postfix = "]") { "${it.step}=${it.duration}" }
         when {
             o.result != ProbeResult.OK -> log.warn { "$summary: ${o.errorType}${o.errorMessage?.let { ": $it" } ?: ""}" }
