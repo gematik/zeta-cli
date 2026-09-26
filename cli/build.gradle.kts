@@ -1,3 +1,5 @@
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
 import org.gradle.api.tasks.application.CreateStartScripts
 import org.gradle.api.tasks.bundling.Compression
 
@@ -51,12 +53,14 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.sqlite.jdbc)
     implementation(libs.commons.compress)
-    // `zeta probe`: metrics scraped from the OTel Prometheus exporter, spans pushed via OTLP over the
-    // OkHttp sender (no grpc-java). Autoconfigure makes every OTEL_* env var work unchanged in Docker.
+    // `zeta probe` pushes metrics and traces via OTLP. The JDK HttpClient sender replaces the OkHttp one,
+    // which targets OkHttp 4 while Ktor pulls OkHttp 5. Autoconfigure makes every OTEL_* env var work.
     implementation(platform(libs.opentelemetry.bom))
     implementation(libs.opentelemetry.sdk.autoconfigure)
-    implementation(libs.opentelemetry.exporter.otlp)
-    implementation(libs.opentelemetry.exporter.prometheus)
+    implementation(libs.opentelemetry.exporter.otlp) {
+        exclude(group = "io.opentelemetry", module = "opentelemetry-exporter-sender-okhttp")
+    }
+    implementation(libs.opentelemetry.exporter.sender.jdk)
     // MockEngine for testing the service-discovery catalog client without a real HTTP call.
     testImplementation(libs.ktor.client.mock)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -68,7 +72,12 @@ application {
     applicationName = "zeta"
     // `zeta popp standard` uses javax.smartcardio (PC/SC), whose module java.smartcardio is not part
     // of java.se and so isn't resolved by default for a classpath app — pull it in explicitly.
-    applicationDefaultJvmArgs = listOf("--add-modules", "java.smartcardio")
+    // kotlin-logging 8 announces its logger factory on stdout at first use, which would corrupt
+    // output that scripts pipe from `zeta`.
+    applicationDefaultJvmArgs = listOf(
+        "--add-modules", "java.smartcardio",
+        "-Dkotlin-logging.logStartupMessage=false",
+    )
 }
 
 val generateBuildConfig by tasks.registering {
@@ -118,3 +127,43 @@ tasks.named<CreateStartScripts>("startScripts") {
         bat.writeText("@chcp 65001 >NUL\r\n" + bat.readText())
     }
 }
+
+// The runtime must stay free of Prometheus and of alpha OpenTelemetry artifacts: `zeta probe` pushes via
+// OTLP only, and alpha artifacts carry no compatibility guarantee. Fails `check` with the dependency path.
+val checkRuntimeClasspath by tasks.registering {
+    group = "verification"
+    description = "Fail if the runtime classpath contains Prometheus or alpha OpenTelemetry modules."
+    val root = configurations.runtimeClasspath.flatMap { it.incoming.resolutionResult.rootComponent }
+    doLast {
+        fun forbidden(group: String, name: String, version: String) =
+            group == "io.prometheus" || "prometheus" in name ||
+                (group == "io.opentelemetry" && version.endsWith("-alpha"))
+
+        val paths = mutableMapOf<ResolvedComponentResult, List<String>>()
+        val queue = ArrayDeque<ResolvedComponentResult>()
+        val start = root.get()
+        paths[start] = emptyList()
+        queue.add(start)
+        val offending = mutableListOf<String>()
+        while (queue.isNotEmpty()) {
+            val component = queue.removeFirst()
+            component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { dep ->
+                val next = dep.selected
+                if (next in paths) return@forEach
+                val id = next.moduleVersion ?: return@forEach
+                val coords = "${id.group}:${id.name}:${id.version}"
+                paths[next] = paths.getValue(component) + coords
+                if (forbidden(id.group, id.name, id.version)) offending += paths.getValue(next).joinToString(" -> ")
+                queue.add(next)
+            }
+        }
+        if (offending.isNotEmpty()) {
+            throw GradleException(
+                "runtimeClasspath contains forbidden modules (Prometheus or alpha OpenTelemetry):\n" +
+                    offending.joinToString("\n") { "  $it" },
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(checkRuntimeClasspath) }

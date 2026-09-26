@@ -241,9 +241,12 @@ internal fun semverAsNumber(version: String): Int {
     return major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
 }
 
-internal val defaultXml: XML = XML {
-    autoPolymorphic = false
+// xmlutil 1.0 deprecates the pre-1.0 defaults; `XML.v1` changes them. The SOAP requests sent to real
+// Konnektors are only partly pinned by tests, so the switch waits for a check against hardware.
+@Suppress("DEPRECATION")
+internal val defaultXml: XML = XML.compat {
     defaultPolicy {
+        autoPolymorphic = false
         ignoreUnknownChildren()
     }
 }

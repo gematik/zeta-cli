@@ -12,6 +12,7 @@ import de.gematik.zeta.sdk.configuration.ConfigurationStorage
 import de.gematik.zeta.sdk.configuration.ConfigurationStorageImpl
 import de.gematik.zeta.sdk.storage.ResourceScope
 import de.gematik.zeta.sdk.storage.SdkStorage
+import de.gematik.zeta.time.SystemZetaClock
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Base64
 import kotlinx.serialization.json.Json
@@ -71,7 +72,7 @@ internal data class RegistrationInfo(
  */
 internal class ProfileStores(val scope: ResourceScope, db: ProfileDb) {
     private val storage: SdkStorage = SqliteSdkStorage(scope.storageKey, db)
-    val configuration: ConfigurationStorage = ConfigurationStorageImpl(storage, scope)
+    val configuration: ConfigurationStorage = ConfigurationStorageImpl(storage, scope, clock = SystemZetaClock)
     val registration: ClientRegistrationStorage = ClientRegistrationStorageImpl(storage, scope)
     val authentication: AuthenticationStorage = AuthenticationStorageImpl(storage, scope)
 }
