@@ -18,14 +18,14 @@ import org.junit.jupiter.api.assertThrows
 
 class ConsumerClientTest {
 
-    private val dotkon = parseDotkon(
+    private fun dotkon(certificateVersion: String = "3.0.1", signatureVersion: String = "3.2.1") = parseDotkon(
         """
         {
             "product": "consumer",
             "url": "https://bc.test:8443/",
             "serviceEndpoints": [
-                { "name": "CertificateService", "path": "/ws/CertificateService" },
-                { "name": "SignatureService", "path": "/ws/SignatureService" }
+                { "name": "CertificateService", "path": "/ws/CertificateService", "version": "$certificateVersion" },
+                { "name": "SignatureService", "path": "/ws/SignatureService", "version": "$signatureVersion" }
             ],
             "credentials": { "type": "none" }
         }
@@ -33,13 +33,15 @@ class ConsumerClientTest {
         envLookup = { null },
     )
 
-    private val readCertificateResponseXml = """
+    private val dotkon = dotkon()
+
+    private fun readCertificateResponseXml(certNs: String = "v3.1", commonNs: String = "v2.1") = """
         <?xml version="1.0" encoding="UTF-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
           <soap:Body>
-            <CERT:ReadCertificateResponse xmlns:CERT="http://ws.gematik.de/consumer/CertificateService/v3.1"
+            <CERT:ReadCertificateResponse xmlns:CERT="http://ws.gematik.de/consumer/CertificateService/$certNs"
                                           xmlns:CONSUMER="http://ws.gematik.de/consumer/ConsumerCommon/v2.0"
-                                          xmlns:CERTCMN="http://ws.gematik.de/consumer/CertificateServiceCommon/v2.1">
+                                          xmlns:CERTCMN="http://ws.gematik.de/consumer/CertificateServiceCommon/$commonNs">
               <CONSUMER:Status><CONSUMER:Result>OK</CONSUMER:Result></CONSUMER:Status>
               <CERTCMN:X509DataInfoList>
                 <CERTCMN:X509DataInfo>
@@ -59,11 +61,11 @@ class ConsumerClientTest {
         </soap:Envelope>
     """.trimIndent()
 
-    private val externalAuthenticateResponseXml = """
+    private fun externalAuthenticateResponseXml(sigNs: String = "v3.2") = """
         <?xml version="1.0" encoding="UTF-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
           <soap:Body>
-            <SIG:ExternalAuthenticateResponse xmlns:SIG="http://ws.gematik.de/consumer/SignatureService/v3.2"
+            <SIG:ExternalAuthenticateResponse xmlns:SIG="http://ws.gematik.de/consumer/SignatureService/$sigNs"
                                               xmlns:CONSUMER="http://ws.gematik.de/consumer/ConsumerCommon/v2.0"
                                               xmlns:dss="urn:oasis:names:tc:dss:1.0:core:schema">
               <CONSUMER:Status><CONSUMER:Result>OK</CONSUMER:Result></CONSUMER:Status>
@@ -105,7 +107,11 @@ class ConsumerClientTest {
 
     private data class Recorded(val method: HttpMethod, val url: String, val soapAction: String?, val body: String)
 
-    private fun consumer(recorded: MutableList<Recorded>, respond: (Recorded) -> Pair<String, HttpStatusCode>): ConsumerClient {
+    private fun consumer(
+        recorded: MutableList<Recorded>,
+        dotkon: Dotkon = this.dotkon,
+        respond: (Recorded) -> Pair<String, HttpStatusCode>,
+    ): ConsumerClient {
         val engine = MockEngine { req ->
             val r = Recorded(req.method, req.url.toString(), req.headers["SOAPAction"], req.body.toByteArray().decodeToString())
             recorded += r
@@ -118,7 +124,7 @@ class ConsumerClientTest {
     @Test
     fun `ReadCertificate goes to the configured path without context`() = runBlocking {
         val recorded = mutableListOf<Recorded>()
-        val cert = consumer(recorded) { readCertificateResponseXml to HttpStatusCode.OK }
+        val cert = consumer(recorded) { readCertificateResponseXml() to HttpStatusCode.OK }
             .readCardAutCertificate("bc-handle-1")
 
         assertArrayEquals(byteArrayOf(1, 2, 3, 4), cert)
@@ -133,7 +139,7 @@ class ConsumerClientTest {
     @Test
     fun `ExternalAuthenticate signs through the SignatureService`() = runBlocking {
         val recorded = mutableListOf<Recorded>()
-        val sig = consumer(recorded) { externalAuthenticateResponseXml to HttpStatusCode.OK }
+        val sig = consumer(recorded) { externalAuthenticateResponseXml() to HttpStatusCode.OK }
             .externalAuthenticate("bc-handle-1", ByteArray(32) { it.toByte() })
 
         assertArrayEquals(byteArrayOf(0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x02), sig)
@@ -162,5 +168,42 @@ class ConsumerClientTest {
         val authenticator = dotkon.smcbAuthenticator(HttpClient(engine))
         assertInstanceOf(ConsumerClient::class.java, authenticator)
         assertTrue(recorded.isEmpty(), "requests: $recorded")
+    }
+
+    @Test
+    fun `ReadCertificate speaks the configured version`() = runBlocking {
+        // version -> (SOAPAction version, payload namespace, CertificateServiceCommon namespace)
+        mapOf("3.0.0" to Triple("v3.0", "v3.0", "v2.0"), "3.0.1" to Triple("v3.0", "v3.1", "v2.1"))
+            .forEach { (version, ns) ->
+                val (action, payload, common) = ns
+                val recorded = mutableListOf<Recorded>()
+                val cert = consumer(recorded, dotkon(certificateVersion = version)) {
+                    readCertificateResponseXml(payload, common) to HttpStatusCode.OK
+                }.readCardAutCertificate("bc-handle-1")
+
+                assertArrayEquals(byteArrayOf(1, 2, 3, 4), cert, version)
+                val req = recorded.single()
+                assertEquals("http://ws.gematik.de/consumer/CertificateService/$action#ReadCertificate", req.soapAction, version)
+                assertTrue("xmlns=\"http://ws.gematik.de/consumer/CertificateService/$payload\"" in req.body, "$version: ${req.body}")
+            }
+    }
+
+    @Test
+    fun `ExternalAuthenticate speaks the configured version`() = runBlocking {
+        // version -> (namespace, whether its schema has OptionalInputs)
+        mapOf("3.0.0" to ("v3.0" to true), "3.1.0" to ("v3.1" to false), "3.2.0" to ("v3.2" to false), "3.2.1" to ("v3.2" to true))
+            .forEach { (version, expected) ->
+                val (ns, optionalInputs) = expected
+                val recorded = mutableListOf<Recorded>()
+                val sig = consumer(recorded, dotkon(signatureVersion = version)) {
+                    externalAuthenticateResponseXml(ns) to HttpStatusCode.OK
+                }.externalAuthenticate("bc-handle-1", ByteArray(32) { it.toByte() })
+
+                assertArrayEquals(byteArrayOf(0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x02), sig, version)
+                val req = recorded.single()
+                assertEquals("http://ws.gematik.de/consumer/SignatureService/$ns#ExternalAuthenticate", req.soapAction, version)
+                assertTrue("xmlns=\"http://ws.gematik.de/consumer/SignatureService/$ns\"" in req.body, "$version: ${req.body}")
+                assertEquals(optionalInputs, "OptionalInputs" in req.body, "$version: ${req.body}")
+            }
     }
 }

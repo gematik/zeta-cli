@@ -142,12 +142,13 @@ validation error ("password is required"), not a substitution failure.
 ### 5.1 Basis-Consumer
 
 With `"product": "consumer"` there is no `<url>/connector.sds` to discover endpoints from, so
-`serviceEndpoints` lists them. Each entry is an object:
+`serviceEndpoints` lists them, together with the version each one speaks. Each entry is an object:
 
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `name` | **REQUIRED** | Service name as in the Basis-Consumer WSDL, e.g. `CertificateService`, `SignatureService`, `EncryptionService`. Each name **MUST** appear at most once. |
-| `path` | **REQUIRED** | Path of the service's SOAP endpoint, starting with `/`. It is appended to `url`; scheme, host and port always come from `url`. |
+| `path` | **REQUIRED** | The service's SOAP endpoint: either a path starting with `/`, appended to `url`, or a full `http(s)://` URL for a provider that runs the service on its own host. |
+| `version` | **REQUIRED** | WSDL version the service speaks, e.g. `"3.2.1"`. Every version of a consumer service is its own XML namespace and nothing on the server announces it, so it has to be configured. Clients **MUST** reject a version they cannot speak. |
 
 There are no default paths. Clients **MUST** reject a consumer configuration that lacks an entry
 for a service they call. `mandantId`, `workplaceId`, `clientSystemId` and `userId` are ignored,
@@ -240,8 +241,9 @@ A conformant client **MUST** reject a configuration that:
 - specifies `product` with a value other than `konnektor` or `consumer`;
 - for `konnektor` (or no `product`), omits any of `mandantId`, `workplaceId`, `clientSystemId`,
   or leaves them blank, or carries `serviceEndpoints`;
-- for `consumer`, has a `serviceEndpoints` entry with a blank `name`, a `path` that does not start
-  with `/` or carries a scheme, host, query or fragment, or a `name` that appears twice; or sets
+- for `consumer`, has a `serviceEndpoints` entry with a blank `name`, a `path` that is neither a
+  path starting with `/` nor an `http(s)` URL with a host (or that carries a query or fragment), a
+  missing or unsupported `version`, or a `name` that appears twice; or sets
   `rewriteServiceEndpoints` to `true`;
 - specifies `env` with a value other than `ru`, `tu`, or `pu`;
 - omits `credentials` or its `type`;
@@ -287,8 +289,8 @@ A Basis-Consumer without client authentication:
   "product": "consumer",
   "url": "https://basis-consumer.example.com:443",
   "serviceEndpoints": [
-    { "name": "CertificateService", "path": "/ws/CertificateService" },
-    { "name": "SignatureService", "path": "/ws/SignatureService" }
+    { "name": "CertificateService", "path": "/ws/CertificateService", "version": "3.0.1" },
+    { "name": "SignatureService", "path": "https://signature.basis-consumer.example.com/ws/SignatureService", "version": "3.2.1" }
   ],
   "credentials": { "type": "none" },
   "env": "pu",

@@ -13,8 +13,9 @@ Praxis SMC-Bs.
 
 Save this as `default.kon` in the working directory (or as
 `$XDG_CONFIG_HOME/telematik/connectors/default.kon`) and every command picks it up without
-`--connector-config`. Replace the `<…>` placeholders; the service paths are not standardised and
-come from the provider.
+`--connector-config`. Replace the `<…>` placeholders. Service paths and versions are not
+standardised and come from the provider; a service on its own host takes a full `https://` URL as
+`path`. For the versions, see [Service versions](#service-versions).
 
 ```json
 {
@@ -22,8 +23,8 @@ come from the provider.
   "product": "consumer",
   "url": "https://<basis-consumer-host>:<port>",
   "serviceEndpoints": [
-    { "name": "CertificateService", "path": "/<path-to>/CertificateService" },
-    { "name": "SignatureService", "path": "/<path-to>/SignatureService" }
+    { "name": "CertificateService", "path": "/<path-to>/CertificateService", "version": "<3.0.0 | 3.0.1>" },
+    { "name": "SignatureService", "path": "/<path-to>/SignatureService", "version": "<3.0.0 | 3.1.0 | 3.2.0 | 3.2.1>" }
   ],
   "credentials": { "type": "none" },
   "env": "ru",
@@ -70,44 +71,56 @@ invalid when the identity is removed (A_25030); how a client learns it is not sp
 
 ## Operations used for ZETA signing
 
-Generated from `api-telematik` tag `Consumer_1.2.1` into `de.gematik.connector.api.gematik.consumer.*`.
+Generated into `de.gematik.connector.api.gematik.consumer.*`, one package per namespace generation
+(see [Service versions](#service-versions)).
 
-**ReadCertificate** (A_24782-02) — `certificateservice30`, payload types in `certificateservice31`
+**ReadCertificate** (A_24782-02)
 
-- SOAPAction `http://ws.gematik.de/consumer/CertificateService/v3.0#ReadCertificate`
+- SOAPAction `http://ws.gematik.de/consumer/CertificateService/v3.0#ReadCertificate` in every version
 - Input: `CardHandle`, `CertRefList` with `C.AUT` (or `C.OSIG`), `Crypt` `ECC` or `RSA` (default ECC).
 - Faults: 4000 syntax error, 4149 invalid certificate reference, 4090 access to identity not permitted,
   4258 no certificates on the identity.
 
-**ExternalAuthenticate** (A_17578-03 / A_17578-04) — `signatureservice32`
+**ExternalAuthenticate** (A_17578-03 / A_17578-04)
 
-- SOAPAction `http://ws.gematik.de/consumer/SignatureService/v3.2#ExternalAuthenticate`
-- Input: `CardHandle`, `OptionalInputs/SignatureType` `urn:bsi:tr:03111:ecdsa`, and the SHA-256 digest
-  as `BinaryString`. Signs with `PrK.HCI.AUT` of the SM(C)-B; the DER ECDSA signature comes back in
+- SOAPAction `http://ws.gematik.de/consumer/SignatureService/v3.<minor>#ExternalAuthenticate`
+- Input: `CardHandle`, `OptionalInputs/SignatureType` `urn:bsi:tr:03111:ecdsa` where the version has
+  `OptionalInputs`, and the SHA-256 digest as `BinaryString`. Signs with `PrK.HCI.AUT` of the SM(C)-B; the DER ECDSA signature comes back in
   `SignatureObject/Base64Signature`, as with the Konnektor.
 - Which requirement applies depends on the "ECC preferred" switch (A_26447-01), which gematik controls
   and which is off by default. Off (-03): RSA and ECDSA are both allowed and ECDSA is the default when
-  `SignatureType` is absent. On (-04): ECDSA over at most 256 bits only. Sending ECDSA explicitly works
-  in both states.
+  `SignatureType` is absent. On (-04): ECDSA over at most 256 bits only. So ECDSA is what comes back
+  whether the type is named or left out.
 - Faults: 4000 syntax error, 4111 invalid signature type or variant, 4123 signing failed.
 
 Fault bodies carry the same `http://ws.gematik.de/tel/error/v2.0` `Error` as the Konnektor's, so the
 existing SOAP-fault handling applies unchanged.
 
-## Version caveat
+## Service versions
 
-The generated code (`Consumer_1.2.1`) is newer than what gemSpec_Basis_Consumer V1.12.1 describes:
+Every consumer service version is its own XML namespace, and a Basis-Consumer serves the one of the
+release it runs; nothing on the wire announces it, so each `serviceEndpoints` entry names it in
+`version`. A mismatch is not subtle: the server does not recognise the request, or we cannot read its
+answer.
 
-| | gemSpec V1.12.1 | generated |
-| --- | --- | --- |
-| SignatureService (WSDL and schema) | 3.1 | 3.2 |
-| CertificateService WSDL / SOAPAction | 3.0 | 3.0 |
-| CertificateService schema (`ReadCertificate` payload) | 3.0 | 3.1 |
-| CertificateServiceCommon | 2.0 | 2.1 |
+| `version` | Release | Payload namespace | `OptionalInputs` | Package |
+| --- | --- | --- | --- | --- |
+| CertificateService `3.0.0` | Consumer 1.0 / 1.1 (OPB5) | `CertificateService/v3.0`, `CertificateServiceCommon/v2.0` | – | `certificateservice300` |
+| CertificateService `3.0.1` | Consumer 1.2 | `CertificateService/v3.1`, `CertificateServiceCommon/v2.1` | – | `certificateservice30` (types in `certificateservice31`) |
+| SignatureService `3.0.0` | OPB5 | `SignatureService/v3.0` | yes | `signatureservice30` |
+| SignatureService `3.1.0` | Consumer 1.1 (gemSpec V1.12.1) | `SignatureService/v3.1` | no | `signatureservice31` |
+| SignatureService `3.2.0` | Consumer 1.2.0 | `SignatureService/v3.2` | no | `signatureservice32` |
+| SignatureService `3.2.1` | Consumer 1.2.1 | `SignatureService/v3.2` | yes | `signatureservice32` |
 
-The version is part of the element namespaces (and, for SignatureService, the SOAPAction), so a
-Basis-Consumer at the V1.12.1 level would not recognise these requests. Check which versions a real
-system serves before relying on it.
+The server's own WSDL says which one it is:
+
+```sh
+curl -s '<endpoint>?wsdl' | grep -oE 'targetNamespace="[^"]+"'
+```
+
+`…/SignatureService/WSDL/v3.2` is 3.2.x: the XSD's `version` attribute tells 3.2.0 (`3.2.1`, no
+`OptionalInputs` in `ExternalAuthenticate`) from 3.2.1 (`3.2.2`). A CertificateService WSDL is always
+`…/WSDL/v3.0`; its XSD namespace `…/CertificateService/v3.0` means 3.0.0, `…/v3.1` means 3.0.1.
 
 ## Authentication and TLS
 

@@ -82,7 +82,11 @@ class RequestEncodingTest {
     fun `StartCardSession request is byte-identical`() =
         assertPinned("StartCardSession", sent { startCardSession("card-handle-1") })
 
-    private fun sentToConsumer(block: suspend ConsumerClient.() -> Unit): String {
+    private fun sentToConsumer(
+        certificateVersion: String = "3.0.1",
+        signatureVersion: String = "3.2.1",
+        block: suspend ConsumerClient.() -> Unit,
+    ): String {
         val recorded = mutableListOf<String>()
         val engine = MockEngine { req ->
             recorded += req.body.toByteArray().toString(Charsets.UTF_8)
@@ -93,8 +97,8 @@ class RequestEncodingTest {
             credentials = Credentials.None,
             product = Product.Consumer,
             serviceEndpoints = listOf(
-                ConsumerEndpoint("CertificateService", "/ws/CertificateService"),
-                ConsumerEndpoint("SignatureService", "/ws/SignatureService"),
+                ConsumerEndpoint("CertificateService", "/ws/CertificateService", certificateVersion),
+                ConsumerEndpoint("SignatureService", "/ws/SignatureService", signatureVersion),
             ),
         )
         runCatching { runBlocking { ConsumerClient(HttpClient(engine), dotkon).block() } }
@@ -102,15 +106,22 @@ class RequestEncodingTest {
     }
 
     @Test
-    fun `Basis-Consumer ReadCertificate request is byte-identical`() =
-        assertPinned("ConsumerReadCertificate", sentToConsumer { readCardAutCertificate("card-handle-1") })
+    fun `Basis-Consumer ReadCertificate requests are byte-identical per version`() =
+        listOf("3.0.0", "3.0.1").forEach { version ->
+            assertPinned(
+                "ConsumerReadCertificate-$version",
+                sentToConsumer(certificateVersion = version) { readCardAutCertificate("card-handle-1") },
+            )
+        }
 
     @Test
-    fun `Basis-Consumer ExternalAuthenticate request is byte-identical`() =
-        assertPinned(
-            "ConsumerExternalAuthenticate",
-            sentToConsumer { externalAuthenticate("card-handle-1", ByteArray(32) { it.toByte() }) },
-        )
+    fun `Basis-Consumer ExternalAuthenticate requests are byte-identical per version`() =
+        listOf("3.0.0", "3.1.0", "3.2.0", "3.2.1").forEach { version ->
+            assertPinned(
+                "ConsumerExternalAuthenticate-$version",
+                sentToConsumer(signatureVersion = version) { externalAuthenticate("card-handle-1", ByteArray(32) { it.toByte() }) },
+            )
+        }
 
     @Test
     fun `requests carry no XML declaration and no indentation`() {

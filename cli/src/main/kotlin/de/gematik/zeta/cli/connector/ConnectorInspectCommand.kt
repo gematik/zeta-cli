@@ -108,6 +108,7 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
                 dotkon.serviceEndpoints.forEach { e ->
                     addJsonObject {
                         put("name", e.name)
+                        put("version", e.version)
                         put("endpoint", dotkon.consumerEndpoint(e.name))
                     }
                 }
@@ -167,7 +168,7 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
 
             if (services == null) {
                 section("Service endpoints") {
-                    dotkon.serviceEndpoints.forEach { e -> field(e.name, dotkon.consumerEndpoint(e.name)) }
+                    dotkon.serviceEndpoints.forEach { e -> field("${e.name} ${e.version}", dotkon.consumerEndpoint(e.name)) }
                 }
                 return@renderSections
             }

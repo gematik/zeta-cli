@@ -30,8 +30,8 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  * before parsing, so secrets can stay outside the file.
  *
  * With `"product": "consumer"` the file describes a Basis-Consumer instead: it has no service
- * directory and no call context, so `serviceEndpoints` names each service's path under `url`
- * and the mandant / workplace / client-system ids are not needed.
+ * directory and no call context, so `serviceEndpoints` names where each service lives and which
+ * version it speaks, and the mandant / workplace / client-system ids are not needed.
  *
  * Pure data: certs stay as their base64 strings here so the type is free of JVM-only
  * crypto types. The TLS / PKCS#12 wiring lives in
@@ -64,23 +64,32 @@ enum class Product {
     Consumer,
 }
 
-/** Where one Basis-Consumer service lives: [path] is resolved against [Dotkon.url]. */
+/**
+ * One Basis-Consumer service. [path] is either a path resolved against [Dotkon.url] or a full
+ * `http(s)://` URL, for providers that run each service on its own host. [version] is the WSDL
+ * version the service speaks (e.g. `"3.2.1"`): every version is its own XML namespace, and there
+ * is no service directory to learn it from.
+ */
 @Serializable
 data class ConsumerEndpoint(
     val name: String,
     val path: String,
+    val version: String = "",
 )
 
 /**
- * Full URL of the Basis-Consumer service [name], from [Dotkon.url] and its configured path.
+ * Full URL of the Basis-Consumer service [name]: its configured URL, or [Dotkon.url] joined with its
+ * configured path.
  *
  * @throws DotkonValidationException when no `serviceEndpoints` entry is named [name].
  */
 fun Dotkon.consumerEndpoint(name: String): String {
     val entry = serviceEndpoints.firstOrNull { it.name == name }
         ?: throw DotkonValidationException(listOf("serviceEndpoints has no entry named \"$name\""))
-    return url.trimEnd('/') + entry.path
+    return if (entry.path.isAbsoluteUrl()) entry.path else url.trimEnd('/') + entry.path
 }
+
+private fun String.isAbsoluteUrl(): Boolean = startsWith("https://") || startsWith("http://")
 
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
@@ -182,8 +191,6 @@ fun expandEnvVars(text: String, envLookup: (String) -> String? = { System.getenv
 
 private val VALID_ENV_VALUES = setOf("ru", "tu", "pu")
 
-/** Services the consumer client calls; a consumer `.kon` without either cannot sign anything. */
-private val REQUIRED_CONSUMER_SERVICES = listOf("CertificateService", "SignatureService")
 
 private fun Dotkon.validationErrors(): List<String> = buildList {
     if (url.isBlank()) add(""""url" is required""")
@@ -218,17 +225,28 @@ private fun Dotkon.consumerEndpointErrors(): List<String> = buildList {
     if (rewriteServiceEndpoints) add(""""rewriteServiceEndpoints" is not valid with "product": "consumer"""")
     serviceEndpoints.forEachIndexed { i, e ->
         if (e.name.isBlank()) add("serviceEndpoints[$i].name is required")
-        // Paths only: scheme, host and port come from "url", so one file cannot point its services
-        // at different hosts than the one its TLS settings were written for.
         val p = e.path
-        if (!p.startsWith("/") || p.startsWith("//") || "://" in p || '?' in p || '#' in p) {
-            add("serviceEndpoints[$i].path must be a path starting with \"/\" (got \"$p\")")
+        val validShape = if (p.isAbsoluteUrl()) {
+            p.substringAfter("://").substringBefore('/').isNotEmpty()
+        } else {
+            p.startsWith("/") && !p.startsWith("//") && "://" !in p
+        }
+        if (!validShape || '?' in p || '#' in p) {
+            add("serviceEndpoints[$i].path must be a path starting with \"/\" or an http(s) URL (got \"$p\")")
+        }
+        val supported = CONSUMER_SERVICE_VERSIONS[e.name]
+        when {
+            e.version.isBlank() -> add("serviceEndpoints[$i].version is required")
+            supported != null && e.version !in supported -> add(
+                "serviceEndpoints[$i].version \"${e.version}\" of ${e.name} is not supported " +
+                    "(supported: ${supported.joinToString(", ")})",
+            )
         }
     }
     serviceEndpoints.groupBy { it.name }
         .filter { (name, entries) -> name.isNotBlank() && entries.size > 1 }
         .keys.forEach { add("serviceEndpoints has more than one entry named \"$it\"") }
-    REQUIRED_CONSUMER_SERVICES
+    CONSUMER_SERVICE_VERSIONS.keys
         .filter { name -> serviceEndpoints.none { it.name == name } }
         .forEach { add("serviceEndpoints needs an entry named \"$it\" for \"product\": \"consumer\"") }
 }
