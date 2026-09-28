@@ -9,6 +9,49 @@ KIM. It holds SM(C)-B **ORG** and **KTR** identities (in an HSM or on cards) and
 surface for them. Access to other Fachanwendungen is explicitly not part of it, and it does not serve
 Praxis SMC-Bs.
 
+## Configuration template (`default.kon`)
+
+Save this as `default.kon` in the working directory (or as
+`$XDG_CONFIG_HOME/telematik/connectors/default.kon`) and every command picks it up without
+`--connector-config`. Replace the `<…>` placeholders; the service paths are not standardised and
+come from the provider.
+
+```json
+{
+  "version": "1.1.0",
+  "product": "consumer",
+  "url": "https://<basis-consumer-host>:<port>",
+  "serviceEndpoints": [
+    { "name": "CertificateService", "path": "/<path-to>/CertificateService" },
+    { "name": "SignatureService", "path": "/<path-to>/SignatureService" }
+  ],
+  "credentials": { "type": "none" },
+  "env": "ru",
+  "insecureSkipVerify": false,
+  "trustStore": ["<base64-encoded DER certificates of the provider's chain, or set insecureSkipVerify to true instead>"]
+}
+```
+
+If the provider requires client authentication, replace `credentials` with one of:
+
+```json
+"credentials": { "type": "pkcs12", "data": "${BC_CLIENT_P12_BASE64}", "password": "${BC_CLIENT_P12_PASSWORD}" }
+```
+
+```json
+"credentials": { "type": "basic", "username": "<user>", "password": "${BC_PASSWORD}" }
+```
+
+Either pin the server with `trustStore` (the base64 DER certificates of its chain, CA and/or leaf) or,
+for a first test against a self-signed setup, set `"insecureSkipVerify": true` and drop `trustStore`;
+never use that beyond a test. Check the file, then sign in with the identity's card
+handle (the Basis-Consumer cannot look it up by ICCSN or Telematik-ID):
+
+```sh
+zeta connector inspect
+zeta vsdm get --auth-method connector --auth-connector-card-handle <card-handle> …
+```
+
 ## What differs from a Konnektor
 
 | | Konnektor | Basis-Consumer |
