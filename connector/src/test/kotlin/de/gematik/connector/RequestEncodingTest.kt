@@ -82,6 +82,36 @@ class RequestEncodingTest {
     fun `StartCardSession request is byte-identical`() =
         assertPinned("StartCardSession", sent { startCardSession("card-handle-1") })
 
+    private fun sentToConsumer(block: suspend ConsumerClient.() -> Unit): String {
+        val recorded = mutableListOf<String>()
+        val engine = MockEngine { req ->
+            recorded += req.body.toByteArray().toString(Charsets.UTF_8)
+            respond("not soap", HttpStatusCode.InternalServerError)
+        }
+        val dotkon = Dotkon(
+            url = "https://basis-consumer.test",
+            credentials = Credentials.None,
+            product = Product.Consumer,
+            serviceEndpoints = listOf(
+                ConsumerEndpoint("CertificateService", "/ws/CertificateService"),
+                ConsumerEndpoint("SignatureService", "/ws/SignatureService"),
+            ),
+        )
+        runCatching { runBlocking { ConsumerClient(HttpClient(engine), dotkon).block() } }
+        return recorded.singleOrNull() ?: fail("expected exactly one SOAP request, got ${recorded.size}")
+    }
+
+    @Test
+    fun `Basis-Consumer ReadCertificate request is byte-identical`() =
+        assertPinned("ConsumerReadCertificate", sentToConsumer { readCardAutCertificate("card-handle-1") })
+
+    @Test
+    fun `Basis-Consumer ExternalAuthenticate request is byte-identical`() =
+        assertPinned(
+            "ConsumerExternalAuthenticate",
+            sentToConsumer { externalAuthenticate("card-handle-1", ByteArray(32) { it.toByte() }) },
+        )
+
     @Test
     fun `requests carry no XML declaration and no indentation`() {
         val body = sent { readCardAutCertificate("card-handle-1") }

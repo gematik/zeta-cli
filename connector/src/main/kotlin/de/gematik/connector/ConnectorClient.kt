@@ -49,7 +49,7 @@ private val log = KotlinLogging.logger {}
  * Standard signature-type URI for ECDSA on SMC-B / HBA cards (BSI TR-03111).
  * Required by the Connector's `ExternalAuthenticate` to pick the ECC card key.
  */
-private const val ECDSA_SIGNATURE_TYPE = "urn:bsi:tr:03111:ecdsa"
+internal const val ECDSA_SIGNATURE_TYPE = "urn:bsi:tr:03111:ecdsa"
 
 /**
  * CardService version pin for `SecureSendAPDU` + `StartCardSession` / `StopCardSession`.
@@ -106,7 +106,7 @@ class ConnectorClient(
     val httpClient: HttpClient,
     val context: ConnectorContext,
     val services: ConnectorServices,
-) {
+) : SmcbAuthenticator {
     /** [ServiceProxy] for the highest-semver version of [serviceName]. */
     fun latestServiceProxy(serviceName: String): ServiceProxy {
         val (svc, ver) =
@@ -205,7 +205,7 @@ class ConnectorClient(
      * not verified, …) or [IllegalStateException] if the response is shaped unexpectedly.
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun readCardAutCertificate(cardHandle: String): ByteArray {
+    override suspend fun readCardAutCertificate(cardHandle: String): ByteArray {
         log.debug { "ReadCardCertificate cardHandle=$cardHandle certRef=C.AUT crypt=ECC" }
         val proxy = latestServiceProxy(ServiceNames.CertificateService)
         val envelope =
@@ -253,7 +253,7 @@ class ConnectorClient(
      * does not drive PIN entry from this operation.
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun externalAuthenticate(
+    override suspend fun externalAuthenticate(
         cardHandle: String,
         hash: ByteArray,
     ): ByteArray {
