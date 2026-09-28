@@ -92,32 +92,52 @@ class RequestEncodingTest {
 
     @Serializable
     @XmlSerialName("Flag", namespace = "urn:zeta:test", prefix = "t")
-    private data class Flag(
+    private data class ElementFlag(
         @XmlElement(true) @XmlSerialName("Value", namespace = "urn:zeta:test", prefix = "t") val value: Boolean,
     )
 
-    private fun decodeFlag(raw: String): Boolean =
-        defaultXml.decodeFromString(Flag.serializer(), """<t:Flag xmlns:t="urn:zeta:test"><t:Value>$raw</t:Value></t:Flag>""").value
+    // Konnektor schemas carry booleans as attributes too (e.g. GetCardTerminals/@mandant-wide), and xmlutil
+    // reads attribute values through a different path than element text, so both are pinned.
+    @Serializable
+    @XmlSerialName("Flag", namespace = "urn:zeta:test", prefix = "t")
+    private data class AttributeFlag(
+        @XmlElement(false) @XmlSerialName("value") val value: Boolean,
+    )
+
+    private val decoders: Map<String, (String) -> Boolean> = mapOf(
+        "element" to { raw ->
+            defaultXml.decodeFromString(ElementFlag.serializer(), """<t:Flag xmlns:t="urn:zeta:test"><t:Value>$raw</t:Value></t:Flag>""").value
+        },
+        "attribute" to { raw ->
+            defaultXml.decodeFromString(AttributeFlag.serializer(), """<t:Flag xmlns:t="urn:zeta:test" value="$raw"/>""").value
+        },
+    )
+
+    private fun assertDecodes(expected: Boolean, raw: String) = decoders.forEach { (form, decode) ->
+        assertEquals(expected, decode(raw), "$form '$raw'")
+    }
 
     @Test
     fun `xs boolean lexical forms decode as the schema defines them`() {
-        assertTrue(decodeFlag("true"))
-        assertTrue(decodeFlag("1"))
-        assertFalse(decodeFlag("false"))
-        assertFalse(decodeFlag("0"))
+        assertDecodes(true, "true")
+        assertDecodes(true, "1")
+        assertDecodes(false, "false")
+        assertDecodes(false, "0")
     }
 
     @Test
     fun `surrounding whitespace is collapsed like xs boolean requires`() {
-        assertTrue(decodeFlag(" true "))
-        assertTrue(decodeFlag("\n  1\n"))
-        assertFalse(decodeFlag(" false "))
+        assertDecodes(true, " true ")
+        assertDecodes(true, "\n  1\n")
+        assertDecodes(false, " false ")
     }
 
     @Test
     fun `forms outside xs boolean are rejected`() {
         listOf("TRUE", "True", "yes", "").forEach { raw ->
-            assertThrows<Exception>("'$raw' should not decode") { decodeFlag(raw) }
+            decoders.forEach { (form, decode) ->
+                assertThrows<Exception>("$form '$raw' should not decode") { decode(raw) }
+            }
         }
     }
 }
