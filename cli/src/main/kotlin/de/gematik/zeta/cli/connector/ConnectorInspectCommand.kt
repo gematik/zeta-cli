@@ -194,6 +194,7 @@ private fun redactedDotkonJson(dotkon: Dotkon, sourceFile: Path): JsonObject = b
                 put("type", "pkcs12")
                 // data + password deliberately omitted
             }
+            Credentials.None -> put("type", "none")
         }
     })
     if (dotkon.trustStore.isNotEmpty()) put("trustStoreSize", dotkon.trustStore.size)
@@ -204,4 +205,5 @@ private fun redactedDotkonJson(dotkon: Dotkon, sourceFile: Path): JsonObject = b
 private fun credentialsLabel(credentials: Credentials): String = when (credentials) {
     is Credentials.Basic -> "basic (username=${credentials.username})"
     is Credentials.Pkcs12 -> "pkcs12 client certificate"
+    Credentials.None -> "none"
 }

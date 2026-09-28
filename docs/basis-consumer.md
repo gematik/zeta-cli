@@ -70,4 +70,6 @@ system serves before relying on it.
 
 The specification defines no client authentication for this interface. The `.kon` settings that
 already exist for a Konnektor (`credentials`, `trustStore`, `insecureSkipVerify`, `expectedHost`)
-apply as they are, whichever mechanism the provider chose.
+apply as they are, whichever mechanism the provider chose; `"credentials": {"type": "none"}` covers a
+provider that uses none. The `.kon` for a Basis-Consumer is described in
+[kon-format.md §5.1](kon-format.md#51-basis-consumer).

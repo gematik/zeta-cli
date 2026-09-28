@@ -152,9 +152,9 @@ class DotkonTest {
                 envLookup = { null },
             )
         }
-        // Whatever the wording, the error should mention basic/pkcs12 to point users at valid types.
+        // Whatever the wording, the error should name every valid type.
         assertTrue(
-            ex.message!!.contains("basic") && ex.message!!.contains("pkcs12"),
+            ex.message!!.contains("basic") && ex.message!!.contains("pkcs12") && ex.message!!.contains("none"),
             "message: ${ex.message}",
         )
     }
@@ -173,5 +173,158 @@ class DotkonTest {
             envLookup = { null },
         )
         assertTrue(dk.rewriteServiceEndpoints)
+    }
+
+    @Test
+    fun `a dotkon without product is a konnektor`() {
+        val dk = parseDotkon(
+            """
+            {
+                "url": "https://k.example.com",
+                "mandantId": "M1", "workplaceId": "W1", "clientSystemId": "C1",
+                "credentials": { "type": "basic", "username": "u", "password": "p" }
+            }
+            """.trimIndent(),
+            envLookup = { null },
+        )
+        assertEquals(Product.Konnektor, dk.product)
+        assertTrue(dk.serviceEndpoints.isEmpty())
+    }
+
+    @Test
+    fun `a konnektor still needs its call context`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                """
+                {
+                    "url": "https://k.example.com",
+                    "credentials": { "type": "basic", "username": "u", "password": "p" }
+                }
+                """.trimIndent(),
+                envLookup = { null },
+            )
+        }
+        assertEquals(
+            listOf(""""mandantId" is required""", """"workplaceId" is required""", """"clientSystemId" is required"""),
+            ex.errors,
+        )
+    }
+
+    @Test
+    fun `parses none credentials`() {
+        val dk = parseDotkon(
+            """
+            {
+                "url": "https://k.example.com",
+                "mandantId": "M1", "workplaceId": "W1", "clientSystemId": "C1",
+                "credentials": { "type": "none" }
+            }
+            """.trimIndent(),
+            envLookup = { null },
+        )
+        assertEquals(Credentials.None, dk.credentials)
+        assertTrue(dk.toKeyManagers().isEmpty())
+    }
+
+    private fun consumerKon(endpoints: String, extra: String = "") =
+        """
+        {
+            "product": "consumer",
+            "url": "https://bc.example.com:8443/",
+            "serviceEndpoints": $endpoints,
+            $extra
+            "credentials": { "type": "none" }
+        }
+        """.trimIndent()
+
+    private val bothEndpoints =
+        """[{ "name": "CertificateService", "path": "/ws/cert" }, { "name": "SignatureService", "path": "/ws/sig" }]"""
+
+    @Test
+    fun `parses a consumer dotkon without call context`() {
+        val dk = parseDotkon(consumerKon(bothEndpoints), envLookup = { null })
+        assertEquals(Product.Consumer, dk.product)
+        assertEquals(
+            listOf(ConsumerEndpoint("CertificateService", "/ws/cert"), ConsumerEndpoint("SignatureService", "/ws/sig")),
+            dk.serviceEndpoints,
+        )
+        assertEquals("https://bc.example.com:8443/ws/sig", dk.consumerEndpoint("SignatureService"))
+        assertEquals("", dk.mandantId)
+    }
+
+    @Test
+    fun `a consumer needs certificate and signature endpoints`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(consumerKon("""[{ "name": "EncryptionService", "path": "/ws/enc" }]"""), envLookup = { null })
+        }
+        assertTrue(ex.errors.any { "\"CertificateService\"" in it }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.any { "\"SignatureService\"" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `consumer endpoints are paths, named once`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                consumerKon(
+                    """
+                    [
+                        { "name": "CertificateService", "path": "https://other.example.com/ws/cert" },
+                        { "name": "SignatureService", "path": "/ws/sig" },
+                        { "name": "SignatureService", "path": "ws/sig" }
+                    ]
+                    """.trimIndent(),
+                ),
+                envLookup = { null },
+            )
+        }
+        assertTrue(ex.errors.any { it.startsWith("serviceEndpoints[0].path") }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.any { it.startsWith("serviceEndpoints[2].path") }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.any { "more than one entry named \"SignatureService\"" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `serviceEndpoints are rejected for a konnektor`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                """
+                {
+                    "url": "https://k.example.com",
+                    "mandantId": "M1", "workplaceId": "W1", "clientSystemId": "C1",
+                    "serviceEndpoints": [{ "name": "SignatureService", "path": "/ws/sig" }],
+                    "credentials": { "type": "basic", "username": "u", "password": "p" }
+                }
+                """.trimIndent(),
+                envLookup = { null },
+            )
+        }
+        assertTrue(ex.errors.any { "serviceEndpoints" in it && "consumer" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `rewriteServiceEndpoints is rejected for a consumer`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(consumerKon(bothEndpoints, extra = """"rewriteServiceEndpoints": true,"""), envLookup = { null })
+        }
+        assertTrue(ex.errors.any { "rewriteServiceEndpoints" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `rejects unknown product`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                """
+                {
+                    "product": "gateway",
+                    "url": "https://k.example.com",
+                    "credentials": { "type": "none" }
+                }
+                """.trimIndent(),
+                envLookup = { null },
+            )
+        }
+        assertTrue(
+            ex.message!!.contains("konnektor") && ex.message!!.contains("consumer"),
+            "message: ${ex.message}",
+        )
     }
 }

@@ -1,6 +1,9 @@
 # Konnektor Configuration Format (`.kon`)
 
-**Status:** Draft · **Version:** 1.0.0 · **Last updated:** 2026-02-08
+**Status:** Draft · **Version:** 1.1.0 · **Last updated:** 2026-09-28
+
+Version 1.1.0 only adds parameters (`product`, `serviceEndpoints`, credentials type `none`); every
+valid 1.0.0 configuration is a valid 1.1.0 configuration with the same meaning.
 
 ## 1. Introduction
 
@@ -122,10 +125,11 @@ validation error ("password is required"), not a substitution failure.
 | --- | --- | --- | --- |
 | `version` | OPTIONAL | string | Version of the configuration format (e.g. `"1.0.0"`). |
 | `url` | **REQUIRED** | string | Konnektor URL. MUST include the scheme (normally `https://`) and the FQDN or IP address, plus the port if it differs from the scheme default. Clients **MUST** tolerate a trailing `/`. Serves as the base for `<url>/connector.sds`. Examples: `https://konnektor.example.com:8443`, `https://192.168.1.2`, `https://konnektor.example.com/kon1`. |
+| `product` | OPTIONAL (default `"konnektor"`) | string | What `url` points at: `"konnektor"`, or `"consumer"` for a gematik Basis-Consumer. A Basis-Consumer has no service directory and no call context; see [§5.1](#51-basis-consumer). Clients **MUST** reject any other value. |
 | `rewriteServiceEndpoints` | OPTIONAL (default `false`) | boolean | When `true`, the endpoint URLs returned in the Konnektor's service directory (e.g. `https://10.1.1.1:80/SignatureService`) are ignored and rebuilt against `url`, keeping only the path component (e.g. `/SignatureService`). REQUIRED when the Konnektor runs behind a reverse proxy, NAT, or in a Docker network where the advertised internal addresses are not reachable by the client. |
-| `mandantId` | **REQUIRED** | string | Mandant ID from the information model. Used as the call context for the Konnektor interfaces. |
-| `workplaceId` | **REQUIRED** | string | Workplace ID from the information model. Used as the call context. |
-| `clientSystemId` | **REQUIRED** | string | Client-system ID from the information model. Used as the call context. |
+| `mandantId` | **REQUIRED** for `konnektor` | string | Mandant ID from the information model. Used as the call context for the Konnektor interfaces. |
+| `workplaceId` | **REQUIRED** for `konnektor` | string | Workplace ID from the information model. Used as the call context. |
+| `clientSystemId` | **REQUIRED** for `konnektor` | string | Client-system ID from the information model. Used as the call context. |
 | `userId` | OPTIONAL | string | User ID of the HBA holder. Used as the call context. |
 | `telematikId` | OPTIONAL | string | Telematik-ID of a card. When the client is bound to a specific identity (e.g. a KIM client module), this hints which smartcard to select. |
 | `credentials` | **REQUIRED** | object | Authentication configuration. See [§6](#6-credentials). |
@@ -133,16 +137,33 @@ validation error ("password is required"), not a substitution failure.
 | `insecureSkipVerify` | OPTIONAL (default `false`) | boolean | When `true`, TLS verification is disabled. **MUST** be used for test purposes only. |
 | `expectedHost` | OPTIONAL | string | FQDN/hostname that **MUST** appear as the Subject or a Subject Alternative Name (SAN) in the Konnektor's certificate. Use this when the Konnektor presents a certificate whose name differs from the host in `url`. |
 | `trustStore` | OPTIONAL | array of string | Certificates used to verify the Konnektor, each a base64-encoded DER certificate. Both the end-entity certificate and CA certificates MAY be supplied. Clients **SHOULD** accept line-wrapped (MIME) base64. |
+| `serviceEndpoints` | **REQUIRED** for `consumer`, not allowed for `konnektor` | array of object | Where each Basis-Consumer service lives. See [§5.1](#51-basis-consumer). |
+
+### 5.1 Basis-Consumer
+
+With `"product": "consumer"` there is no `<url>/connector.sds` to discover endpoints from, so
+`serviceEndpoints` lists them. Each entry is an object:
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `name` | **REQUIRED** | Service name as in the Basis-Consumer WSDL, e.g. `CertificateService`, `SignatureService`, `EncryptionService`. Each name **MUST** appear at most once. |
+| `path` | **REQUIRED** | Path of the service's SOAP endpoint, starting with `/`. It is appended to `url`; scheme, host and port always come from `url`. |
+
+There are no default paths. Clients **MUST** reject a consumer configuration that lacks an entry
+for a service they call. `mandantId`, `workplaceId`, `clientSystemId` and `userId` are ignored,
+because Basis-Consumer operations take no call context, and `rewriteServiceEndpoints` **MUST** be
+rejected.
 
 ## 6. Credentials
 
 The `credentials` object is a tagged union discriminated by its `type` field. This version
-defines three types; further types MAY be added in the future, so clients **MUST** reject
+defines four types; further types MAY be added in the future, so clients **MUST** reject
 an unknown `type` with a clear error rather than silently ignoring it.
 
 - `basic` — username and password for HTTP Basic authentication.
 - `pkcs12` — a PKCS#12 container holding a TLS client certificate and private key.
 - `system` — a reference to an entry in an operating-system credential store.
+- `none` — no client authentication.
 
 ### 6.1 `basic`
 
@@ -193,12 +214,35 @@ actual secret at runtime.
 }
 ```
 
+### 6.4 `none`
+
+The client authenticates neither with HTTP Basic nor with a client certificate. TLS
+verification of the server (`trustStore`, `expectedHost`, `insecureSkipVerify`) still applies.
+It exists as an explicit type so that "no authentication" is a deliberate choice rather than a
+forgotten `credentials` block.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `type` | **REQUIRED** | `"none"` |
+
+```json
+{
+  "type": "none"
+}
+```
+
 ## 7. Validation
 
 A conformant client **MUST** reject a configuration that:
 
 - is not well-formed JSON (or YAML, for `.kony`) after substitution;
-- omits any of `url`, `mandantId`, `workplaceId`, `clientSystemId`, or leaves them blank;
+- omits `url` or leaves it blank;
+- specifies `product` with a value other than `konnektor` or `consumer`;
+- for `konnektor` (or no `product`), omits any of `mandantId`, `workplaceId`, `clientSystemId`,
+  or leaves them blank, or carries `serviceEndpoints`;
+- for `consumer`, has a `serviceEndpoints` entry with a blank `name`, a `path` that does not start
+  with `/` or carries a scheme, host, query or fragment, or a `name` that appears twice; or sets
+  `rewriteServiceEndpoints` to `true`;
 - specifies `env` with a value other than `ru`, `tu`, or `pu`;
 - omits `credentials` or its `type`;
 - for `basic`, omits or leaves blank `username` or `password`;
@@ -232,6 +276,23 @@ Clients **SHOULD** report all field errors at once rather than failing on the fi
     "<base64-encoded DER certificate>",
     "<base64-encoded DER certificate>"
   ]
+}
+```
+
+A Basis-Consumer without client authentication:
+
+```json
+{
+  "version": "1.1.0",
+  "product": "consumer",
+  "url": "https://basis-consumer.example.com:443",
+  "serviceEndpoints": [
+    { "name": "CertificateService", "path": "/ws/CertificateService" },
+    { "name": "SignatureService", "path": "/ws/SignatureService" }
+  ],
+  "credentials": { "type": "none" },
+  "env": "pu",
+  "trustStore": ["<base64-encoded DER certificate>"]
 }
 ```
 
