@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "x-wsdl-version": "1.0.0",
   "info": {
-    "title": "Konnektor 6.0.1 and Consumer 1.2.1",
-    "version": "Konnektor 6.0.1, Consumer 1.2.1",
+    "title": "Konnektor 6.0.1 and Consumer 1.2.1, 1.1.0, OPB5",
+    "version": "Konnektor 6.0.1, Consumer 1.2.1, 1.1.0, OPB5",
     "description": "Conversion of the WSDL to OpenAPI 3.1"
   },
   "x-wsdl-services": [
@@ -1384,6 +1384,176 @@
               },
               "output": {
                 "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService32.SignPlainResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SignatureService",
+      "targetNamespace": "http://ws.gematik.de/consumer/SignatureService/WSDL/v3.1",
+      "targetPackage": "de.gematik.ws.consumer.SignatureService31",
+      "ports": [
+        {
+          "name": "SignatureServicePort",
+          "bindingType": "soap11",
+          "address": "https://ti-consumer/signatureservice",
+          "operations": [
+            {
+              "name": "VerifyDocument",
+              "soapAction": "http://ws.gematik.de/consumer/SignatureService/v3.1#VerifyDocument",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.VerifyDocument"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.VerifyDocumentResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            },
+            {
+              "name": "SignDocument",
+              "soapAction": "http://ws.gematik.de/consumer/SignatureService/v3.1#SignDocument",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.SignDocument"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.SignDocumentResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            },
+            {
+              "name": "ExternalAuthenticate",
+              "soapAction": "http://ws.gematik.de/consumer/SignatureService/v3.1#ExternalAuthenticate",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.ExternalAuthenticate"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.ExternalAuthenticateResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SignatureService",
+      "targetNamespace": "http://ws.gematik.de/consumer/SignatureService/WSDL/v3.0",
+      "targetPackage": "de.gematik.ws.consumer.SignatureService30",
+      "ports": [
+        {
+          "name": "SignatureServicePort",
+          "bindingType": "soap11",
+          "address": "https://ti-consumer/signatureservice",
+          "operations": [
+            {
+              "name": "VerifyDocument",
+              "soapAction": "http://ws.gematik.de/consumer/SignatureService/v3.0#VerifyDocument",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.VerifyDocument"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.VerifyDocumentResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            },
+            {
+              "name": "SignDocument",
+              "soapAction": "http://ws.gematik.de/consumer/SignatureService/v3.0#SignDocument",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.SignDocument"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.SignDocumentResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            },
+            {
+              "name": "ExternalAuthenticate",
+              "soapAction": "http://ws.gematik.de/consumer/SignatureService/v3.0#ExternalAuthenticate",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.ExternalAuthenticate"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.ExternalAuthenticateResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CertificateService",
+      "targetNamespace": "http://ws.gematik.de/consumer/CertificateService/WSDL/v3.0",
+      "targetPackage": "de.gematik.ws.consumer.CertificateService300",
+      "ports": [
+        {
+          "name": "CertificateServicePort",
+          "bindingType": "soap11",
+          "address": "https://ti-consumer/certificateservice",
+          "operations": [
+            {
+              "name": "ReadCertificate",
+              "soapAction": "http://ws.gematik.de/consumer/CertificateService/v3.0#ReadCertificate",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.CertificateService300.ReadCertificate"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.CertificateService300.ReadCertificateResponse"
+              },
+              "faults": {
+                "FaultMessage": {
+                  "soapBody": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+                }
+              }
+            },
+            {
+              "name": "VerifyCertificate",
+              "soapAction": "http://ws.gematik.de/consumer/CertificateService/v3.0#VerifyCertificate",
+              "style": "document",
+              "input": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.CertificateService300.VerifyCertificate"
+              },
+              "output": {
+                "soapBody": "#/components/schemas/de.gematik.ws.consumer.CertificateService300.VerifyCertificateResponse"
               },
               "faults": {
                 "FaultMessage": {
@@ -18148,6 +18318,1432 @@
           "highLevelResult",
           "timestampType",
           "timestamp"
+        ]
+      },
+      "de.gematik.ws.consumer.SignatureService31.SignDocument": {
+        "type": "object",
+        "properties": {
+          "privateKeyOnCard": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.EncryptionService30.PrivateKeyOnCard"
+          },
+          "signRequest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.SignRequest"
+            }
+          }
+        },
+        "required": [
+          "privateKeyOnCard",
+          "signRequest"
+        ],
+        "xml": {
+          "name": "SignDocument",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.SignRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "xml": {
+              "name": "RequestID",
+              "attribute": true
+            }
+          },
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "signatureType": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
+              },
+              "properties": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Properties"
+              },
+              "includeEnvelopedContent": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.IncludeEContent"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            }
+          },
+          "document": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.Document"
+          }
+        },
+        "required": [
+          "requestId",
+          "document"
+        ],
+        "xml": {
+          "name": "SignRequest",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.SignatureSchemes": {
+        "type": "string",
+        "xml": {
+          "name": "SignatureSchemes",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        },
+        "enum": [
+          "RSASSA-PSS",
+          "RSASSA-PKCS1-v1_5"
+        ]
+      },
+      "de.gematik.ws.consumer.SignatureService31.DocumentWithSignature": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.DocumentType",
+        "xml": {
+          "name": "DocumentWithSignature",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.SignDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "signResponse": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.SignResponse"
+            }
+          }
+        },
+        "required": [
+          "signResponse"
+        ],
+        "xml": {
+          "name": "SignDocumentResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.SignResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "xml": {
+              "name": "RequestID",
+              "attribute": true
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "optionalOutputs": {
+            "type": "object",
+            "properties": {
+              "documentWithSignature": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.DocumentWithSignature"
+              },
+              "verificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
+              }
+            },
+            "xml": {
+              "name": "OptionalOutputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            }
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "required": [
+          "requestId",
+          "status"
+        ],
+        "xml": {
+          "name": "SignResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.VerifyDocument": {
+        "type": "object",
+        "properties": {
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "verifyManifests": {
+                "type": "string",
+                "format": "xml",
+                "xml": {
+                  "name": "VerifyManifests",
+                  "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+                }
+              },
+              "useVerificationTime": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.UseVerificationTime"
+              },
+              "additionalKeyInfo": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.AdditionalKeyInfo"
+              },
+              "returnVerificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.ReturnVerificationReport"
+              },
+              "schemas": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Schemas"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            }
+          },
+          "document": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.Document"
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "xml": {
+          "name": "VerifyDocument",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.UseVerificationTime": {
+        "$ref": "#/components/schemas/oasis.names.tc.dss10.core.UseVerificationTimeType",
+        "xml": {
+          "name": "UseVerificationTime",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.VerifyDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "verificationResult": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.VerificationResultType",
+            "xml": {
+              "name": "VerificationResult",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            }
+          },
+          "optionalOutputs": {
+            "type": "object",
+            "properties": {
+              "verifyManifestResults": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.VerifyManifestResults"
+              },
+              "verificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
+              }
+            },
+            "xml": {
+              "name": "OptionalOutputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "verificationResult"
+        ],
+        "xml": {
+          "name": "VerifyDocumentResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.ExternalAuthenticate": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.CardHandle"
+          },
+          "binaryString": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.BinaryString"
+          }
+        },
+        "required": [
+          "cardHandle",
+          "binaryString"
+        ],
+        "xml": {
+          "name": "ExternalAuthenticate",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.ExternalAuthenticateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "xml": {
+          "name": "ExternalAuthenticateResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.Deselected": {
+        "type": "string",
+        "format": "xml",
+        "xml": {
+          "name": "Deselected",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.SignatureForm": {
+        "type": "string",
+        "xml": {
+          "name": "SignatureForm",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        },
+        "enum": [
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:BES",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-T",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-C",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X-L"
+        ]
+      },
+      "de.gematik.ws.consumer.SignatureService31.IncludeEContent": {
+        "type": "boolean",
+        "xml": {
+          "name": "IncludeEContent",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.Document": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.DocumentType",
+        "xml": {
+          "name": "Document",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.BinaryString": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService31.BinaryDocumentType",
+        "xml": {
+          "name": "BinaryString",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.ShortText": {
+        "type": "string",
+        "maxLength": 1000,
+        "xml": {
+          "name": "ShortText",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.CounterSignatureMarker": {
+        "type": "object",
+        "properties": {
+          "signatureValueReference": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "idRef": {
+                  "type": "string",
+                  "xml": {
+                    "name": "IdRef",
+                    "attribute": true
+                  }
+                }
+              },
+              "xml": {
+                "name": "SignatureValueReference",
+                "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+              }
+            }
+          }
+        },
+        "required": [
+          "signatureValueReference"
+        ],
+        "xml": {
+          "name": "CounterSignatureMarker",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.DisplayableAttributes": {
+        "type": "object",
+        "properties": {
+          "displayableAttribute": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "xml": {
+                    "name": "Key",
+                    "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+                  }
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 8000,
+                  "xml": {
+                    "name": "Value",
+                    "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+                  }
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "xml": {
+                "name": "DisplayableAttribute",
+                "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+              }
+            }
+          }
+        },
+        "required": [
+          "displayableAttribute"
+        ],
+        "xml": {
+          "name": "DisplayableAttributes",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.ReferenceToSignerCertificate": {
+        "type": "boolean",
+        "xml": {
+          "name": "ReferenceToSignerCertificate",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.X509DataInfoList": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.X509DataInfoListType",
+        "xml": {
+          "name": "X509DataInfoList",
+          "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.CheckCertificateDetails": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.CheckCertificateDetailsType",
+        "xml": {
+          "name": "CheckCertificateDetails",
+          "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.X509Certificate": {
+        "type": "string",
+        "format": "byte",
+        "xml": {
+          "name": "X509Certificate",
+          "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.DocumentType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "xml": {
+              "name": "ID",
+              "attribute": true
+            }
+          },
+          "refUri": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefURI",
+              "attribute": true
+            }
+          },
+          "refType": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefType",
+              "attribute": true
+            }
+          },
+          "schemaRefs": {
+            "type": "string",
+            "xml": {
+              "name": "SchemaRefs",
+              "attribute": true
+            }
+          },
+          "shortText": {
+            "type": "string",
+            "xml": {
+              "name": "ShortText",
+              "attribute": true
+            }
+          },
+          "base64Xml": {
+            "type": "string",
+            "format": "byte",
+            "xml": {
+              "name": "Base64XML",
+              "namespace": "http://ws.gematik.de/consumer/ConsumerCommon/v2.0"
+            }
+          },
+          "base64Data": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
+          }
+        },
+        "xml": {
+          "x-extends": [
+            "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.DocumentType",
+            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
+          ],
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.BinaryDocumentType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "xml": {
+              "name": "ID",
+              "attribute": true
+            }
+          },
+          "refUri": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefURI",
+              "attribute": true
+            }
+          },
+          "refType": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefType",
+              "attribute": true
+            }
+          },
+          "schemaRefs": {
+            "type": "string",
+            "xml": {
+              "name": "SchemaRefs",
+              "attribute": true
+            }
+          },
+          "base64Data": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
+          }
+        },
+        "required": [
+          "base64Data"
+        ],
+        "xml": {
+          "x-extends": [
+            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
+          ],
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService31.VerificationResultType": {
+        "type": "object",
+        "properties": {
+          "highLevelResult": {
+            "type": "string",
+            "xml": {
+              "name": "HighLevelResult",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            },
+            "enum": [
+              "VALID",
+              "INCONCLUSIVE",
+              "INVALID"
+            ]
+          },
+          "timestampType": {
+            "type": "string",
+            "xml": {
+              "name": "TimestampType",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            },
+            "enum": [
+              "SIGNATURE_EMBEDDED_TIMESTAMP",
+              "QUALIFIED_TIMESTAMP",
+              "USER_DEFINED_TIMESTAMP",
+              "SYSTEM_TIMESTAMP"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "xml": {
+              "name": "Timestamp",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.1"
+            }
+          }
+        },
+        "required": [
+          "highLevelResult",
+          "timestampType",
+          "timestamp"
+        ]
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.CertRefEnum": {
+        "type": "string",
+        "enum": [
+          "C.AUT"
+        ]
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.CheckCertificateDetailEnum": {
+        "type": "string",
+        "enum": [
+          "CERT_SIG_ERROR",
+          "BUILD_CHAIN_FAILED",
+          "CHECK_REVOCATION_FAILED",
+          "CERT_REVOKED",
+          "CERT_EXPIRED",
+          "CERT_BAD_FORMAT",
+          "POLICY_ERROR",
+          "QC_STATEMENT_ERROR",
+          "WRONG_ROLE",
+          "UNKNOWN_CRITICAL_EXTENSIONS",
+          "CERT_REVOKED_AFTER",
+          "NO_REVOCATION_CHECK",
+          "TSL_OUT_OF_DATE",
+          "QUALIFIED"
+        ]
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.CheckCertificateDetailsType": {
+        "type": "object",
+        "properties": {
+          "checkCertificateDetail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.CheckCertificateDetailEnum",
+              "xml": {
+                "name": "CheckCertificateDetail",
+                "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+              }
+            }
+          }
+        },
+        "xml": {
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.consumer.CertificateServiceCommon20.X509DataInfoListType": {
+        "type": "object",
+        "properties": {
+          "x509DataInfo": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "certRef": {
+                  "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.CertRefEnum",
+                  "xml": {
+                    "name": "CertRef",
+                    "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+                  }
+                },
+                "x509Data": {
+                  "type": "object",
+                  "properties": {
+                    "x509IssuerSerial": {
+                      "type": "object",
+                      "properties": {
+                        "x509IssuerName": {
+                          "type": "string",
+                          "xml": {
+                            "name": "X509IssuerName",
+                            "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+                          }
+                        },
+                        "x509SerialNumber": {
+                          "type": "string",
+                          "xml": {
+                            "name": "X509SerialNumber",
+                            "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+                          }
+                        }
+                      },
+                      "required": [
+                        "x509IssuerName",
+                        "x509SerialNumber"
+                      ],
+                      "xml": {
+                        "name": "X509IssuerSerial",
+                        "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+                      }
+                    },
+                    "x509SubjectName": {
+                      "type": "string",
+                      "xml": {
+                        "name": "X509SubjectName",
+                        "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+                      }
+                    },
+                    "x509Certificate": {
+                      "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.X509Certificate"
+                    }
+                  },
+                  "required": [
+                    "x509IssuerSerial",
+                    "x509SubjectName",
+                    "x509Certificate"
+                  ],
+                  "xml": {
+                    "name": "X509Data",
+                    "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+                  }
+                }
+              },
+              "required": [
+                "certRef"
+              ],
+              "xml": {
+                "name": "X509DataInfo",
+                "namespace": "http://ws.gematik.de/consumer/CertificateServiceCommon/v2.0"
+              }
+            }
+          }
+        },
+        "required": [
+          "x509DataInfo"
+        ],
+        "xml": {
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.SignDocument": {
+        "type": "object",
+        "properties": {
+          "privateKeyOnCard": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.EncryptionService30.PrivateKeyOnCard"
+          },
+          "signRequest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.SignRequest"
+            }
+          }
+        },
+        "required": [
+          "privateKeyOnCard",
+          "signRequest"
+        ],
+        "xml": {
+          "name": "SignDocument",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.SignRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "xml": {
+              "name": "RequestID",
+              "attribute": true
+            }
+          },
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "signatureType": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
+              },
+              "properties": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Properties"
+              },
+              "includeEnvelopedContent": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.IncludeEContent"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          },
+          "document": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.Document"
+          }
+        },
+        "required": [
+          "requestId",
+          "document"
+        ],
+        "xml": {
+          "name": "SignRequest",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.SignatureSchemes": {
+        "type": "string",
+        "xml": {
+          "name": "SignatureSchemes",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        },
+        "enum": [
+          "RSASSA-PSS",
+          "RSASSA-PKCS1-v1_5"
+        ]
+      },
+      "de.gematik.ws.consumer.SignatureService30.DocumentWithSignature": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.DocumentType",
+        "xml": {
+          "name": "DocumentWithSignature",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.SignDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "signResponse": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.SignResponse"
+            }
+          }
+        },
+        "required": [
+          "signResponse"
+        ],
+        "xml": {
+          "name": "SignDocumentResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.SignResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "xml": {
+              "name": "RequestID",
+              "attribute": true
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "optionalOutputs": {
+            "type": "object",
+            "properties": {
+              "documentWithSignature": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.DocumentWithSignature"
+              },
+              "verificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
+              }
+            },
+            "xml": {
+              "name": "OptionalOutputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "required": [
+          "requestId",
+          "status"
+        ],
+        "xml": {
+          "name": "SignResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.VerifyDocument": {
+        "type": "object",
+        "properties": {
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "verifyManifests": {
+                "type": "string",
+                "format": "xml",
+                "xml": {
+                  "name": "VerifyManifests",
+                  "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+                }
+              },
+              "useVerificationTime": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.UseVerificationTime"
+              },
+              "additionalKeyInfo": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.AdditionalKeyInfo"
+              },
+              "returnVerificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.ReturnVerificationReport"
+              },
+              "schemas": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Schemas"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          },
+          "document": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.Document"
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "xml": {
+          "name": "VerifyDocument",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.UseVerificationTime": {
+        "$ref": "#/components/schemas/oasis.names.tc.dss10.core.UseVerificationTimeType",
+        "xml": {
+          "name": "UseVerificationTime",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.VerifyDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "verificationResult": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.VerificationResultType",
+            "xml": {
+              "name": "VerificationResult",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          },
+          "optionalOutputs": {
+            "type": "object",
+            "properties": {
+              "verifyManifestResults": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.VerifyManifestResults"
+              },
+              "verificationReport": {
+                "$ref": "#/components/schemas/oasis.names.tc.dssx10.profiles.verificationreport.VerificationReport"
+              }
+            },
+            "xml": {
+              "name": "OptionalOutputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "verificationResult"
+        ],
+        "xml": {
+          "name": "VerifyDocumentResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.ExternalAuthenticate": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.CardHandle"
+          },
+          "optionalInputs": {
+            "type": "object",
+            "properties": {
+              "signatureType": {
+                "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureType"
+              },
+              "signatureSchemes": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.SignatureSchemes"
+              }
+            },
+            "xml": {
+              "name": "OptionalInputs",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          },
+          "binaryString": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.BinaryString"
+          }
+        },
+        "required": [
+          "cardHandle",
+          "binaryString"
+        ],
+        "xml": {
+          "name": "ExternalAuthenticate",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.ExternalAuthenticateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "signatureObject": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.SignatureObject"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "xml": {
+          "name": "ExternalAuthenticateResponse",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.Deselected": {
+        "type": "string",
+        "format": "xml",
+        "xml": {
+          "name": "Deselected",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.SignatureForm": {
+        "type": "string",
+        "xml": {
+          "name": "SignatureForm",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        },
+        "enum": [
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:BES",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-T",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-C",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X",
+          "urn:oasis:names:tc:dss:1.0:profiles:AdES:forms:ES-X-L"
+        ]
+      },
+      "de.gematik.ws.consumer.SignatureService30.IncludeEContent": {
+        "type": "boolean",
+        "xml": {
+          "name": "IncludeEContent",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.Document": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.DocumentType",
+        "xml": {
+          "name": "Document",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.BinaryString": {
+        "$ref": "#/components/schemas/de.gematik.ws.consumer.SignatureService30.BinaryDocumentType",
+        "xml": {
+          "name": "BinaryString",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.ShortText": {
+        "type": "string",
+        "maxLength": 1000,
+        "xml": {
+          "name": "ShortText",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.CounterSignatureMarker": {
+        "type": "object",
+        "properties": {
+          "signatureValueReference": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "idRef": {
+                  "type": "string",
+                  "xml": {
+                    "name": "IdRef",
+                    "attribute": true
+                  }
+                }
+              },
+              "xml": {
+                "name": "SignatureValueReference",
+                "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+              }
+            }
+          }
+        },
+        "required": [
+          "signatureValueReference"
+        ],
+        "xml": {
+          "name": "CounterSignatureMarker",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.DisplayableAttributes": {
+        "type": "object",
+        "properties": {
+          "displayableAttribute": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "xml": {
+                    "name": "Key",
+                    "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+                  }
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 8000,
+                  "xml": {
+                    "name": "Value",
+                    "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+                  }
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "xml": {
+                "name": "DisplayableAttribute",
+                "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+              }
+            }
+          }
+        },
+        "required": [
+          "displayableAttribute"
+        ],
+        "xml": {
+          "name": "DisplayableAttributes",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.ReferenceToSignerCertificate": {
+        "type": "boolean",
+        "xml": {
+          "name": "ReferenceToSignerCertificate",
+          "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.DocumentType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "xml": {
+              "name": "ID",
+              "attribute": true
+            }
+          },
+          "refUri": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefURI",
+              "attribute": true
+            }
+          },
+          "refType": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefType",
+              "attribute": true
+            }
+          },
+          "schemaRefs": {
+            "type": "string",
+            "xml": {
+              "name": "SchemaRefs",
+              "attribute": true
+            }
+          },
+          "shortText": {
+            "type": "string",
+            "xml": {
+              "name": "ShortText",
+              "attribute": true
+            }
+          },
+          "base64Xml": {
+            "type": "string",
+            "format": "byte",
+            "xml": {
+              "name": "Base64XML",
+              "namespace": "http://ws.gematik.de/consumer/ConsumerCommon/v2.0"
+            }
+          },
+          "base64Data": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
+          }
+        },
+        "xml": {
+          "x-extends": [
+            "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.DocumentType",
+            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
+          ],
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.BinaryDocumentType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "xml": {
+              "name": "ID",
+              "attribute": true
+            }
+          },
+          "refUri": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefURI",
+              "attribute": true
+            }
+          },
+          "refType": {
+            "type": "string",
+            "format": "uri",
+            "xml": {
+              "name": "RefType",
+              "attribute": true
+            }
+          },
+          "schemaRefs": {
+            "type": "string",
+            "xml": {
+              "name": "SchemaRefs",
+              "attribute": true
+            }
+          },
+          "base64Data": {
+            "$ref": "#/components/schemas/oasis.names.tc.dss10.core.Base64Data"
+          }
+        },
+        "required": [
+          "base64Data"
+        ],
+        "xml": {
+          "x-extends": [
+            "#/components/schemas/oasis.names.tc.dss10.core.DocumentBaseType"
+          ],
+          "x-is-base": true
+        }
+      },
+      "de.gematik.ws.consumer.SignatureService30.VerificationResultType": {
+        "type": "object",
+        "properties": {
+          "highLevelResult": {
+            "type": "string",
+            "xml": {
+              "name": "HighLevelResult",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            },
+            "enum": [
+              "VALID",
+              "INCONCLUSIVE",
+              "INVALID"
+            ]
+          },
+          "timestampType": {
+            "type": "string",
+            "xml": {
+              "name": "TimestampType",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            },
+            "enum": [
+              "SIGNATURE_EMBEDDED_TIMESTAMP",
+              "QUALIFIED_TIMESTAMP",
+              "USER_DEFINED_TIMESTAMP",
+              "SYSTEM_TIMESTAMP"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "xml": {
+              "name": "Timestamp",
+              "namespace": "http://ws.gematik.de/consumer/SignatureService/v3.0"
+            }
+          }
+        },
+        "required": [
+          "highLevelResult",
+          "timestampType",
+          "timestamp"
+        ]
+      },
+      "de.gematik.ws.consumer.CertificateService300.ReadCertificate": {
+        "type": "object",
+        "properties": {
+          "cardHandle": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.CardHandle"
+          },
+          "certRefList": {
+            "type": "object",
+            "properties": {
+              "certRef": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "xml": {
+                    "name": "CertRef",
+                    "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+                  }
+                }
+              }
+            },
+            "required": [
+              "certRef"
+            ],
+            "xml": {
+              "name": "CertRefList",
+              "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+            }
+          },
+          "crypt": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateService300.CryptType",
+            "xml": {
+              "name": "Crypt",
+              "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+            }
+          }
+        },
+        "required": [
+          "cardHandle",
+          "certRefList"
+        ],
+        "xml": {
+          "name": "ReadCertificate",
+          "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateService300.ReadCertificateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "x509DataInfoList": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.X509DataInfoList"
+          }
+        },
+        "required": [
+          "status",
+          "x509DataInfoList"
+        ],
+        "xml": {
+          "name": "ReadCertificateResponse",
+          "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateService300.VerifyCertificate": {
+        "type": "object",
+        "properties": {
+          "x509Certificate": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateServiceCommon20.X509Certificate"
+          },
+          "verificationTime": {
+            "type": "string",
+            "format": "date-time",
+            "xml": {
+              "name": "VerificationTime",
+              "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+            }
+          }
+        },
+        "required": [
+          "x509Certificate"
+        ],
+        "xml": {
+          "name": "VerifyCertificate",
+          "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateService300.VerifyCertificateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/de.gematik.ws.consumer.ConsumerCommon20.Status"
+          },
+          "verificationStatus": {
+            "type": "object",
+            "properties": {
+              "verificationResult": {
+                "$ref": "#/components/schemas/de.gematik.ws.consumer.CertificateService300.VerificationResultType",
+                "xml": {
+                  "name": "VerificationResult",
+                  "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+                }
+              },
+              "error": {
+                "$ref": "#/components/schemas/de.gematik.ws.tel.error20.Error"
+              }
+            },
+            "required": [
+              "verificationResult"
+            ],
+            "xml": {
+              "name": "VerificationStatus",
+              "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+            }
+          },
+          "roleList": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 100,
+                  "xml": {
+                    "name": "Role",
+                    "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+                  }
+                }
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "xml": {
+              "name": "RoleList",
+              "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "verificationStatus",
+          "roleList"
+        ],
+        "xml": {
+          "name": "VerifyCertificateResponse",
+          "namespace": "http://ws.gematik.de/consumer/CertificateService/v3.0"
+        }
+      },
+      "de.gematik.ws.consumer.CertificateService300.CryptType": {
+        "type": "string",
+        "enum": [
+          "RSA",
+          "ECC"
+        ]
+      },
+      "de.gematik.ws.consumer.CertificateService300.VerificationResultType": {
+        "type": "string",
+        "enum": [
+          "VALID",
+          "INCONCLUSIVE",
+          "INVALID"
         ]
       }
     }

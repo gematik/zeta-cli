@@ -148,7 +148,7 @@ release sdk_version="":
 generate-connector:
     #!/usr/bin/env bash
     java -jar ~/Development/gematik/wsdl2openapi/generator-kotlin/app/build/libs/wsdl2openapi2kotlin.jar \
-        --file connector/Konnektor-6.0.1-Consumer-1.2.1.json \
+        --file connector/Konnektor-6.0.1-Consumer.json \
         --output connector/src/main/kotlin \
         --naming connector/naming-strategy.json
 
