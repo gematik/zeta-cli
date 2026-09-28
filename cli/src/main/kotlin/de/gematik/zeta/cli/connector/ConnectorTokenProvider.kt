@@ -1,11 +1,12 @@
 package de.gematik.zeta.cli.connector
 
-import de.gematik.connector.ConnectorClient
+import de.gematik.connector.SmcbAuthenticator
 import de.gematik.zeta.sdk.authentication.smcb.CustomConnectorApi
 import java.util.Base64
 
 /**
- * [CustomConnectorApi] that signs SMC-B subject tokens via the Konnektor behind [ConnectorClient].
+ * [CustomConnectorApi] that signs SMC-B subject tokens via a Konnektor or a Basis-Consumer, whichever
+ * [SmcbAuthenticator] the active `.kon` describes.
  *
  * zeta-sdk's [de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider] assembles the JWT and
  * calls back here for exactly two things — the same external-signer seam the DB path uses
@@ -17,10 +18,10 @@ import java.util.Base64
  *   the DER result to the JOSE R‖S form itself.
  *
  * The [cardHandle] is resolved once up front; mandant / client-system / workspace / user context is
- * already carried by the [ConnectorClient] (built from the active `.kon`), so it isn't threaded here.
+ * already carried by the Konnektor client (built from the active `.kon`), so it isn't threaded here.
  */
 class ConnectorTokenProvider(
-    private val connector: ConnectorClient,
+    private val connector: SmcbAuthenticator,
     private val cardHandle: String,
 ) : CustomConnectorApi {
 

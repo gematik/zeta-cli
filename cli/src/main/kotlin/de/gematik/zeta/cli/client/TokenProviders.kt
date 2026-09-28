@@ -1,6 +1,7 @@
 package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.UsageError
+import de.gematik.connector.Product
 import de.gematik.zeta.cli.connector.ConnectorTokenProvider
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
@@ -30,16 +31,25 @@ internal fun buildConnectorTokenProvider(
     cardHandle: String?,
     iccsn: String?,
     telematikId: String?,
-): SubjectTokenProvider = LazySubjectTokenProvider {
-    val connector = session.connector()
-    val resolvedHandle = resolveSmcbCardHandle(
-        connector = connector,
-        cardHandle = cardHandle,
-        iccsn = iccsn,
-        telematikId = telematikId,
-    )
-    log.info { "Using SMC-B card handle: $resolvedHandle" }
-    CustomSmcbTokenProvider(ConnectorTokenProvider(connector, resolvedHandle))
+): SubjectTokenProvider {
+    // A Basis-Consumer cannot enumerate its identities (no GetCards), so only a handle can name one.
+    // Checked up front so the mistake surfaces before any SDK round trip.
+    if (session.dotkon.product == Product.Consumer && cardHandle == null) {
+        throw UsageError(
+            "a Basis-Consumer (\"product\": \"consumer\") cannot look up SMC-Bs by ICCSN or Telematik-ID; " +
+                "pass --auth-connector-card-handle",
+        )
+    }
+    return LazySubjectTokenProvider {
+        val resolvedHandle = cardHandle ?: resolveSmcbCardHandle(
+            connector = session.connector(),
+            cardHandle = null,
+            iccsn = iccsn,
+            telematikId = telematikId,
+        )
+        log.info { "Using SMC-B card handle: $resolvedHandle" }
+        CustomSmcbTokenProvider(ConnectorTokenProvider(session.authenticator(), resolvedHandle))
+    }
 }
 
 /**

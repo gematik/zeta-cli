@@ -11,6 +11,8 @@ import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
 import de.gematik.zeta.cli.http.applyProxy
 import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.connector.parseDotkon
+import de.gematik.connector.Product
+import de.gematik.connector.consumerEndpoint
 import de.gematik.zeta.cli.ZetaCliktCommand
 import de.gematik.zeta.cli.http.installCurlieLogging
 import de.gematik.zeta.cli.output.OutputFormat
@@ -56,6 +58,15 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
     private fun doRun(configFile: Path) {
         log.info { "Reading .kon from $configFile" }
         val dotkon = parseDotkon(configFile.readText())
+        if (dotkon.product == Product.Consumer) {
+            // A Basis-Consumer has no service directory, so there is nothing to connect for: the
+            // configuration, with its endpoints resolved, is all there is to show.
+            when (cliConfig.outputFormat) {
+                OutputFormat.JSON -> echo(renderJson(buildJsonReport(configFile, dotkon, services = null), colorize = colorize))
+                OutputFormat.TEXT, OutputFormat.RAW -> echo(renderTextReport(configFile, dotkon, services = null))
+            }
+            return
+        }
         log.info { "Connecting to Connector at ${dotkon.url}" }
         log.debug { "Mandant=${dotkon.mandantId} Workplace=${dotkon.workplaceId} ClientSystem=${dotkon.clientSystemId}" }
 
@@ -90,8 +101,19 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
         }
     }
 
-    private fun buildJsonReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices): JsonObject = buildJsonObject {
+    private fun buildJsonReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices?): JsonObject = buildJsonObject {
         put("configuration", redactedDotkonJson(dotkon, configFile))
+        if (services == null) {
+            put("serviceEndpoints", buildJsonArray {
+                dotkon.serviceEndpoints.forEach { e ->
+                    addJsonObject {
+                        put("name", e.name)
+                        put("endpoint", dotkon.consumerEndpoint(e.name))
+                    }
+                }
+            })
+            return@buildJsonObject
+        }
         put("productInformation", buildJsonObject {
             val pti = services.productInformation.productTypeInformation
             put("productType", pti.productType)
@@ -123,13 +145,14 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
         })
     }
 
-    private fun renderTextReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices): String =
+    private fun renderTextReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices?): String =
         renderSections(colorize = colorize) {
             section("Configuration") {
                 field("File", configFile.toString())
                 field("URL", dotkon.url)
                 field("Environment", dotkon.env)
                 field("Expected host", dotkon.expectedHost)
+                if (dotkon.product == Product.Consumer) field("Product", "Basis-Consumer")
                 field("Mandant", dotkon.mandantId)
                 field("Workplace", dotkon.workplaceId)
                 field("Client system", dotkon.clientSystemId)
@@ -140,6 +163,13 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
                 }
                 if (dotkon.insecureSkipVerify) field("Insecure skip verify", "true")
                 if (dotkon.rewriteServiceEndpoints) field("Rewrite endpoints", "true")
+            }
+
+            if (services == null) {
+                section("Service endpoints") {
+                    dotkon.serviceEndpoints.forEach { e -> field(e.name, dotkon.consumerEndpoint(e.name)) }
+                }
+                return@renderSections
             }
 
             val pti = services.productInformation.productTypeInformation
@@ -179,9 +209,10 @@ private fun redactedDotkonJson(dotkon: Dotkon, sourceFile: Path): JsonObject = b
     put("url", dotkon.url)
     dotkon.env?.let { put("env", it) }
     dotkon.expectedHost?.let { put("expectedHost", it) }
-    put("mandantId", dotkon.mandantId)
-    put("workplaceId", dotkon.workplaceId)
-    put("clientSystemId", dotkon.clientSystemId)
+    if (dotkon.product == Product.Consumer) put("product", "consumer")
+    dotkon.mandantId.ifBlank { null }?.let { put("mandantId", it) }
+    dotkon.workplaceId.ifBlank { null }?.let { put("workplaceId", it) }
+    dotkon.clientSystemId.ifBlank { null }?.let { put("clientSystemId", it) }
     dotkon.userId?.let { put("userId", it) }
     put("credentials", buildJsonObject {
         when (val c = dotkon.credentials) {
