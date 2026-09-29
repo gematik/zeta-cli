@@ -1,11 +1,9 @@
 package de.gematik.zeta.cli.connector
 
-import com.github.ajalt.clikt.core.CliktError
-import de.gematik.connector.ConsumerClient
+import com.github.ajalt.clikt.core.UsageError
 import de.gematik.connector.Dotkon
-import de.gematik.connector.ConnectorClient
 import de.gematik.connector.Product
-import de.gematik.connector.SmcbAuthenticator
+import de.gematik.connector.ConnectorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
 import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.http.applyProxy
@@ -58,25 +56,10 @@ internal class ConnectorSession(
      */
     suspend fun connector(): ConnectorClient =
         cached ?: mutex.withLock {
-            if (dotkon.product == Product.Consumer) {
-                throw CliktError(
-                    "this needs a Konnektor, but the selected .kon describes a Basis-Consumer " +
-                        "(\"product\": \"consumer\"), which only supports SMC-B token signing",
-                )
-            }
             cached ?: Tracer.spanSuspend("connector.connect", attrs = mapOf("url" to dotkon.url)) {
                 ConnectorClient.connect(httpClient, dotkon)
             }.also { cached = it }
         }
-
-    /**
-     * The SMC-B signer for this `.kon`: the Konnektor client (loaded as by [connector]) or, for a
-     * Basis-Consumer, a [ConsumerClient], which has no service directory to load.
-     */
-    suspend fun authenticator(): SmcbAuthenticator =
-        if (dotkon.product == Product.Consumer) consumer else connector()
-
-    private val consumer by lazy { ConsumerClient(httpClient, dotkon) }
 
     /** Whether the Konnektor client (its SDS) has been loaded yet — the connection is established lazily. */
     fun isConnected(): Boolean = cached != null
@@ -132,9 +115,27 @@ internal fun openConnectorSession(
 ): ConnectorSession {
     log.info { "Reading .kon from $konPath" }
     val dotkon = parseDotkon(konPath.readText())
+    if (dotkon.product == Product.Consumer) {
+        throw UsageError(
+            "$konPath describes a Basis-Consumer (\"product\": \"consumer\"), not a Konnektor; " +
+                "it only signs SMC-B tokens, via --auth-method consumer",
+        )
+    }
     log.info { "Connector: ${dotkon.url}" }
+    return ConnectorSession(dotkon, dotkonHttpClient(dotkon, connectTimeout, requestTimeout, proxy))
+}
 
-    val httpClient = dotkonOkHttpClient(dotkon) {
+/**
+ * The OkHttp client for the server a `.kon` describes: its TLS settings and credentials, the CLI's
+ * timeouts, curlie wire logging, tracing and, when given, the CLI's proxy.
+ */
+internal fun dotkonHttpClient(
+    dotkon: Dotkon,
+    connectTimeout: Duration,
+    requestTimeout: Duration,
+    proxy: ProxyConfig? = null,
+): HttpClient =
+    dotkonOkHttpClient(dotkon) {
         install(HttpTimeout) {
             connectTimeoutMillis = connectTimeout.inWholeMilliseconds
             requestTimeoutMillis = requestTimeout.inWholeMilliseconds
@@ -148,6 +149,3 @@ internal fun openConnectorSession(
             }
         }
     }
-
-    return ConnectorSession(dotkon, httpClient)
-}

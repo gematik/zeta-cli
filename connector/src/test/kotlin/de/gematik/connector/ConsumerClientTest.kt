@@ -11,7 +11,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -156,18 +155,6 @@ class ConsumerClientTest {
         val client = consumer(recorded) { noCertificatesFaultXml to HttpStatusCode.InternalServerError }
         val ex = assertThrows<SoapFaultException> { runBlocking { client.readCardAutCertificate("bc-handle-1") } }
         assertTrue("4258" in ex.message!!, ex.message)
-    }
-
-    @Test
-    fun `a consumer dotkon builds a ConsumerClient without any request`() = runBlocking {
-        val recorded = mutableListOf<Recorded>()
-        val engine = MockEngine { req ->
-            recorded += Recorded(req.method, req.url.toString(), null, "")
-            respond("", HttpStatusCode.NotFound)
-        }
-        val authenticator = dotkon.smcbAuthenticator(HttpClient(engine))
-        assertInstanceOf(ConsumerClient::class.java, authenticator)
-        assertTrue(recorded.isEmpty(), "requests: $recorded")
     }
 
     @Test

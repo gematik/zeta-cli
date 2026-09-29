@@ -18,6 +18,7 @@ import de.gematik.zeta.cli.storage.zetaProfilePath
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
+import java.io.Closeable
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
 
@@ -36,7 +37,7 @@ internal sealed class SmcbCardId {
 }
 
 /**
- * Common base for the two auth-method groups. Sealed so `--auth-method`'s [groupChoice]
+ * Common base for the auth-method groups. Sealed so `--auth-method`'s [groupChoice]
  * resolves to a closed set and downstream `when` is exhaustive.
  */
 internal sealed class AuthMethodOptions(name: String, help: String) : OptionGroup(name, help)
@@ -103,6 +104,25 @@ internal class ConnectorAuthOptions : AuthMethodOptions(
 }
 
 /**
+ * Basis-Consumer authentication: sign with an SM(C)-B identity held by the gematik Basis-Consumer the
+ * active `.kon` describes (`"product": "consumer"`). A Basis-Consumer cannot enumerate its identities,
+ * so the only way to name one is its card handle.
+ */
+internal class ConsumerAuthOptions : AuthMethodOptions(
+    name = "Zeta authentication — Basis-Consumer method",
+    help = "Sign with an SM(C)-B identity of the Basis-Consumer described by --connector-config.",
+) {
+    val cardHandle: String by option(
+        "--auth-consumer-card-handle",
+        metavar = "HANDLE",
+        envvar = "ZETA_AUTH_CONSUMER_CARD_HANDLE",
+        help = "Card handle of the identity, as assigned by the Basis-Consumer's provider. " +
+            "Default: 'HSM', the handle a provider with a single HSM-held identity uses. " +
+            "(env: ZETA_AUTH_CONSUMER_CARD_HANDLE)",
+    ).default("HSM")
+}
+
+/**
  * PKCS#12 fallback authentication: sign locally with a `.p12` keystore on disk. For headless
  * / no-Connector environments. The keystore file is required; alias and password default to
  * the conventional gematik test values.
@@ -160,6 +180,24 @@ internal class DbAuthOptions : AuthMethodOptions(
 }
 
 /**
+ * The subject-token provider for the chosen `--auth-method`, and what it holds open.
+ *
+ * [connectorSession] is the Konnektor session behind the provider, present only for
+ * `--auth-method connector`; commands that also drive the Konnektor themselves (PoPP via the
+ * Konnektor) reuse it and treat its absence as "no Konnektor". [close] releases [resources]: that
+ * session, or the HTTP client of a Basis-Consumer.
+ */
+internal data class AuthSetup(
+    val tokenProvider: SubjectTokenProvider,
+    val connectorSession: ConnectorSession? = null,
+    val resources: Closeable? = connectorSession,
+) : Closeable {
+    override fun close() {
+        resources?.close()
+    }
+}
+
+/**
  * Base for any subcommand that needs an authenticated [ZetaSdkClient]. Owns the shared
  * `--profile` option, the `--auth-method` switch + its dependent option group, and the SDK
  * construction. Subclasses override `runCommand()` and call [openSession] to receive a
@@ -167,7 +205,7 @@ internal class DbAuthOptions : AuthMethodOptions(
  *
  * Auth-method selection and per-method validation are entirely declarative: `--auth-method`
  * is a Clikt [groupChoice] that activates exactly one of [ConnectorAuthOptions] /
- * [P12AuthOptions], and each group's internal constraints (exactly-one card identifier;
+ * [ConsumerAuthOptions] / [P12AuthOptions] / [DbAuthOptions], and each group's internal constraints (exactly-one card identifier;
  * mandatory keystore file) are enforced by Clikt's native option machinery. No cross-group
  * exclusion check is needed — Clikt rejects flags from the inactive group as unknown.
  *
@@ -187,10 +225,11 @@ abstract class ZetaSessionCommand(
         metavar = "METHOD",
         envvar = "ZETA_AUTH_METHOD",
         help = "Authentication method: 'connector' (SMC-B via Konnektor — preferred), " +
-            "'p12' (PKCS#12 keystore), or 'db' (SMC-B from a zeta-stress identity database). " +
-            "(env: ZETA_AUTH_METHOD)",
+            "'consumer' (SM(C)-B via a Basis-Consumer), 'p12' (PKCS#12 keystore), or 'db' " +
+            "(SMC-B from a zeta-stress identity database). (env: ZETA_AUTH_METHOD)",
     ).groupChoice(
         "connector" to ConnectorAuthOptions(),
+        "consumer" to ConsumerAuthOptions(),
         "p12" to P12AuthOptions(),
         "db" to DbAuthOptions(),
     ).required()
@@ -198,7 +237,7 @@ abstract class ZetaSessionCommand(
     /**
      * Build a token provider, build a Zeta SDK client, run [action] with it, then clean up.
      * The second [action] argument is the Connector session backing the token provider, or
-     * `null` when the user picked the PKCS#12 path — popp-style subcommands that need to
+     * `null` for any auth method other than `connector` — popp-style subcommands that need to
      * call back into the Connector (e.g. `SecureSendAPDU`) reuse the same session here
      * rather than opening a second one.
      *
@@ -229,12 +268,9 @@ abstract class ZetaSessionCommand(
             val storagePath = zetaProfilePath(profile)
             log.info { "Persisting SDK state to $storagePath (profile: $profile, resource: $resource, scopes: $scopes)" }
 
-            val (tokenProvider, session) = buildTokenProvider()
-            try {
-                val sdk = buildSdk(resource, scopes, storagePath, tokenProvider)
-                action(sdk, session)
-            } finally {
-                session?.close()
+            buildTokenProvider().use { auth ->
+                val sdk = buildSdk(resource, scopes, storagePath, auth.tokenProvider)
+                action(sdk, auth.connectorSession)
             }
         }
     }
@@ -257,7 +293,7 @@ abstract class ZetaSessionCommand(
     // the provider + connector session once and own their lifetime, instead of the per-action
     // open/close in [openSession]. `internal` rather than `protected` because the return type's
     // `ConnectorSession` is itself `internal`.
-    internal fun buildTokenProvider(): Pair<SubjectTokenProvider, ConnectorSession?> =
+    internal fun buildTokenProvider(): AuthSetup =
         when (val opts = auth) {
             is ConnectorAuthOptions -> {
                 // .kon parsing + HttpClient construction (cheap); SDS load + SMC-B enumeration
@@ -279,20 +315,32 @@ abstract class ZetaSessionCommand(
                     iccsn = iccsn,
                     telematikId = tid,
                 )
-                provider to session
+                AuthSetup(provider, connectorSession = session)
             }
-            is P12AuthOptions -> buildP12TokenProvider(
-                file = opts.file,
-                alias = opts.alias,
-                password = opts.password,
-            ) to null
+            is ConsumerAuthOptions -> {
+                val (provider, httpClient) = buildConsumerTokenProvider(
+                    konPath = cliConfig.resolveSelectedKonFile(),
+                    cardHandle = opts.cardHandle,
+                    connectTimeout = cliConfig.connectTimeout,
+                    requestTimeout = cliConfig.requestTimeout,
+                    proxy = cliConfig.proxy,
+                )
+                AuthSetup(provider, resources = httpClient)
+            }
+            is P12AuthOptions -> AuthSetup(
+                buildP12TokenProvider(
+                    file = opts.file,
+                    alias = opts.alias,
+                    password = opts.password,
+                ),
+            )
             is DbAuthOptions -> {
                 val tid = opts.telematikId ?: dbTelematikIdOverride
                     ?: throw UsageError(
                         "--auth-method db needs a Telematik-ID: pass --auth-db-telematik-id " +
                             "(env: ZETA_AUTH_DB_TELEMATIK_ID)",
                     )
-                buildDbTokenProvider(opts.db, tid) to null
+                AuthSetup(buildDbTokenProvider(opts.db, tid))
             }
         }
 

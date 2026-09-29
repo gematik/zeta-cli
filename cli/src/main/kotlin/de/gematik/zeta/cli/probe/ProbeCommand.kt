@@ -250,7 +250,8 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
             ).start()
         }
 
-        val (tokenProvider, connectorSession) = buildTokenProvider()
+        val auth = buildTokenProvider()
+        val (tokenProvider, connectorSession) = auth
         val signingLock = Mutex().takeIf { connectorSession != null }
 
         val backoff = BackoffPolicy(backoffMax) { kind -> if (kind == ProbeKind.LOGIN) loginInterval else refreshInterval }
@@ -311,7 +312,7 @@ class ProbeCommand : ZetaSessionCommand(name = "probe") {
                 health?.close()
                 scheduler.close()
                 sessions.close()
-                runCatching { connectorSession?.close() }
+                runCatching { auth.close() }
                 runCatching { otel.close() }
                 runCatching { cliConfig.httpClient.close() }
             },

@@ -4,7 +4,7 @@
 ## Release 0.15.0
 ### changes
 - Add `zeta probe` — a long-running prober that periodically logs in to and refreshes tokens for the VSDM and PoPP endpoints, and pushes metrics and traces via OTLP. Ships with a `Dockerfile` that runs it by default. See [docs/probe.md](docs/probe.md)
-- Add Basis-Consumer support for SMC-B token signing: `"product": "consumer"` in the `.kon` with `serviceEndpoints`, used with `--auth-connector-card-handle`. `.kon` also accepts `"credentials": {"type": "none"}`. See [docs/basis-consumer.md](docs/basis-consumer.md)
+- Add Basis-Consumer support for SMC-B token signing: `"product": "consumer"` in the `.kon` with `serviceEndpoints`, used with `--auth-method consumer` (`--auth-consumer-card-handle`, default `HSM`). `.kon` also accepts `"credentials": {"type": "none"}`. See [docs/basis-consumer.md](docs/basis-consumer.md)
 - Bump `zeta-sdk` dependency to 1.3.2
 - Bump Kotlin, Ktor, kotlinx, Logback, xmlutil, BouncyCastle, sqlite-jdbc and the Gradle wrapper
 

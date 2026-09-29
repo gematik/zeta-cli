@@ -45,13 +45,17 @@ If the provider requires client authentication, replace `credentials` with one o
 
 Either pin the server with `trustStore` (the base64 DER certificates of its chain, CA and/or leaf) or,
 for a first test against a self-signed setup, set `"insecureSkipVerify": true` and drop `trustStore`;
-never use that beyond a test. Check the file, then sign in with the identity's card
-handle (the Basis-Consumer cannot look it up by ICCSN or Telematik-ID):
+never use that beyond a test. Check the file, then sign in with `--auth-method consumer`. The identity
+is named by its card handle (a Basis-Consumer cannot look it up by ICCSN or Telematik-ID), `HSM`
+unless `--auth-consumer-card-handle` says otherwise:
 
 ```sh
 zeta connector inspect
-zeta vsdm get --auth-method connector --auth-connector-card-handle <card-handle> …
+zeta vsdm get --auth-method consumer --auth-consumer-card-handle <card-handle> …
 ```
+
+Commands that need a Konnektor (`--auth-method connector`, `zeta connector get cards`,
+`zeta popp connector`) refuse a Basis-Consumer `.kon`.
 
 ## What differs from a Konnektor
 

@@ -1,6 +1,5 @@
 package de.gematik.zeta.cli.serve
 
-import de.gematik.connector.Product
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +38,6 @@ internal data class ConnectorDto(
     val mandantId: String? = null,
     val workplaceId: String? = null,
     val clientSystemId: String? = null,
-    val product: String? = null,
 )
 
 /**
@@ -53,11 +51,9 @@ internal suspend fun handleHealth(call: ApplicationCall, ctx: DaemonContext) {
             configured = true,
             connected = it.isConnected(),
             url = it.dotkon.url,
-            // A Basis-Consumer has no call context; report absence rather than empty strings.
-            mandantId = it.dotkon.mandantId.ifBlank { null },
-            workplaceId = it.dotkon.workplaceId.ifBlank { null },
-            clientSystemId = it.dotkon.clientSystemId.ifBlank { null },
-            product = if (it.dotkon.product == Product.Consumer) "consumer" else "konnektor",
+            mandantId = it.dotkon.mandantId,
+            workplaceId = it.dotkon.workplaceId,
+            clientSystemId = it.dotkon.clientSystemId,
         )
     } ?: ConnectorDto(configured = false)
 

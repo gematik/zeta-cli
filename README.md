@@ -184,7 +184,7 @@ Pick a method via `--auth-method`, then supply that method's options.
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--auth-method=connector\|p12\|db` | `ZETA_AUTH_METHOD` | required |
+| `--auth-method=connector\|consumer\|p12\|db` | `ZETA_AUTH_METHOD` | required |
 
 #### Connector method (`--auth-method connector`)
 
@@ -245,6 +245,16 @@ Dev Konnektor over basic auth (RU), TLS verification off for self-signed setups:
   "insecureSkipVerify": true
 }
 ```
+
+#### Basis-Consumer method (`--auth-method consumer`)
+
+Signs the SMC-B token via a gematik Basis-Consumer, described by a `.kon` with `"product": "consumer"`
+and selected like a Konnektor's (`--connector-config`). A Basis-Consumer cannot list its identities,
+so one is named by its card handle only. See [`docs/basis-consumer.md`](docs/basis-consumer.md).
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--auth-consumer-card-handle=<handle>` | `ZETA_AUTH_CONSUMER_CARD_HANDLE` | `HSM` |
 
 #### PKCS#12 method (`--auth-method p12`)
 

@@ -65,6 +65,8 @@ internal class DaemonContext(
     private val storagePath: Path,
     private val tokenProvider: SubjectTokenProvider,
     val connectorSession: ConnectorSession?,
+    /** What [tokenProvider] holds open ([connectorSession], or a Basis-Consumer's HTTP client); closed with the daemon. */
+    private val authResources: Closeable?,
     val env: Environment,
     val poppMint: PoppCardConfig? = null,
     /** The shared cache file, or null when `--cache-db` was not given. Owned here, closed with the daemon. */
@@ -216,7 +218,7 @@ internal class DaemonContext(
         // close WarmSession.http separately.
         cache.values.forEach { runCatching { ZetaSdkClientExtension.close(it.sdk) } }
         cache.clear()
-        runCatching { connectorSession?.close() }
+        runCatching { authResources?.close() }
         runCatching { cacheDb?.close() }
         runCatching { cliConfig.httpClient.close() }
     }

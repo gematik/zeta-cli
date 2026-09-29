@@ -1,9 +1,14 @@
 package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.UsageError
+import de.gematik.connector.ConsumerClient
 import de.gematik.connector.Product
+import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.connector.ConnectorTokenProvider
 import de.gematik.zeta.cli.connector.ConnectorSession
+import de.gematik.zeta.cli.connector.dotkonHttpClient
+import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
+import io.ktor.client.HttpClient
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
 import de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider
@@ -12,6 +17,8 @@ import de.gematik.zeta.stress.db.IdentityStore
 import de.gematik.zeta.stress.db.Db
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
+import kotlin.io.path.readText
+import kotlin.time.Duration
 
 private val log = KotlinLogging.logger {}
 
@@ -31,25 +38,42 @@ internal fun buildConnectorTokenProvider(
     cardHandle: String?,
     iccsn: String?,
     telematikId: String?,
-): SubjectTokenProvider {
-    // A Basis-Consumer cannot enumerate its identities (no GetCards), so only a handle can name one.
-    // Checked up front so the mistake surfaces before any SDK round trip.
-    if (session.dotkon.product == Product.Consumer && cardHandle == null) {
+): SubjectTokenProvider = LazySubjectTokenProvider {
+    val connector = session.connector()
+    val resolvedHandle = resolveSmcbCardHandle(
+        connector = connector,
+        cardHandle = cardHandle,
+        iccsn = iccsn,
+        telematikId = telematikId,
+    )
+    log.info { "Using SMC-B card handle: $resolvedHandle" }
+    CustomSmcbTokenProvider(ConnectorTokenProvider(connector, resolvedHandle))
+}
+
+/**
+ * Build an SMC-B [SubjectTokenProvider] that signs through the Basis-Consumer described by the
+ * `.kon` at [konPath]. The Basis-Consumer has no service directory and cannot enumerate its
+ * identities, so there is nothing to load up front and the identity is named by [cardHandle] alone.
+ * Returns the provider and the HTTP client it signs over, which the caller closes when done.
+ */
+internal fun buildConsumerTokenProvider(
+    konPath: Path,
+    cardHandle: String,
+    connectTimeout: Duration,
+    requestTimeout: Duration,
+    proxy: ProxyConfig?,
+): Pair<SubjectTokenProvider, HttpClient> {
+    log.info { "Reading .kon from $konPath" }
+    val dotkon = parseDotkon(konPath.readText())
+    if (dotkon.product != Product.Consumer) {
         throw UsageError(
-            "a Basis-Consumer (\"product\": \"consumer\") cannot look up SMC-Bs by ICCSN or Telematik-ID; " +
-                "pass --auth-connector-card-handle",
+            "--auth-method consumer needs a Basis-Consumer .kon (\"product\": \"consumer\"); " +
+                "$konPath describes a Konnektor, use --auth-method connector",
         )
     }
-    return LazySubjectTokenProvider {
-        val resolvedHandle = cardHandle ?: resolveSmcbCardHandle(
-            connector = session.connector(),
-            cardHandle = null,
-            iccsn = iccsn,
-            telematikId = telematikId,
-        )
-        log.info { "Using SMC-B card handle: $resolvedHandle" }
-        CustomSmcbTokenProvider(ConnectorTokenProvider(session.authenticator(), resolvedHandle))
-    }
+    val httpClient = dotkonHttpClient(dotkon, connectTimeout, requestTimeout, proxy)
+    log.info { "Using Basis-Consumer card handle: $cardHandle" }
+    return CustomSmcbTokenProvider(ConnectorTokenProvider(ConsumerClient(httpClient, dotkon), cardHandle)) to httpClient
 }
 
 /**

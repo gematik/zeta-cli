@@ -179,7 +179,8 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
 
         // Build the identity once (fatal if the config is wrong: bad keystore, no card, unreadable DB).
-        val (tokenProvider, connectorSession) = buildTokenProvider()
+        val auth = buildTokenProvider()
+        val (tokenProvider, connectorSession) = auth
 
         // Connector card minting reuses the auth Konnektor session (same SMC-B behind both), so it's only
         // available under --auth-method connector; connectorSession is non-null exactly then.
@@ -211,6 +212,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             zetaProfilePath(profile),
             tokenProvider,
             connectorSession,
+            auth,
             env,
             poppMint,
             cacheDb,
