@@ -132,9 +132,9 @@ tasks.named<CreateStartScripts>("startScripts") {
 // line spells out every jar, so a long install path broke the Windows launcher. A manifest-only jar
 // lists them instead (relative to itself, in Gradle's order), the launcher needs a single entry, and
 // jars left over from an older install in lib/ are never loaded. The Unix script has no such limit.
-val classpathJar by tasks.registering(Jar::class) {
-    archiveFileName.set("zeta-classpath.jar")
-    destinationDirectory.set(layout.buildDirectory.dir("classpath-jar"))
+val launcherJar by tasks.registering(Jar::class) {
+    archiveFileName.set("zeta-launcher.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("launcher-jar"))
     val runtimeFiles: FileCollection = configurations.runtimeClasspath.get()
     val mainJarName = tasks.jar.flatMap { it.archiveFileName }
     inputs.files(runtimeFiles)
@@ -145,13 +145,13 @@ val classpathJar by tasks.registering(Jar::class) {
 }
 
 distributions.named("main") {
-    contents { from(classpathJar) { into("lib") } }
+    contents { from(launcherJar) { into("lib") } }
 }
 
 tasks.named<CreateStartScripts>("startScripts") {
     doLast {
         val bat = windowsScript
-        val pathing = "set CLASSPATH=%APP_HOME%\\lib\\zeta-classpath.jar"
+        val pathing = "set CLASSPATH=%APP_HOME%\\lib\\zeta-launcher.jar"
         val rewritten = bat.readText().replace(Regex("(?m)^set CLASSPATH=.*$"), Regex.escapeReplacement(pathing))
         check(pathing in rewritten && rewritten.lines().none { it.startsWith("set CLASSPATH=") && it != pathing }) {
             "zeta.bat no longer has the expected 'set CLASSPATH=' line; the Windows launcher would exceed cmd's line limit"

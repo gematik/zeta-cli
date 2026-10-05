@@ -636,7 +636,7 @@ Run straight from sources via `:cli:run` — the `./zeta-dev` wrapper forwards a
 
 ### Release archive
 
-The release `.zip` / `.tar.gz` holds `zeta-<version>/bin/zeta` (`zeta.bat` on Windows) and the jars in `lib/`. Unpack each release into a fresh directory rather than over an older one. On Windows the launcher loads the jars through `lib/zeta-classpath.jar`, whose manifest lists exactly the jars of that release, so its command line stays short at any install path and stray jars in `lib/` are ignored.
+The release `.zip` / `.tar.gz` holds `zeta-<version>/bin/zeta` (`zeta.bat` on Windows) and the jars in `lib/`. Unpack each release into a fresh directory rather than over an older one. On Windows the launcher loads the jars through `lib/zeta-launcher.jar`, whose manifest lists exactly the jars of that release, so its command line stays short at any install path and stray jars in `lib/` are ignored.
 
 ### Local install via Gradle (no Homebrew)
 
