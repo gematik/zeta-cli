@@ -6,19 +6,20 @@ import de.gematik.connector.Product
 import de.gematik.connector.ConnectorClient
 import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
 import de.gematik.connector.parseDotkon
-import de.gematik.zeta.cli.http.applyProxy
-import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.zeta.cli.http.installCurlieLogging
 import de.gematik.zeta.cli.trace.HttpTracingPlugin
 import de.gematik.zeta.cli.trace.Span
 import de.gematik.zeta.cli.trace.Tracer
-import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.URI
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.time.Duration
@@ -103,15 +104,11 @@ internal suspend fun <T> ConnectorSession.tracedUnder(
  * [ConnectorSession.connector] call. Callers resolve [konPath] via
  * `cliConfig.resolveSelectedKonFile()` so the `active`-file fallback (and its stale-pointer
  * error hint) is applied uniformly across commands.
- *
- * @param proxy when non-null, the same proxy used by the CLI's other HTTP clients is
- *   applied to the OkHttp engine, so SOAP traffic to the Connector traverses it as well.
  */
 internal fun openConnectorSession(
     konPath: Path,
     connectTimeout: Duration,
     requestTimeout: Duration,
-    proxy: ProxyConfig? = null,
 ): ConnectorSession {
     log.info { "Reading .kon from $konPath" }
     val dotkon = parseDotkon(konPath.readText())
@@ -122,30 +119,40 @@ internal fun openConnectorSession(
         )
     }
     log.info { "Connector: ${dotkon.url}" }
-    return ConnectorSession(dotkon, dotkonHttpClient(dotkon, connectTimeout, requestTimeout, proxy))
+    return ConnectorSession(dotkon, dotkonHttpClient(dotkon, connectTimeout, requestTimeout))
 }
 
 /**
  * The OkHttp client for the server a `.kon` describes: its TLS settings and credentials, the CLI's
- * timeouts, curlie wire logging, tracing and, when given, the CLI's proxy.
+ * timeouts, curlie wire logging and tracing. `--proxy` is reserved for ZETA traffic and deliberately
+ * not applied here: a Konnektor or Basis-Consumer usually sits on the local network while ZETA services
+ * need the forward proxy. OkHttp therefore follows the JVM's default proxy selector — direct, unless
+ * `-Dhttps.proxyHost` / `-Dhttp.nonProxyHosts` (e.g. via `ZETA_OPTS`) say otherwise.
  */
 internal fun dotkonHttpClient(
     dotkon: Dotkon,
     connectTimeout: Duration,
     requestTimeout: Duration,
-    proxy: ProxyConfig? = null,
-): HttpClient =
-    dotkonOkHttpClient(dotkon) {
+): HttpClient {
+    log.info { "Route to ${dotkon.url}: ${jvmProxyRoute(dotkon.url)}" }
+    return dotkonOkHttpClient(dotkon) {
         install(HttpTimeout) {
             connectTimeoutMillis = connectTimeout.inWholeMilliseconds
             requestTimeoutMillis = requestTimeout.inWholeMilliseconds
         }
         installCurlieLogging()
         install(HttpTracingPlugin)
-        engine {
-            proxy?.let {
-                applyProxy(it)
-                applyProxyAuthenticator(it)
-            }
-        }
     }
+}
+
+/** How [url] is reached under [selector] (the JVM default unless given): `direct` or the proxy it picks. */
+internal fun jvmProxyRoute(url: String, selector: ProxySelector? = ProxySelector.getDefault()): String {
+    val uri = runCatching { URI(url) }.getOrNull() ?: return "direct"
+    val proxy = selector?.select(uri)?.firstOrNull() ?: return "direct"
+    val address = proxy.address() as? InetSocketAddress
+    return if (proxy.type() == Proxy.Type.DIRECT || address == null) {
+        "direct"
+    } else {
+        "via ${address.hostString}:${address.port} (JVM proxy properties)"
+    }
+}

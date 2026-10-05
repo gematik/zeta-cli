@@ -7,7 +7,6 @@ import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.connector.ConnectorTokenProvider
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.dotkonHttpClient
-import de.gematik.zeta.sdk.network.http.client.config.ProxyConfig
 import io.ktor.client.HttpClient
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
@@ -61,7 +60,6 @@ internal fun buildConsumerTokenProvider(
     cardHandle: String,
     connectTimeout: Duration,
     requestTimeout: Duration,
-    proxy: ProxyConfig?,
 ): Pair<SubjectTokenProvider, HttpClient> {
     log.info { "Reading .kon from $konPath" }
     val dotkon = parseDotkon(konPath.readText())
@@ -71,7 +69,7 @@ internal fun buildConsumerTokenProvider(
                 "$konPath describes a Konnektor, use --auth-method connector",
         )
     }
-    val httpClient = dotkonHttpClient(dotkon, connectTimeout, requestTimeout, proxy)
+    val httpClient = dotkonHttpClient(dotkon, connectTimeout, requestTimeout)
     log.info { "Using Basis-Consumer card handle: $cardHandle" }
     return CustomSmcbTokenProvider(ConnectorTokenProvider(ConsumerClient(httpClient, dotkon), cardHandle)) to httpClient
 }

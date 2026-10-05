@@ -32,7 +32,6 @@ class ConnectorGetCardsCommand : ZetaCliktCommand(name = "cards") {
             konPath = cliConfig.resolveSelectedKonFile(),
             connectTimeout = cliConfig.connectTimeout,
             requestTimeout = cliConfig.requestTimeout,
-            proxy = cliConfig.proxy,
         )
         try {
             val cards = runBlocking { session.traced("getAllCards") { connector().getAllCards() } }

@@ -128,6 +128,38 @@ tasks.named<CreateStartScripts>("startScripts") {
     }
 }
 
+// cmd caps a line at 8191 characters after %APP_HOME% expansion, and the generated `set CLASSPATH=`
+// line spells out every jar, so a long install path broke the Windows launcher. A manifest-only jar
+// lists them instead (relative to itself, in Gradle's order), the launcher needs a single entry, and
+// jars left over from an older install in lib/ are never loaded. The Unix script has no such limit.
+val classpathJar by tasks.registering(Jar::class) {
+    archiveFileName.set("zeta-classpath.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("classpath-jar"))
+    val runtimeFiles: FileCollection = configurations.runtimeClasspath.get()
+    val mainJarName = tasks.jar.flatMap { it.archiveFileName }
+    inputs.files(runtimeFiles)
+    inputs.property("mainJar", mainJarName)
+    doFirst {
+        manifest.attributes["Class-Path"] = (listOf(mainJarName.get()) + runtimeFiles.files.map { it.name }).joinToString(" ")
+    }
+}
+
+distributions.named("main") {
+    contents { from(classpathJar) { into("lib") } }
+}
+
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        val bat = windowsScript
+        val pathing = "set CLASSPATH=%APP_HOME%\\lib\\zeta-classpath.jar"
+        val rewritten = bat.readText().replace(Regex("(?m)^set CLASSPATH=.*$"), Regex.escapeReplacement(pathing))
+        check(pathing in rewritten && rewritten.lines().none { it.startsWith("set CLASSPATH=") && it != pathing }) {
+            "zeta.bat no longer has the expected 'set CLASSPATH=' line; the Windows launcher would exceed cmd's line limit"
+        }
+        bat.writeText(rewritten)
+    }
+}
+
 // The runtime must stay free of Prometheus and of alpha OpenTelemetry artifacts: `zeta probe` pushes via
 // OTLP only, and alpha artifacts carry no compatibility guarantee. Fails `check` with the dependency path.
 val checkRuntimeClasspath by tasks.registering {

@@ -17,6 +17,10 @@ Save this as `default.kon` in the working directory (or as
 standardised and come from the provider; a service on its own host takes a full `https://` URL as
 `path`. For the versions, see [Service versions](#service-versions).
 
+The Basis-Consumer is reached directly: `--proxy` only covers ZETA traffic. If the route to it needs a
+proxy, set the JVM proxy properties instead, as described in
+[Konnektor and Basis-Consumer behind a proxy](../README.md#konnektor-and-basis-consumer-behind-a-proxy).
+
 ```json
 {
   "version": "1.1.0",

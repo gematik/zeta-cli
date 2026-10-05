@@ -5,6 +5,8 @@
 ### changes
 - Add `zeta probe` — a long-running prober that periodically logs in to and refreshes tokens for the VSDM and PoPP endpoints, and pushes metrics and traces via OTLP. Ships with a `Dockerfile` that runs it by default. See [docs/probe.md](docs/probe.md)
 - Add Basis-Consumer support for SMC-B token signing: `"product": "consumer"` in the `.kon` with `serviceEndpoints`, used with `--auth-method consumer` (`--auth-consumer-card-handle`, default `HSM`). `.kon` also accepts `"credentials": {"type": "none"}`. See [docs/basis-consumer.md](docs/basis-consumer.md)
+- `--proxy` now covers ZETA traffic only (ZETA SDK, PoPP, VSDM, service discovery); the Konnektor and the Basis-Consumer are reached directly. If they need a proxy, set the JVM proxy properties via `ZETA_OPTS` (`-Dhttps.proxyHost`, `-Dhttp.nonProxyHosts`, …), see [Konnektor and Basis-Consumer behind a proxy](README.md#konnektor-and-basis-consumer-behind-a-proxy)
+- Fix the Windows launcher failing with "Die eingegebene Zeile ist zu lang" under a long install path: `zeta.bat` now loads the jars through `lib/zeta-classpath.jar`, so jars left in `lib/` by an older install are no longer picked up either
 - Bump `zeta-sdk` dependency to 1.3.2
 - Bump Kotlin, Ktor, kotlinx, Logback, xmlutil, BouncyCastle, sqlite-jdbc and the Gradle wrapper
 

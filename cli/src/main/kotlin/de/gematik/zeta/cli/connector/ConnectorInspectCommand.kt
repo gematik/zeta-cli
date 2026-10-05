@@ -7,21 +7,15 @@ import de.gematik.connector.ConnectorServices
 import de.gematik.connector.Credentials
 import de.gematik.connector.Dotkon
 import de.gematik.connector.ConnectorClient
-import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
-import de.gematik.zeta.cli.http.applyProxy
-import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.connector.parseDotkon
 import de.gematik.connector.Product
 import de.gematik.connector.consumerEndpoint
 import de.gematik.zeta.cli.ZetaCliktCommand
-import de.gematik.zeta.cli.http.installCurlieLogging
 import de.gematik.zeta.cli.output.OutputFormat
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderSections
-import de.gematik.zeta.cli.trace.HttpTracingPlugin
 import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.plugins.HttpTimeout
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlinx.coroutines.runBlocking
@@ -70,26 +64,7 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
         log.info { "Connecting to Connector at ${dotkon.url}" }
         log.debug { "Mandant=${dotkon.mandantId} Workplace=${dotkon.workplaceId} ClientSystem=${dotkon.clientSystemId}" }
 
-        // OkHttp engine for mutual TLS: Ktor CIO's TLS implementation drops the client
-        // certificate whenever the server's CertificateRequest doesn't enumerate a matching
-        // CA name, which most Connector-fronting nginx instances don't do. OkHttp routes
-        // through JSSE and presents what's installed.
-        val httpClient = dotkonOkHttpClient(dotkon) {
-            install(HttpTimeout) {
-                connectTimeoutMillis = cliConfig.connectTimeout.inWholeMilliseconds
-                requestTimeoutMillis = cliConfig.requestTimeout.inWholeMilliseconds
-            }
-            // -vv (DEBUG on de.gematik.zeta.http.wire) toggles full curlie-style request/response
-            // logging — same wire log format the rest of the CLI uses.
-            installCurlieLogging()
-            install(HttpTracingPlugin)
-            engine {
-                cliConfig.proxy?.let {
-                    applyProxy(it)
-                    applyProxyAuthenticator(it)
-                }
-            }
-        }
+        val httpClient = dotkonHttpClient(dotkon, cliConfig.connectTimeout, cliConfig.requestTimeout)
         val connector = httpClient.use { http ->
             runBlocking { Tracer.spanSuspend("connector.connect") { ConnectorClient.connect(http, dotkon) } }
         }

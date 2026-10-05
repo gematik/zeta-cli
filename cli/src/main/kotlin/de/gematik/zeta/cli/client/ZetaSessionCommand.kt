@@ -302,7 +302,6 @@ abstract class ZetaSessionCommand(
                     konPath = cliConfig.resolveSelectedKonFile(),
                     connectTimeout = cliConfig.connectTimeout,
                     requestTimeout = cliConfig.requestTimeout,
-                    proxy = cliConfig.proxy,
                 )
                 val (handle, iccsn, tid) = when (val id = opts.cardId) {
                     is SmcbCardId.CardHandle -> Triple(id.value, null, null)
@@ -323,7 +322,6 @@ abstract class ZetaSessionCommand(
                     cardHandle = opts.cardHandle,
                     connectTimeout = cliConfig.connectTimeout,
                     requestTimeout = cliConfig.requestTimeout,
-                    proxy = cliConfig.proxy,
                 )
                 AuthSetup(provider, resources = httpClient)
             }

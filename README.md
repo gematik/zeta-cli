@@ -164,7 +164,61 @@ Available on every command.
 
 `-v` is the one exception to the env-var rule: Clikt's repeat-count flag doesn't pair with a single env value. Use `-v`/`-vv`/`-vvv` on the CLI, or set `verbose:` in `zeta.yaml`.
 
-`--proxy` accepts `http[s]://[user:pass@]host[:port]`. Use `--proxy-user` / `--proxy-password` to keep credentials out of the URL.
+`--proxy` accepts `http[s]://[user:pass@]host[:port]`. Use `--proxy-user` / `--proxy-password` to keep credentials out of the URL. It covers ZETA traffic only — the ZETA SDK (discovery, registration, tokens, ASL), PoPP, VSDM and the service-discovery catalog. The Konnektor and the Basis-Consumer never use it; see below.
+
+#### Konnektor and Basis-Consumer behind a proxy
+
+A Konnektor or Basis-Consumer usually sits on the local network while the ZETA services need the forward proxy, so the servers described by a `.kon` file are reached **directly**, whatever `--proxy` says. If one of them does need a proxy, set the JVM's standard proxy properties through `ZETA_OPTS`:
+
+| Property | Meaning |
+| --- | --- |
+| `https.proxyHost`, `https.proxyPort` | proxy for `https://` targets |
+| `http.proxyHost`, `http.proxyPort` | proxy for `http://` targets (e.g. OCSP responders) |
+| `http.nonProxyHosts` | hosts reached directly, `\|`-separated, `*` as wildcard; applies to `http` and `https` |
+
+These properties apply to the whole process. Where `--proxy` is given it wins for ZETA traffic:
+
+| Configured | ZETA, PoPP, VSDM, service discovery | Konnektor, Basis-Consumer |
+| --- | --- | --- |
+| nothing | direct | direct |
+| `--proxy` | `--proxy` | direct |
+| `ZETA_OPTS` `-D…` | the `-D` proxy, minus `nonProxyHosts` | the `-D` proxy, minus `nonProxyHosts` |
+| both | `--proxy` | the `-D` proxy, minus `nonProxyHosts` |
+
+`-v` logs the route taken to each `.kon` server (`Route to https://…: direct` or `via host:port`). Proxies set this way cannot take credentials; `--proxy-user` / `--proxy-password` only apply to `--proxy`. `zeta.yaml` cannot carry JVM properties — they have to exist before the JVM starts.
+
+How to set `ZETA_OPTS` (or `JAVA_OPTS`, which both launchers read as well):
+
+- **macOS / Linux** (bash, zsh) — for one command, or persistently in `~/.zshrc` / `~/.bashrc`. Single quotes keep `|` and `*` away from the shell:
+
+  ```sh
+  ZETA_OPTS='-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.nonProxyHosts=localhost|*.intern' zeta …
+  export ZETA_OPTS='-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.nonProxyHosts=localhost|*.intern'
+  ```
+
+- **Homebrew** — as above; the Homebrew `zeta` wrapper passes the environment through.
+- **Windows cmd** — `zeta.bat` inserts `%ZETA_OPTS%` into the `java` command unquoted, so a `|` would be taken as a pipe. Quote the `nonProxyHosts` option **inside** the value and the whole assignment around it; `setx` stores it for new windows:
+
+  ```bat
+  set "ZETA_OPTS=-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 "-Dhttp.nonProxyHosts=localhost|*.intern""
+  setx ZETA_OPTS "-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 \"-Dhttp.nonProxyHosts=localhost|*.intern\""
+  ```
+
+- **Windows PowerShell** — the same inner quotes in a single-quoted string; the second line stores it for the user:
+
+  ```powershell
+  $env:ZETA_OPTS = '-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 "-Dhttp.nonProxyHosts=localhost|*.intern"'
+  [Environment]::SetEnvironmentVariable('ZETA_OPTS', $env:ZETA_OPTS, 'User')
+  ```
+
+- **Docker** — `docker run -e ZETA_OPTS='…'` or `environment:` in Compose. Use `ZETA_OPTS` rather than `JAVA_OPTS`, which the image uses for its memory settings.
+- **Kubernetes** — an `env` entry `ZETA_OPTS` in the container spec.
+
+To check what the JVM received, add `-XshowSettings:properties` and run `zeta version`; the three properties are listed on stderr:
+
+```sh
+ZETA_OPTS='-XshowSettings:properties -Dhttp.nonProxyHosts=localhost|*.intern' zeta version 2>&1 | grep nonProxyHosts
+```
 
 ### Profile
 
@@ -579,6 +633,10 @@ Run straight from sources via `:cli:run` — the `./zeta-dev` wrapper forwards a
 ./zeta-dev version
 ./zeta-dev discover https://popp.dev.poppservice.de
 ```
+
+### Release archive
+
+The release `.zip` / `.tar.gz` holds `zeta-<version>/bin/zeta` (`zeta.bat` on Windows) and the jars in `lib/`. Unpack each release into a fresh directory rather than over an older one. On Windows the launcher loads the jars through `lib/zeta-classpath.jar`, whose manifest lists exactly the jars of that release, so its command line stays short at any install path and stray jars in `lib/` are ignored.
 
 ### Local install via Gradle (no Homebrew)
 

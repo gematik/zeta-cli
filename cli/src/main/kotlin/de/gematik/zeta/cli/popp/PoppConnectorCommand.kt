@@ -75,7 +75,6 @@ class PoppConnectorCommand : ZetaSessionCommand(name = "connector") {
                 konPath = cliConfig.resolveSelectedKonFile(),
                 connectTimeout = cliConfig.connectTimeout,
                 requestTimeout = cliConfig.requestTimeout,
-                proxy = cliConfig.proxy,
             )
             try {
                 // sdk.ws() handles discover/register/authenticate on first call when needed,
