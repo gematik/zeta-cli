@@ -1,8 +1,34 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.UsageError
+import de.gematik.connector.ConsumerClient
+import de.gematik.connector.Product
+import de.gematik.connector.parseDotkon
 import de.gematik.zeta.cli.connector.ConnectorTokenProvider
 import de.gematik.zeta.cli.connector.ConnectorSession
+import de.gematik.zeta.cli.connector.dotkonHttpClient
+import io.ktor.client.HttpClient
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.smb.SmbTokenProvider
 import de.gematik.zeta.sdk.authentication.smcb.CustomSmcbTokenProvider
@@ -11,6 +37,8 @@ import de.gematik.zeta.stress.db.IdentityStore
 import de.gematik.zeta.stress.db.Db
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.nio.file.Path
+import kotlin.io.path.readText
+import kotlin.time.Duration
 
 private val log = KotlinLogging.logger {}
 
@@ -40,6 +68,31 @@ internal fun buildConnectorTokenProvider(
     )
     log.info { "Using SMC-B card handle: $resolvedHandle" }
     CustomSmcbTokenProvider(ConnectorTokenProvider(connector, resolvedHandle))
+}
+
+/**
+ * Build an SMC-B [SubjectTokenProvider] that signs through the Basis-Consumer described by the
+ * `.kon` at [konPath]. The Basis-Consumer has no service directory and cannot enumerate its
+ * identities, so there is nothing to load up front and the identity is named by [cardHandle] alone.
+ * Returns the provider and the HTTP client it signs over, which the caller closes when done.
+ */
+internal fun buildConsumerTokenProvider(
+    konPath: Path,
+    cardHandle: String,
+    connectTimeout: Duration,
+    requestTimeout: Duration,
+): Pair<SubjectTokenProvider, HttpClient> {
+    log.info { "Reading .kon from $konPath" }
+    val dotkon = parseDotkon(konPath.readText())
+    if (dotkon.product != Product.Consumer) {
+        throw UsageError(
+            "--auth-method consumer needs a Basis-Consumer .kon (\"product\": \"consumer\"); " +
+                "$konPath describes a Konnektor, use --auth-method connector",
+        )
+    }
+    val httpClient = dotkonHttpClient(dotkon, connectTimeout, requestTimeout)
+    log.info { "Using Basis-Consumer card handle: $cardHandle" }
+    return CustomSmcbTokenProvider(ConnectorTokenProvider(ConsumerClient(httpClient, dotkon), cardHandle)) to httpClient
 }
 
 /**

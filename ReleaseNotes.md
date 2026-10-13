@@ -1,6 +1,18 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.15.0
+### changes
+- Add `zeta probe` — a long-running prober that periodically logs in to and refreshes tokens for the VSDM and PoPP endpoints, and pushes metrics and traces via OTLP. Ships with a `Dockerfile` that runs it by default. See [docs/probe.md](docs/probe.md)
+- Add Basis-Consumer support for SMC-B token signing: `"product": "consumer"` in the `.kon` with `serviceEndpoints`, used with `--auth-method consumer` (`--auth-consumer-card-handle`, default `HSM`). `.kon` also accepts `"credentials": {"type": "none"}`. See [docs/basis-consumer.md](docs/basis-consumer.md)
+- `--proxy` now covers ZETA traffic only (ZETA SDK, PoPP, VSDM, service discovery); the Konnektor and the Basis-Consumer are reached directly. If they need a proxy, set the JVM proxy properties via `ZETA_OPTS` (`-Dhttps.proxyHost`, `-Dhttp.nonProxyHosts`, …), see [Konnektor and Basis-Consumer behind a proxy](README.md#konnektor-and-basis-consumer-behind-a-proxy)
+- Fix the Windows launcher failing with "Die eingegebene Zeile ist zu lang" under a long install path: `zeta.bat` now loads the jars through `lib/zeta-launcher.jar`, so jars left in `lib/` by an older install are no longer picked up either
+- Reuse validated OCSP/CRL responses for up to 24 hours instead of the SDK's one hour (still capped by the response's own `nextUpdate`), so a short CLI run no longer costs a revocation round-trip nearly every time
+- Konnektor responses now decode booleans as `xs:boolean`: `1` and `0` are read correctly (`1` used to come back as `false`), surrounding whitespace is ignored, and values outside the schema such as `TRUE` are rejected
+- Publish under the EUPL-1.2: add `LICENSE`, `SECURITY.md`, the license section and gematik disclaimer in the README, and the license header in every Kotlin source and build script, enforced by Spotless in `./gradlew check`
+- Bump `zeta-sdk` dependency to 1.3.2
+- Bump Kotlin, Ktor, kotlinx, Logback, xmlutil, BouncyCastle, sqlite-jdbc and the Gradle wrapper
+
 ## Release 0.14.0
 ### changes
 - Add `--cache-db FILE` to `zeta vsdm get` and `zeta serve` — a shared SQLite cache that turns the mandatory `If-None-Match` into a real conditional request: the ETag the service last gave for a patient record is sent back, and an unchanged record answers `304` and is served from the cache instead of being re-transferred. Nothing expires — every read is revalidated against the service, so the cache can never hand out a stale record. Entries are keyed by the reading SMC-B (`actorId`), endpoint, insurer (IKNR), insurant (KVNR), `profileVersion` and media type, so several identities can share one file and be counted and purged apart — attribution, **not** isolation: anyone who can read the file reads every bundle in it. Off unless the flag is given, and the file stores Versichertenstammdaten and PoPP tokens **unencrypted**, mode `0600` (its `-wal`/`-shm` sidecars included) — `--cache-max-entries` (10000) and `--cache-max-age-days` (180) bound it, and `zeta serve` now applies those bounds hourly rather than only at startup

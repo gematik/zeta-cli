@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.zeta.cli.state
 
 import de.gematik.zeta.cli.storage.ProfileDb
@@ -12,6 +33,7 @@ import de.gematik.zeta.sdk.configuration.ConfigurationStorage
 import de.gematik.zeta.sdk.configuration.ConfigurationStorageImpl
 import de.gematik.zeta.sdk.storage.ResourceScope
 import de.gematik.zeta.sdk.storage.SdkStorage
+import de.gematik.zeta.time.SystemZetaClock
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Base64
 import kotlinx.serialization.json.Json
@@ -71,7 +93,7 @@ internal data class RegistrationInfo(
  */
 internal class ProfileStores(val scope: ResourceScope, db: ProfileDb) {
     private val storage: SdkStorage = SqliteSdkStorage(scope.storageKey, db)
-    val configuration: ConfigurationStorage = ConfigurationStorageImpl(storage, scope)
+    val configuration: ConfigurationStorage = ConfigurationStorageImpl(storage, scope, clock = SystemZetaClock)
     val registration: ClientRegistrationStorage = ClientRegistrationStorageImpl(storage, scope)
     val authentication: AuthenticationStorage = AuthenticationStorageImpl(storage, scope)
 }

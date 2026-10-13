@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.connector
 
 import kotlin.io.encoding.Base64
@@ -29,6 +50,10 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  * `${VAR}` placeholders anywhere in the raw text are substituted from the environment
  * before parsing, so secrets can stay outside the file.
  *
+ * With `"product": "consumer"` the file describes a Basis-Consumer instead: it has no service
+ * directory and no call context, so `serviceEndpoints` names where each service lives and which
+ * version it speaks, and the mandant / workplace / client-system ids are not needed.
+ *
  * Pure data: certs stay as their base64 strings here so the type is free of JVM-only
  * crypto types. The TLS / PKCS#12 wiring lives in
  * [de.gematik.connector.engine.okhttp.dotkonOkHttpClient].
@@ -38,16 +63,54 @@ data class Dotkon(
     val version: String? = null,
     val url: String,
     val rewriteServiceEndpoints: Boolean = false,
-    val mandantId: String,
-    val workplaceId: String,
-    val clientSystemId: String,
+    val mandantId: String = "",
+    val workplaceId: String = "",
+    val clientSystemId: String = "",
     val userId: String? = null,
     val credentials: Credentials,
     val env: String? = null,
     val insecureSkipVerify: Boolean = false,
     val expectedHost: String? = null,
     val trustStore: List<String> = emptyList(),
+    val product: Product = Product.Konnektor,
+    val serviceEndpoints: List<ConsumerEndpoint> = emptyList(),
 )
+
+@Serializable
+enum class Product {
+    @SerialName("konnektor")
+    Konnektor,
+
+    @SerialName("consumer")
+    Consumer,
+}
+
+/**
+ * One Basis-Consumer service. [path] is either a path resolved against [Dotkon.url] or a full
+ * `http(s)://` URL, for providers that run each service on its own host. [version] is the WSDL
+ * version the service speaks (e.g. `"3.2.1"`): every version is its own XML namespace, and there
+ * is no service directory to learn it from.
+ */
+@Serializable
+data class ConsumerEndpoint(
+    val name: String,
+    val path: String,
+    val version: String = "",
+)
+
+/**
+ * Full URL of the Basis-Consumer service [name]: its configured URL, or [Dotkon.url] joined with its
+ * configured path.
+ *
+ * @throws DotkonValidationException when no `serviceEndpoints` entry is named [name].
+ */
+fun Dotkon.consumerEndpoint(name: String): String {
+    val entry = serviceEndpoints.firstOrNull { it.name == name }
+        ?: throw DotkonValidationException(listOf("serviceEndpoints has no entry named \"$name\""))
+    return if (entry.path.isAbsoluteUrl()) entry.path else url.trimEnd('/') + entry.path
+}
+
+private fun String.isAbsoluteUrl(): Boolean = startsWith("https://") || startsWith("http://")
 
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
@@ -71,6 +134,11 @@ sealed interface Credentials {
         val data: String,
         val password: String = "",
     ) : Credentials
+
+    /** No client authentication: neither a basic-auth header nor a client certificate is sent. */
+    @Serializable
+    @SerialName("none")
+    data object None : Credentials
 }
 
 /** Decoded DER bytes of every cert in [Dotkon.trustStore], in original order. */
@@ -144,11 +212,20 @@ fun expandEnvVars(text: String, envLookup: (String) -> String? = { System.getenv
 
 private val VALID_ENV_VALUES = setOf("ru", "tu", "pu")
 
+
 private fun Dotkon.validationErrors(): List<String> = buildList {
     if (url.isBlank()) add(""""url" is required""")
-    if (mandantId.isBlank()) add(""""mandantId" is required""")
-    if (workplaceId.isBlank()) add(""""workplaceId" is required""")
-    if (clientSystemId.isBlank()) add(""""clientSystemId" is required""")
+    when (product) {
+        Product.Konnektor -> {
+            if (mandantId.isBlank()) add(""""mandantId" is required""")
+            if (workplaceId.isBlank()) add(""""workplaceId" is required""")
+            if (clientSystemId.isBlank()) add(""""clientSystemId" is required""")
+            if (serviceEndpoints.isNotEmpty()) {
+                add(""""serviceEndpoints" is only valid with "product": "consumer"""")
+            }
+        }
+        Product.Consumer -> addAll(consumerEndpointErrors())
+    }
     if (env != null && env !in VALID_ENV_VALUES) {
         add(""""env" must be one of ru, tu, pu (got "$env")""")
     }
@@ -160,7 +237,39 @@ private fun Dotkon.validationErrors(): List<String> = buildList {
         is Credentials.Pkcs12 -> {
             if (c.data.isBlank()) add("credentials.data is required for pkcs12 credentials")
         }
+        Credentials.None -> {}
     }
+}
+
+private fun Dotkon.consumerEndpointErrors(): List<String> = buildList {
+    // A consumer has no service directory, so there is nothing for the rewrite to act on.
+    if (rewriteServiceEndpoints) add(""""rewriteServiceEndpoints" is not valid with "product": "consumer"""")
+    serviceEndpoints.forEachIndexed { i, e ->
+        if (e.name.isBlank()) add("serviceEndpoints[$i].name is required")
+        val p = e.path
+        val validShape = if (p.isAbsoluteUrl()) {
+            p.substringAfter("://").substringBefore('/').isNotEmpty()
+        } else {
+            p.startsWith("/") && !p.startsWith("//") && "://" !in p
+        }
+        if (!validShape || '?' in p || '#' in p) {
+            add("serviceEndpoints[$i].path must be a path starting with \"/\" or an http(s) URL (got \"$p\")")
+        }
+        val supported = CONSUMER_SERVICE_VERSIONS[e.name]
+        when {
+            e.version.isBlank() -> add("serviceEndpoints[$i].version is required")
+            supported != null && e.version !in supported -> add(
+                "serviceEndpoints[$i].version \"${e.version}\" of ${e.name} is not supported " +
+                    "(supported: ${supported.joinToString(", ")})",
+            )
+        }
+    }
+    serviceEndpoints.groupBy { it.name }
+        .filter { (name, entries) -> name.isNotBlank() && entries.size > 1 }
+        .keys.forEach { add("serviceEndpoints has more than one entry named \"$it\"") }
+    CONSUMER_SERVICE_VERSIONS.keys
+        .filter { name -> serviceEndpoints.none { it.name == name } }
+        .forEach { add("serviceEndpoints needs an entry named \"$it\" for \"product\": \"consumer\"") }
 }
 
 private fun parseFailureMessage(e: SerializationException): String {
@@ -170,12 +279,15 @@ private fun parseFailureMessage(e: SerializationException): String {
     // recognise passes through verbatim.
     return when {
         "credentials" in msg && ("'type'" in msg || "class discriminator" in msg) ->
-            "credentials.type is required (must be basic or pkcs12)"
+            "credentials.type is required (must be basic, pkcs12 or none)"
         // kotlinx 2.x: "Serializer for subclass 'X' is not found in the polymorphic scope of 'Credentials'"
         Regex("""Serializer for subclass '[^']*' is not found.*Credentials""").containsMatchIn(msg) ->
-            "credentials.type is not supported (must be basic or pkcs12)"
+            "credentials.type is not supported (must be basic, pkcs12 or none)"
         msg.contains("Polymorphic serializer was not found", ignoreCase = true) ->
-            "credentials.type is not supported (must be basic or pkcs12)"
+            "credentials.type is not supported (must be basic, pkcs12 or none)"
+        // "de.gematik.connector.Product does not contain element with name 'x' at path $.product"
+        "Product does not contain element with name" in msg ->
+            """"product" is not supported (must be konnektor or consumer)"""
         else -> msg
     }
 }

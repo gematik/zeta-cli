@@ -1,3 +1,26 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
 import org.gradle.api.tasks.application.CreateStartScripts
 import org.gradle.api.tasks.bundling.Compression
 
@@ -51,8 +74,18 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.sqlite.jdbc)
     implementation(libs.commons.compress)
+    // `zeta probe` pushes metrics and traces via OTLP. The JDK HttpClient sender replaces the OkHttp one,
+    // which targets OkHttp 4 while Ktor pulls OkHttp 5. Autoconfigure makes every OTEL_* env var work.
+    implementation(platform(libs.opentelemetry.bom))
+    implementation(libs.opentelemetry.sdk.autoconfigure)
+    implementation(libs.opentelemetry.exporter.otlp) {
+        exclude(group = "io.opentelemetry", module = "opentelemetry-exporter-sender-okhttp")
+    }
+    implementation(libs.opentelemetry.exporter.sender.jdk)
     // MockEngine for testing the service-discovery catalog client without a real HTTP call.
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.opentelemetry.sdk.testing)
 }
 
 application {
@@ -60,7 +93,12 @@ application {
     applicationName = "zeta"
     // `zeta popp standard` uses javax.smartcardio (PC/SC), whose module java.smartcardio is not part
     // of java.se and so isn't resolved by default for a classpath app — pull it in explicitly.
-    applicationDefaultJvmArgs = listOf("--add-modules", "java.smartcardio")
+    // kotlin-logging 8 announces its logger factory on stdout at first use, which would corrupt
+    // output that scripts pipe from `zeta`.
+    applicationDefaultJvmArgs = listOf(
+        "--add-modules", "java.smartcardio",
+        "-Dkotlin-logging.logStartupMessage=false",
+    )
 }
 
 val generateBuildConfig by tasks.registering {
@@ -110,3 +148,75 @@ tasks.named<CreateStartScripts>("startScripts") {
         bat.writeText("@chcp 65001 >NUL\r\n" + bat.readText())
     }
 }
+
+// cmd caps a line at 8191 characters after %APP_HOME% expansion, and the generated `set CLASSPATH=`
+// line spells out every jar, so a long install path broke the Windows launcher. A manifest-only jar
+// lists them instead (relative to itself, in Gradle's order), the launcher needs a single entry, and
+// jars left over from an older install in lib/ are never loaded. The Unix script has no such limit.
+val launcherJar by tasks.registering(Jar::class) {
+    archiveFileName.set("zeta-launcher.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("launcher-jar"))
+    val runtimeFiles: FileCollection = configurations.runtimeClasspath.get()
+    val mainJarName = tasks.jar.flatMap { it.archiveFileName }
+    inputs.files(runtimeFiles)
+    inputs.property("mainJar", mainJarName)
+    doFirst {
+        manifest.attributes["Class-Path"] = (listOf(mainJarName.get()) + runtimeFiles.files.map { it.name }).joinToString(" ")
+    }
+}
+
+distributions.named("main") {
+    contents { from(launcherJar) { into("lib") } }
+}
+
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        val bat = windowsScript
+        val pathing = "set CLASSPATH=%APP_HOME%\\lib\\zeta-launcher.jar"
+        val rewritten = bat.readText().replace(Regex("(?m)^set CLASSPATH=.*$"), Regex.escapeReplacement(pathing))
+        check(pathing in rewritten && rewritten.lines().none { it.startsWith("set CLASSPATH=") && it != pathing }) {
+            "zeta.bat no longer has the expected 'set CLASSPATH=' line; the Windows launcher would exceed cmd's line limit"
+        }
+        bat.writeText(rewritten)
+    }
+}
+
+// The runtime must stay free of Prometheus and of alpha OpenTelemetry artifacts: `zeta probe` pushes via
+// OTLP only, and alpha artifacts carry no compatibility guarantee. Fails `check` with the dependency path.
+val checkRuntimeClasspath by tasks.registering {
+    group = "verification"
+    description = "Fail if the runtime classpath contains Prometheus or alpha OpenTelemetry modules."
+    val root = configurations.runtimeClasspath.flatMap { it.incoming.resolutionResult.rootComponent }
+    doLast {
+        fun forbidden(group: String, name: String, version: String) =
+            group == "io.prometheus" || "prometheus" in name ||
+                (group == "io.opentelemetry" && version.endsWith("-alpha"))
+
+        val paths = mutableMapOf<ResolvedComponentResult, List<String>>()
+        val queue = ArrayDeque<ResolvedComponentResult>()
+        val start = root.get()
+        paths[start] = emptyList()
+        queue.add(start)
+        val offending = mutableListOf<String>()
+        while (queue.isNotEmpty()) {
+            val component = queue.removeFirst()
+            component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { dep ->
+                val next = dep.selected
+                if (next in paths) return@forEach
+                val id = next.moduleVersion ?: return@forEach
+                val coords = "${id.group}:${id.name}:${id.version}"
+                paths[next] = paths.getValue(component) + coords
+                if (forbidden(id.group, id.name, id.version)) offending += paths.getValue(next).joinToString(" -> ")
+                queue.add(next)
+            }
+        }
+        if (offending.isNotEmpty()) {
+            throw GradleException(
+                "runtimeClasspath contains forbidden modules (Prometheus or alpha OpenTelemetry):\n" +
+                    offending.joinToString("\n") { "  $it" },
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(checkRuntimeClasspath) }

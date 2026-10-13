@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.connector
 
 import de.gematik.connector.api.gematik.conn.authsignatureservice74.ExternalAuthenticateEnvelope
@@ -49,7 +70,7 @@ private val log = KotlinLogging.logger {}
  * Standard signature-type URI for ECDSA on SMC-B / HBA cards (BSI TR-03111).
  * Required by the Connector's `ExternalAuthenticate` to pick the ECC card key.
  */
-private const val ECDSA_SIGNATURE_TYPE = "urn:bsi:tr:03111:ecdsa"
+internal const val ECDSA_SIGNATURE_TYPE = "urn:bsi:tr:03111:ecdsa"
 
 /**
  * CardService version pin for `SecureSendAPDU` + `StartCardSession` / `StopCardSession`.
@@ -106,7 +127,7 @@ class ConnectorClient(
     val httpClient: HttpClient,
     val context: ConnectorContext,
     val services: ConnectorServices,
-) {
+) : SmcbAuthenticator {
     /** [ServiceProxy] for the highest-semver version of [serviceName]. */
     fun latestServiceProxy(serviceName: String): ServiceProxy {
         val (svc, ver) =
@@ -205,7 +226,7 @@ class ConnectorClient(
      * not verified, …) or [IllegalStateException] if the response is shaped unexpectedly.
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun readCardAutCertificate(cardHandle: String): ByteArray {
+    override suspend fun readCardAutCertificate(cardHandle: String): ByteArray {
         log.debug { "ReadCardCertificate cardHandle=$cardHandle certRef=C.AUT crypt=ECC" }
         val proxy = latestServiceProxy(ServiceNames.CertificateService)
         val envelope =
@@ -253,7 +274,7 @@ class ConnectorClient(
      * does not drive PIN entry from this operation.
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun externalAuthenticate(
+    override suspend fun externalAuthenticate(
         cardHandle: String,
         hash: ByteArray,
     ): ByteArray {

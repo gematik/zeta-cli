@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.zeta.cli.connector
 
 import com.github.ajalt.clikt.core.CliktError
@@ -7,19 +28,15 @@ import de.gematik.connector.ConnectorServices
 import de.gematik.connector.Credentials
 import de.gematik.connector.Dotkon
 import de.gematik.connector.ConnectorClient
-import de.gematik.connector.engine.okhttp.dotkonOkHttpClient
-import de.gematik.zeta.cli.http.applyProxy
-import de.gematik.zeta.cli.http.applyProxyAuthenticator
 import de.gematik.connector.parseDotkon
+import de.gematik.connector.Product
+import de.gematik.connector.consumerEndpoint
 import de.gematik.zeta.cli.ZetaCliktCommand
-import de.gematik.zeta.cli.http.installCurlieLogging
 import de.gematik.zeta.cli.output.OutputFormat
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderSections
-import de.gematik.zeta.cli.trace.HttpTracingPlugin
 import de.gematik.zeta.cli.trace.Tracer
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.plugins.HttpTimeout
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlinx.coroutines.runBlocking
@@ -56,29 +73,19 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
     private fun doRun(configFile: Path) {
         log.info { "Reading .kon from $configFile" }
         val dotkon = parseDotkon(configFile.readText())
+        if (dotkon.product == Product.Consumer) {
+            // A Basis-Consumer has no service directory, so there is nothing to connect for: the
+            // configuration, with its endpoints resolved, is all there is to show.
+            when (cliConfig.outputFormat) {
+                OutputFormat.JSON -> echo(renderJson(buildJsonReport(configFile, dotkon, services = null), colorize = colorize))
+                OutputFormat.TEXT, OutputFormat.RAW -> echo(renderTextReport(configFile, dotkon, services = null))
+            }
+            return
+        }
         log.info { "Connecting to Connector at ${dotkon.url}" }
         log.debug { "Mandant=${dotkon.mandantId} Workplace=${dotkon.workplaceId} ClientSystem=${dotkon.clientSystemId}" }
 
-        // OkHttp engine for mutual TLS: Ktor CIO's TLS implementation drops the client
-        // certificate whenever the server's CertificateRequest doesn't enumerate a matching
-        // CA name, which most Connector-fronting nginx instances don't do. OkHttp routes
-        // through JSSE and presents what's installed.
-        val httpClient = dotkonOkHttpClient(dotkon) {
-            install(HttpTimeout) {
-                connectTimeoutMillis = cliConfig.connectTimeout.inWholeMilliseconds
-                requestTimeoutMillis = cliConfig.requestTimeout.inWholeMilliseconds
-            }
-            // -vv (DEBUG on de.gematik.zeta.http.wire) toggles full curlie-style request/response
-            // logging — same wire log format the rest of the CLI uses.
-            installCurlieLogging()
-            install(HttpTracingPlugin)
-            engine {
-                cliConfig.proxy?.let {
-                    applyProxy(it)
-                    applyProxyAuthenticator(it)
-                }
-            }
-        }
+        val httpClient = dotkonHttpClient(dotkon, cliConfig.connectTimeout, cliConfig.requestTimeout)
         val connector = httpClient.use { http ->
             runBlocking { Tracer.spanSuspend("connector.connect") { ConnectorClient.connect(http, dotkon) } }
         }
@@ -90,8 +97,20 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
         }
     }
 
-    private fun buildJsonReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices): JsonObject = buildJsonObject {
+    private fun buildJsonReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices?): JsonObject = buildJsonObject {
         put("configuration", redactedDotkonJson(dotkon, configFile))
+        if (services == null) {
+            put("serviceEndpoints", buildJsonArray {
+                dotkon.serviceEndpoints.forEach { e ->
+                    addJsonObject {
+                        put("name", e.name)
+                        put("version", e.version)
+                        put("endpoint", dotkon.consumerEndpoint(e.name))
+                    }
+                }
+            })
+            return@buildJsonObject
+        }
         put("productInformation", buildJsonObject {
             val pti = services.productInformation.productTypeInformation
             put("productType", pti.productType)
@@ -123,13 +142,14 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
         })
     }
 
-    private fun renderTextReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices): String =
+    private fun renderTextReport(configFile: Path, dotkon: Dotkon, services: ConnectorServices?): String =
         renderSections(colorize = colorize) {
             section("Configuration") {
                 field("File", configFile.toString())
                 field("URL", dotkon.url)
                 field("Environment", dotkon.env)
                 field("Expected host", dotkon.expectedHost)
+                if (dotkon.product == Product.Consumer) field("Product", "Basis-Consumer")
                 field("Mandant", dotkon.mandantId)
                 field("Workplace", dotkon.workplaceId)
                 field("Client system", dotkon.clientSystemId)
@@ -140,6 +160,13 @@ class ConnectorInspectCommand : ZetaCliktCommand(name = "inspect") {
                 }
                 if (dotkon.insecureSkipVerify) field("Insecure skip verify", "true")
                 if (dotkon.rewriteServiceEndpoints) field("Rewrite endpoints", "true")
+            }
+
+            if (services == null) {
+                section("Service endpoints") {
+                    dotkon.serviceEndpoints.forEach { e -> field("${e.name} ${e.version}", dotkon.consumerEndpoint(e.name)) }
+                }
+                return@renderSections
             }
 
             val pti = services.productInformation.productTypeInformation
@@ -179,9 +206,10 @@ private fun redactedDotkonJson(dotkon: Dotkon, sourceFile: Path): JsonObject = b
     put("url", dotkon.url)
     dotkon.env?.let { put("env", it) }
     dotkon.expectedHost?.let { put("expectedHost", it) }
-    put("mandantId", dotkon.mandantId)
-    put("workplaceId", dotkon.workplaceId)
-    put("clientSystemId", dotkon.clientSystemId)
+    if (dotkon.product == Product.Consumer) put("product", "consumer")
+    dotkon.mandantId.ifBlank { null }?.let { put("mandantId", it) }
+    dotkon.workplaceId.ifBlank { null }?.let { put("workplaceId", it) }
+    dotkon.clientSystemId.ifBlank { null }?.let { put("clientSystemId", it) }
     dotkon.userId?.let { put("userId", it) }
     put("credentials", buildJsonObject {
         when (val c = dotkon.credentials) {
@@ -194,6 +222,7 @@ private fun redactedDotkonJson(dotkon: Dotkon, sourceFile: Path): JsonObject = b
                 put("type", "pkcs12")
                 // data + password deliberately omitted
             }
+            Credentials.None -> put("type", "none")
         }
     })
     if (dotkon.trustStore.isNotEmpty()) put("trustStoreSize", dotkon.trustStore.size)
@@ -204,4 +233,5 @@ private fun redactedDotkonJson(dotkon: Dotkon, sourceFile: Path): JsonObject = b
 private fun credentialsLabel(credentials: Credentials): String = when (credentials) {
     is Credentials.Basic -> "basic (username=${credentials.username})"
     is Credentials.Pkcs12 -> "pkcs12 client certificate"
+    Credentials.None -> "none"
 }

@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.connector
 
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -152,9 +173,9 @@ class DotkonTest {
                 envLookup = { null },
             )
         }
-        // Whatever the wording, the error should mention basic/pkcs12 to point users at valid types.
+        // Whatever the wording, the error should name every valid type.
         assertTrue(
-            ex.message!!.contains("basic") && ex.message!!.contains("pkcs12"),
+            ex.message!!.contains("basic") && ex.message!!.contains("pkcs12") && ex.message!!.contains("none"),
             "message: ${ex.message}",
         )
     }
@@ -173,5 +194,206 @@ class DotkonTest {
             envLookup = { null },
         )
         assertTrue(dk.rewriteServiceEndpoints)
+    }
+
+    @Test
+    fun `a dotkon without product is a konnektor`() {
+        val dk = parseDotkon(
+            """
+            {
+                "url": "https://k.example.com",
+                "mandantId": "M1", "workplaceId": "W1", "clientSystemId": "C1",
+                "credentials": { "type": "basic", "username": "u", "password": "p" }
+            }
+            """.trimIndent(),
+            envLookup = { null },
+        )
+        assertEquals(Product.Konnektor, dk.product)
+        assertTrue(dk.serviceEndpoints.isEmpty())
+    }
+
+    @Test
+    fun `a konnektor still needs its call context`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                """
+                {
+                    "url": "https://k.example.com",
+                    "credentials": { "type": "basic", "username": "u", "password": "p" }
+                }
+                """.trimIndent(),
+                envLookup = { null },
+            )
+        }
+        assertEquals(
+            listOf(""""mandantId" is required""", """"workplaceId" is required""", """"clientSystemId" is required"""),
+            ex.errors,
+        )
+    }
+
+    @Test
+    fun `parses none credentials`() {
+        val dk = parseDotkon(
+            """
+            {
+                "url": "https://k.example.com",
+                "mandantId": "M1", "workplaceId": "W1", "clientSystemId": "C1",
+                "credentials": { "type": "none" }
+            }
+            """.trimIndent(),
+            envLookup = { null },
+        )
+        assertEquals(Credentials.None, dk.credentials)
+        assertTrue(dk.toKeyManagers().isEmpty())
+    }
+
+    private fun consumerKon(endpoints: String, extra: String = "") =
+        """
+        {
+            "product": "consumer",
+            "url": "https://bc.example.com:8443/",
+            "serviceEndpoints": $endpoints,
+            $extra
+            "credentials": { "type": "none" }
+        }
+        """.trimIndent()
+
+    private val bothEndpoints =
+        """
+        [
+            { "name": "CertificateService", "path": "/ws/cert", "version": "3.0.1" },
+            { "name": "SignatureService", "path": "/ws/sig", "version": "3.2.1" }
+        ]
+        """.trimIndent()
+
+    @Test
+    fun `parses a consumer dotkon without call context`() {
+        val dk = parseDotkon(consumerKon(bothEndpoints), envLookup = { null })
+        assertEquals(Product.Consumer, dk.product)
+        assertEquals(
+            listOf(
+                ConsumerEndpoint("CertificateService", "/ws/cert", "3.0.1"),
+                ConsumerEndpoint("SignatureService", "/ws/sig", "3.2.1"),
+            ),
+            dk.serviceEndpoints,
+        )
+        assertEquals("https://bc.example.com:8443/ws/sig", dk.consumerEndpoint("SignatureService"))
+        assertEquals("", dk.mandantId)
+    }
+
+    @Test
+    fun `a consumer needs certificate and signature endpoints`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(consumerKon("""[{ "name": "EncryptionService", "path": "/ws/enc", "version": "3.0.1" }]"""), envLookup = { null })
+        }
+        assertTrue(ex.errors.any { "\"CertificateService\"" in it }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.any { "\"SignatureService\"" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `consumer endpoints are paths or URLs, named once`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                consumerKon(
+                    """
+                    [
+                        { "name": "CertificateService", "path": "https:///ws/cert", "version": "3.0.1" },
+                        { "name": "SignatureService", "path": "/ws/sig", "version": "3.2.1" },
+                        { "name": "SignatureService", "path": "ws/sig", "version": "3.2.1" }
+                    ]
+                    """.trimIndent(),
+                ),
+                envLookup = { null },
+            )
+        }
+        assertTrue(ex.errors.any { it.startsWith("serviceEndpoints[0].path") }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.none { it.startsWith("serviceEndpoints[1].path") }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.any { it.startsWith("serviceEndpoints[2].path") }, "errors: ${ex.errors}")
+        assertTrue(ex.errors.any { "more than one entry named \"SignatureService\"" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `a consumer service may live on its own host`() {
+        val dk = parseDotkon(
+            consumerKon(
+                """
+                [
+                    { "name": "CertificateService", "path": "https://certificate.bc.example.com/certificateservice/", "version": "3.0.0" },
+                    { "name": "SignatureService", "path": "/ws/sig", "version": "3.0.0" }
+                ]
+                """.trimIndent(),
+            ),
+            envLookup = { null },
+        )
+        assertEquals("https://certificate.bc.example.com/certificateservice/", dk.consumerEndpoint("CertificateService"))
+        assertEquals("https://bc.example.com:8443/ws/sig", dk.consumerEndpoint("SignatureService"))
+    }
+
+    @Test
+    fun `consumer endpoints name a supported version`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                consumerKon(
+                    """
+                    [
+                        { "name": "CertificateService", "path": "/ws/cert" },
+                        { "name": "SignatureService", "path": "/ws/sig", "version": "3.3.0" }
+                    ]
+                    """.trimIndent(),
+                ),
+                envLookup = { null },
+            )
+        }
+        assertTrue(ex.errors.contains("serviceEndpoints[0].version is required"), "errors: ${ex.errors}")
+        assertTrue(
+            ex.errors.any { it.startsWith("serviceEndpoints[1].version \"3.3.0\"") && "3.2.1" in it },
+            "errors: ${ex.errors}",
+        )
+    }
+
+    @Test
+    fun `serviceEndpoints are rejected for a konnektor`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                """
+                {
+                    "url": "https://k.example.com",
+                    "mandantId": "M1", "workplaceId": "W1", "clientSystemId": "C1",
+                    "serviceEndpoints": [{ "name": "SignatureService", "path": "/ws/sig", "version": "3.2.1" }],
+                    "credentials": { "type": "basic", "username": "u", "password": "p" }
+                }
+                """.trimIndent(),
+                envLookup = { null },
+            )
+        }
+        assertTrue(ex.errors.any { "serviceEndpoints" in it && "consumer" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `rewriteServiceEndpoints is rejected for a consumer`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(consumerKon(bothEndpoints, extra = """"rewriteServiceEndpoints": true,"""), envLookup = { null })
+        }
+        assertTrue(ex.errors.any { "rewriteServiceEndpoints" in it }, "errors: ${ex.errors}")
+    }
+
+    @Test
+    fun `rejects unknown product`() {
+        val ex = assertThrows(DotkonValidationException::class.java) {
+            parseDotkon(
+                """
+                {
+                    "product": "gateway",
+                    "url": "https://k.example.com",
+                    "credentials": { "type": "none" }
+                }
+                """.trimIndent(),
+                envLookup = { null },
+            )
+        }
+        assertTrue(
+            ex.message!!.contains("konnektor") && ex.message!!.contains("consumer"),
+            "message: ${ex.message}",
+        )
     }
 }

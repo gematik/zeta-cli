@@ -31,6 +31,7 @@ The binary is called `zeta` after ZETA Guard, which it started out as a client f
 | --- | --- |
 | [Quick start](docs/quickstart.md) | End-to-end: configure the Konnektor, log in, read an SMC-B, get a PoPP token, read a VSDM bundle. |
 | [`zeta serve`](docs/serve.md) | The local warm-session daemon and its HTTP API. |
+| [`zeta probe`](docs/probe.md) | The permanently running auth-flow prober: metrics and traces via OTLP, Docker. |
 | [`zeta stress`](docs/stress.md) | Load-testing ZETA Guard with a fleet of SMC-B clients. |
 | [`.kon` format](docs/kon-format.md) | The Konnektor configuration file. |
 
@@ -104,6 +105,7 @@ zeta login https://popp.dev.poppservice.de \
 
 - `zeta version` — print the CLI and `zeta-sdk` version.
 - `zeta serve` — run a local daemon holding warm sessions for one TI environment, with an HTTP API for VSDM reads and PoPP minting. See [docs/serve.md](docs/serve.md).
+- `zeta probe` — run forever, probing the login and token-refresh flows of one or more TI environments' endpoints on a schedule; pushes metrics and traces via OTLP. See [docs/probe.md](docs/probe.md).
 - `zeta stress …` — load-test ZETA Guard with a fleet of SMC-B-backed clients. See [docs/stress.md](docs/stress.md).
 
 Examples for the less obvious ones:
@@ -162,7 +164,61 @@ Available on every command.
 
 `-v` is the one exception to the env-var rule: Clikt's repeat-count flag doesn't pair with a single env value. Use `-v`/`-vv`/`-vvv` on the CLI, or set `verbose:` in `zeta.yaml`.
 
-`--proxy` accepts `http[s]://[user:pass@]host[:port]`. Use `--proxy-user` / `--proxy-password` to keep credentials out of the URL.
+`--proxy` accepts `http[s]://[user:pass@]host[:port]`. Use `--proxy-user` / `--proxy-password` to keep credentials out of the URL. It covers ZETA traffic only — the ZETA SDK (discovery, registration, tokens, ASL), PoPP, VSDM and the service-discovery catalog. The Konnektor and the Basis-Consumer never use it; see below.
+
+#### Konnektor and Basis-Consumer behind a proxy
+
+A Konnektor or Basis-Consumer usually sits on the local network while the ZETA services need the forward proxy, so the servers described by a `.kon` file are reached **directly**, whatever `--proxy` says. If one of them does need a proxy, set the JVM's standard proxy properties through `ZETA_OPTS`:
+
+| Property | Meaning |
+| --- | --- |
+| `https.proxyHost`, `https.proxyPort` | proxy for `https://` targets |
+| `http.proxyHost`, `http.proxyPort` | proxy for `http://` targets (e.g. OCSP responders) |
+| `http.nonProxyHosts` | hosts reached directly, `\|`-separated, `*` as wildcard; applies to `http` and `https` |
+
+These properties apply to the whole process. Where `--proxy` is given it wins for ZETA traffic:
+
+| Configured | ZETA, PoPP, VSDM, service discovery | Konnektor, Basis-Consumer |
+| --- | --- | --- |
+| nothing | direct | direct |
+| `--proxy` | `--proxy` | direct |
+| `ZETA_OPTS` `-D…` | the `-D` proxy, minus `nonProxyHosts` | the `-D` proxy, minus `nonProxyHosts` |
+| both | `--proxy` | the `-D` proxy, minus `nonProxyHosts` |
+
+`-v` logs the route taken to each `.kon` server (`Route to https://…: direct` or `via host:port`). Proxies set this way cannot take credentials; `--proxy-user` / `--proxy-password` only apply to `--proxy`. `zeta.yaml` cannot carry JVM properties — they have to exist before the JVM starts.
+
+How to set `ZETA_OPTS` (or `JAVA_OPTS`, which both launchers read as well):
+
+- **macOS / Linux** (bash, zsh) — for one command, or persistently in `~/.zshrc` / `~/.bashrc`. Single quotes keep `|` and `*` away from the shell:
+
+  ```sh
+  ZETA_OPTS='-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.nonProxyHosts=localhost|*.intern' zeta …
+  export ZETA_OPTS='-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.nonProxyHosts=localhost|*.intern'
+  ```
+
+- **Homebrew** — as above; the Homebrew `zeta` wrapper passes the environment through.
+- **Windows cmd** — `zeta.bat` inserts `%ZETA_OPTS%` into the `java` command unquoted, so a `|` would be taken as a pipe. Quote the `nonProxyHosts` option **inside** the value and the whole assignment around it; `setx` stores it for new windows:
+
+  ```bat
+  set "ZETA_OPTS=-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 "-Dhttp.nonProxyHosts=localhost|*.intern""
+  setx ZETA_OPTS "-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 \"-Dhttp.nonProxyHosts=localhost|*.intern\""
+  ```
+
+- **Windows PowerShell** — the same inner quotes in a single-quoted string; the second line stores it for the user:
+
+  ```powershell
+  $env:ZETA_OPTS = '-Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 "-Dhttp.nonProxyHosts=localhost|*.intern"'
+  [Environment]::SetEnvironmentVariable('ZETA_OPTS', $env:ZETA_OPTS, 'User')
+  ```
+
+- **Docker** — `docker run -e ZETA_OPTS='…'` or `environment:` in Compose. Use `ZETA_OPTS` rather than `JAVA_OPTS`, which the image uses for its memory settings.
+- **Kubernetes** — an `env` entry `ZETA_OPTS` in the container spec.
+
+To check what the JVM received, add `-XshowSettings:properties` and run `zeta version`; the three properties are listed on stderr:
+
+```sh
+ZETA_OPTS='-XshowSettings:properties -Dhttp.nonProxyHosts=localhost|*.intern' zeta version 2>&1 | grep nonProxyHosts
+```
 
 ### Profile
 
@@ -182,7 +238,7 @@ Pick a method via `--auth-method`, then supply that method's options.
 
 | Option | Env var | Default |
 | --- | --- | --- |
-| `--auth-method=connector\|p12\|db` | `ZETA_AUTH_METHOD` | required |
+| `--auth-method=connector\|consumer\|p12\|db` | `ZETA_AUTH_METHOD` | required |
 
 #### Connector method (`--auth-method connector`)
 
@@ -243,6 +299,16 @@ Dev Konnektor over basic auth (RU), TLS verification off for self-signed setups:
   "insecureSkipVerify": true
 }
 ```
+
+#### Basis-Consumer method (`--auth-method consumer`)
+
+Signs the SMC-B token via a gematik Basis-Consumer, described by a `.kon` with `"product": "consumer"`
+and selected like a Konnektor's (`--connector-config`). A Basis-Consumer cannot list its identities,
+so one is named by its card handle only. See [`docs/basis-consumer.md`](docs/basis-consumer.md).
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--auth-consumer-card-handle=<handle>` | `ZETA_AUTH_CONSUMER_CARD_HANDLE` | `HSM` |
 
 #### PKCS#12 method (`--auth-method p12`)
 
@@ -340,6 +406,32 @@ pz=$(printf '%s\n'   "$resp" | sed -n 's/^PZ: //Ip')            # the Prüfziffe
 body=$(printf '%s\n' "$resp" | sed '1,/^$/d')                   # everything after the blank line
 printf '%s\n' "$body" | jq .                                    # the FHIR bundle
 ```
+
+#### `zeta probe`
+
+A long-running service (see [docs/probe.md](docs/probe.md)); needs an `--auth-method`. Everything below is also settable through `zeta.yaml`.
+
+| Option | Env var | Default |
+| --- | --- | --- |
+| `--probe-env ENV[,ENV…]` (one or more of `dev`, `ref`, `test`, `prod`; one identity for all) | `ZETA_PROBE_ENV` | `dev` |
+| `--endpoint URL` (repeatable; env var: whitespace/comma list; belongs to the first `--probe-env`) | `ZETA_PROBE_ENDPOINTS` | — |
+| `--endpoint-scope SCOPE` (repeatable; i-th scope for the i-th endpoint, counts must match) | `ZETA_PROBE_ENDPOINT_SCOPES` | — |
+| `--endpoint-name SLUG` (repeatable, positional like the scope; optional as a whole) | `ZETA_PROBE_ENDPOINT_NAMES` | host name |
+| `--endpoint-type TYPE` (repeatable, positional like the scope; optional as a whole) | `ZETA_PROBE_ENDPOINT_TYPES` | the slug |
+| `--type-label TYPE:KEY=VALUE` (repeatable; env var: list; labels every target of that type) | `ZETA_PROBE_TYPE_LABELS` | — |
+| `--no-catalog` | `ZETA_PROBE_NO_CATALOG` | off |
+| `--popp-service-url URL` (single `--probe-env` only) | `ZETA_POPP_SERVICE_URL` | derived from the env |
+| `--login-interval DURATION` (`0`/`off` disables) | `ZETA_PROBE_LOGIN_INTERVAL` | `3h` |
+| `--refresh-interval DURATION` | `ZETA_PROBE_REFRESH_INTERVAL` | `5m` |
+| `--catalog-interval DURATION` | `ZETA_PROBE_CATALOG_INTERVAL` | `1h` |
+| `--backoff-max DURATION` (cap of the hold-off for failing targets; `0`/`off` disables) | `ZETA_PROBE_BACKOFF_MAX` | `1h` |
+| `--probe-timeout DURATION` | `ZETA_PROBE_TIMEOUT` | `2m` |
+| `--otlp-endpoint URL` (metrics and traces; OTLP/HTTP) | `OTEL_EXPORTER_OTLP_ENDPOINT` | required |
+| `--otlp-header KEY=VALUE` (repeatable) | `OTEL_EXPORTER_OTLP_HEADERS` | — |
+| `--otlp-protocol http/protobuf` (gRPC is not supported) | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `--health-host ADDR` / `--health-port PORT` (`/healthz`, `/readyz`; port `0` disables) | `ZETA_PROBE_HEALTH_HOST` / `ZETA_PROBE_HEALTH_PORT` | `0.0.0.0` / `8080` |
+
+Durations take `30s`, `5m`, `3h`, `1h30m` or ISO `PT3H`. Metrics and traces are pushed via OTLP; `OTEL_METRIC_EXPORT_INTERVAL` sets the push interval (default 30000 ms), and every other `OTEL_*` variable (certificates, mTLS, compression, resource attributes, sampler) is honoured unchanged.
 
 #### `zeta popp connector [EGK_HANDLE]`
 
@@ -518,13 +610,13 @@ A sticky option (e.g. `--connector-config`) declared at a parent depth (`zeta --
 
 ## SDK version
 
-The CLI is built against a single `zeta-sdk` version (`1.2.5`), pinned in
+The CLI is built against a single `zeta-sdk` version (`1.3.0`), pinned in
 `gradle/libs.versions.toml`. `zeta version` prints it:
 
 ```sh
 $ zeta version
 zeta-cli 0.9.0
-zeta-sdk 1.2.5
+zeta-sdk 1.3.0
 ```
 
 Override the pin at build time with `-PzetaSdkVersion=<tag>` (e.g. `latest` from mavenLocal).
@@ -541,6 +633,10 @@ Run straight from sources via `:cli:run` — the `./zeta-dev` wrapper forwards a
 ./zeta-dev version
 ./zeta-dev discover https://popp.dev.poppservice.de
 ```
+
+### Release archive
+
+The release `.zip` / `.tar.gz` holds `zeta-<version>/bin/zeta` (`zeta.bat` on Windows) and the jars in `lib/`. Unpack each release into a fresh directory rather than over an older one. On Windows the launcher loads the jars through `lib/zeta-launcher.jar`, whose manifest lists exactly the jars of that release, so its command line stays short at any install path and stray jars in `lib/` are ignored.
 
 ### Local install via Gradle (no Homebrew)
 
@@ -570,7 +666,7 @@ just demo      # render demo.gif from demo.tape (requires vhs)
 
 ### Building against a different `zeta-sdk`
 
-By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.2.5`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
+By default the CLI builds against the version of `de.gematik.zeta:zeta-sdk-jvm` pinned in `gradle/libs.versions.toml` (currently `1.3.0`, resolved from Maven Central). To swap in a local SDK build during development without editing the catalog, override the Gradle property at the command line:
 
 ```sh
 # Use whatever you publishToMavenLocal'd as `latest`
@@ -585,3 +681,23 @@ Set it persistently in `~/.gradle/gradle.properties` (`zetaSdkVersion=latest`) t
 `zeta version` prints the resolved SDK version so you always know which one shipped in the binary.
 
 The release tarball (`./gradlew :distTar`) ships two entry points from one archive — `bin/zeta` (the CLI) and `bin/zeta-stress` (the load-test tool) — over a shared `lib/`.
+
+## License
+
+Copyright 2026 gematik GmbH
+
+EUROPEAN UNION PUBLIC LICENCE v. 1.2
+
+EUPL © the European Union 2007, 2016
+
+See the [LICENSE](./LICENSE) for the specific language governing permissions and limitations under the License
+
+## Additional Notes and Disclaimer from gematik GmbH
+
+1. Copyright notice: Each published work result is accompanied by an explicit statement of the license conditions for use. These are regularly typical conditions in connection with open source or free software. Programs described/provided/linked here are free software, unless otherwise stated.
+2. Permission notice: Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+    1. The copyright notice (Item 1) and the permission notice (Item 2) shall be included in all copies or substantial portions of the Software.
+    2. The software is provided "as is" without warranty of any kind, either express or implied, including, but not limited to, the warranties of fitness for a particular purpose, merchantability, and/or non-infringement. The authors or copyright holders shall not be liable in any manner whatsoever for any damages or other claims arising from, out of or in connection with the software or the use or other dealings with the software, whether in an action of contract, tort, or otherwise.
+    3. The software is the result of research and development activities, therefore not necessarily quality assured and without the character of a liable product. For this reason, gematik does not provide any support or other user assistance (unless otherwise stated in individual cases and without justification of a legal obligation). Furthermore, there is no claim to further development and adaptation of the results to a more current state of the art.
+3. Gematik may remove published results temporarily or permanently from the place of publication at any time without prior notice or justification.
+4. Parts of this software and - in isolated cases - content such as text or images may have been developed using the support of AI tools. They are subject to the same reviews, tests, and security checks as any other contribution. The functionality of the software itself is not based on AI decisions.

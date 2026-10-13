@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.zeta.cli.serve
 
 import com.github.ajalt.clikt.core.CliktError
@@ -179,7 +200,8 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
 
         // Build the identity once (fatal if the config is wrong: bad keystore, no card, unreadable DB).
-        val (tokenProvider, connectorSession) = buildTokenProvider()
+        val auth = buildTokenProvider()
+        val (tokenProvider, connectorSession) = auth
 
         // Connector card minting reuses the auth Konnektor session (same SMC-B behind both), so it's only
         // available under --auth-method connector; connectorSession is non-null exactly then.
@@ -211,6 +233,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             zetaProfilePath(profile),
             tokenProvider,
             connectorSession,
+            auth,
             env,
             poppMint,
             cacheDb,

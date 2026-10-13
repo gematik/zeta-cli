@@ -1,3 +1,24 @@
+/*
+ * Copyright (Change Date see Readme), gematik GmbH
+ *
+ * Licensed under the EUPL, Version 1.2 or - as soon they will be approved by the
+ * European Commission – subsequent versions of the EUPL (the "Licence").
+ * You may not use this work except in compliance with the Licence.
+ *
+ * You find a copy of the Licence in the "Licence" file or at
+ * https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the Licence is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied.
+ * In case of changes by gematik GmbH find details in the "Readme" file.
+ *
+ * See the Licence for the specific language governing permissions and limitations under the Licence.
+ *
+ * *******
+ *
+ * For additional notes and disclaimer from gematik and in case of changes by gematik find details in the "Readme" file.
+ */
 package de.gematik.connector
 
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -11,6 +32,8 @@ import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import kotlin.time.measureTimedValue
 import kotlinx.serialization.Serializable
+import nl.adaptivity.xmlutil.XmlDeclMode
+import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
 import nl.adaptivity.xmlutil.serialization.XmlElement
 import nl.adaptivity.xmlutil.serialization.XmlSerialName
@@ -241,9 +264,14 @@ internal fun semverAsNumber(version: String): Int {
     return major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
 }
 
-internal val defaultXml: XML = XML {
-    autoPolymorphic = false
+// xmlutil 1.0 defaults would open every request with `<?xml version='1.1' ?>` and pretty-print it; these
+// three settings keep the bytes a Konnektor receives as they were (pinned by RequestEncodingTest).
+internal val defaultXml: XML = XML.v1 {
+    xmlDeclMode = XmlDeclMode.None
+    indentString = ""
+    xmlVersion = XmlVersion.XML10
     defaultPolicy {
+        autoPolymorphic = false
         ignoreUnknownChildren()
     }
 }
