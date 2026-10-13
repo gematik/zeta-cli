@@ -701,3 +701,9 @@ See the [LICENSE](./LICENSE) for the specific language governing permissions and
     3. The software is the result of research and development activities, therefore not necessarily quality assured and without the character of a liable product. For this reason, gematik does not provide any support or other user assistance (unless otherwise stated in individual cases and without justification of a legal obligation). Furthermore, there is no claim to further development and adaptation of the results to a more current state of the art.
 3. Gematik may remove published results temporarily or permanently from the place of publication at any time without prior notice or justification.
 4. Parts of this software and - in isolated cases - content such as text or images may have been developed using the support of AI tools. They are subject to the same reviews, tests, and security checks as any other contribution. The functionality of the software itself is not based on AI decisions.
+
+## Contact
+
+We take open source license compliance very seriously. We are always striving to achieve compliance at all times and to improve our processes.
+This software is currently being tested to ensure its technical quality and legal compliance. Your feedback is highly valued.
+If you find any issues or have any suggestions or comments, or if you see any other ways in which we can improve, please reach out to us via [GitHub Issues](https://github.com/gematik/zeta-cli/issues).
