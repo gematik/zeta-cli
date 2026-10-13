@@ -1,4 +1,5 @@
 [versions]
+spotless = "8.10.4"
 kotlin-gradle-plugin = "2.4.20"
 clikt = "5.1.0"
 kotlin-logging = "8.0.4"
@@ -47,3 +48,6 @@ opentelemetry-sdk-autoconfigure = { module = "io.opentelemetry:opentelemetry-sdk
 opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp" }
 opentelemetry-exporter-sender-jdk = { module = "io.opentelemetry:opentelemetry-exporter-sender-jdk" }
 opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing" }
+
+[plugins]
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
