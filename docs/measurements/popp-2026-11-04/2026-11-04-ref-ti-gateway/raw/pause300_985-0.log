@@ -1,0 +1,10 @@
+WARN  de.gematik.zeta.sdk - JVM: TLS Server Validation: DISABLED
+WARN  de.gematik.zeta.sdk - JVM: Hostname verification DISABLED — not compliant with gematik requirements
+ERROR d.gematik.zeta.cli.Main - Error: Socket timeout has expired [url=https://<ti-gateway-ip>/connector.sds, socket_timeout=unknown] ms
+
+cli.run (10,82s) argv="popp connector -c ti-gateway EGK-5 --env ref --trace --auth-method connector --auth-connector-card-iccsn ICCSN-EGK-READER --profile perfinf"
+└─ sdk.session (10,72s) resource=https://popp.ref.poppservice.de/ scopes=popp  ! Socket timeout has expired [url=https://<ti-gateway-ip>/connector.sds, socket_timeout=unknown] ms
+   ├─ sdk.init (305ms) resource=https://popp.ref.poppservice.de/ scopes=popp
+   └─ popp.flow (10,13s) scenario=connector  ! Socket timeout has expired [url=https://<ti-gateway-ip>/connector.sds, socket_timeout=unknown] ms
+      └─ connector.connect (10,12s) url=https://<ti-gateway-ip>  ! Socket timeout has expired [url=https://<ti-gateway-ip>/connector.sds, socket_timeout=unknown] ms
+         └─ http.request (10,09s) method=GET host=<ti-gateway-ip> path=/connector.sds  ! Socket timeout has expired [url=https://<ti-gateway-ip>/connector.sds, socket_timeout=unknown] ms

@@ -1,0 +1,18 @@
+WARN  de.gematik.zeta.sdk - JVM: TLS Server Validation: DISABLED
+WARN  de.gematik.zeta.sdk - JVM: Hostname verification DISABLED — not compliant with gematik requirements
+
+cli.run (1,66s) argv="popp kartos --env ref --image <workspace>/card-images/EGKG2_1_ICCSN-EGK-IMAGE_RU_mobil.xml --trace --auth-method p12 --auth-p12-file <home>/.config/telematik/test-identities/ICCSN-SMCB-C_SMCB_AUT_E256_X509/ICCSN-SMCB-C_SMCB_AUT_E256_X509.p12 --profile perfref"
+└─ sdk.session (1,55s) resource=https://popp.ref.poppservice.de/ scopes=popp
+   ├─ sdk.init (569ms) resource=https://popp.ref.poppservice.de/ scopes=popp
+   └─ popp.flow (937ms) scenario=kartos
+      ├─ popp.connect (923ms) service_url=wss://popp.ref.poppservice.de/popp/practitioner/api/v1/token-generation-ehc
+      ├─ popp.ws.send (0,99ms) type=StartMessage bytes=131
+      ├─ popp.ws.recv (48ms) type=StandardScenarioMessage bytes=290
+      ├─ popp.ws.send (0,11ms) type=ScenarioResponseMessage bytes=141
+      ├─ popp.ws.recv (59ms) type=StandardScenarioMessage bytes=347
+      ├─ popp.ws.send (0,10ms) type=ScenarioResponseMessage bytes=1034
+      ├─ popp.ws.recv (62ms) type=StandardScenarioMessage bytes=2607
+      ├─ popp.ws.send (0,16ms) type=ScenarioResponseMessage bytes=245
+      ├─ popp.ws.recv (35ms) type=StandardScenarioMessage bytes=552
+      ├─ popp.ws.send (0,11ms) type=ScenarioResponseMessage bytes=1830
+      └─ popp.ws.recv (51ms) type=TokenMessage bytes=601

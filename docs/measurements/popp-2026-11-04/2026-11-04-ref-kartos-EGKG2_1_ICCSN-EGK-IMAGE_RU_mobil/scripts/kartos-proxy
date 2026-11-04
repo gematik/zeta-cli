@@ -1,0 +1,13 @@
+#!/usr/bin/env python3 -I
+import subprocess,sys,time,json,os
+t0=time.perf_counter()
+p=subprocess.Popen(['<home>/.cargo/bin/kartos']+sys.argv[1:],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
+log=[]
+for line in sys.stdin:
+    t=time.perf_counter()
+    p.stdin.write(line); p.stdin.flush()
+    r=p.stdout.readline()
+    log.append(dict(at=(t-t0)*1000,ms=(time.perf_counter()-t)*1000,ins=line[:8].strip(),sw=r.strip()[-4:]))
+    sys.stdout.write(r); sys.stdout.flush()
+p.stdin.close(); p.wait()
+with open(os.environ['KP_LOG'],'a') as f: f.write(json.dumps(log)+'\n')

@@ -1,0 +1,20 @@
+WARN  de.gematik.zeta.sdk - JVM: TLS Server Validation: DISABLED
+WARN  de.gematik.zeta.sdk - JVM: Hostname verification DISABLED — not compliant with gematik requirements
+ERROR de.gematik.zeta.sdk - Unexpected authentication error:Error: [400] Bad Request
+WARN  de.gematik.zeta.sdk - [AUTH-TIMING][277167589] requestAccessToken FAILED in 241.704417ms: Client hat keine Berechtigung auf angef. Resource
+
+cli.run (8,92s) argv="popp standard --env ref --reader Reader 01 --trace --auth-method p12 --auth-p12-file <home>/.config/telematik/test-identities/ICCSN-SMCB-C_SMCB_AUT_E256_X509/ICCSN-SMCB-C_SMCB_AUT_E256_X509.p12 --profile perfref"
+└─ sdk.session (8,82s) resource=https://popp.ref.poppservice.de/ scopes=popp
+   ├─ sdk.init (1,04s) resource=https://popp.ref.poppservice.de/ scopes=popp
+   └─ popp.flow (7,72s) scenario=standard
+      ├─ popp.connect (7,58s) service_url=wss://popp.ref.poppservice.de/popp/practitioner/api/v1/token-generation-ehc
+      ├─ popp.ws.send (3ms) type=StartMessage bytes=131
+      ├─ popp.ws.recv (133ms) type=StandardScenarioMessage bytes=290
+      ├─ popp.ws.send (0,09ms) type=ScenarioResponseMessage bytes=141
+      ├─ popp.ws.recv (81ms) type=StandardScenarioMessage bytes=347
+      ├─ popp.ws.send (0,57ms) type=ScenarioResponseMessage bytes=1382
+      ├─ popp.ws.recv (93ms) type=StandardScenarioMessage bytes=315
+      ├─ popp.ws.send (0,40ms) type=ScenarioResponseMessage bytes=189
+      ├─ popp.ws.recv (109ms) type=StandardScenarioMessage bytes=552
+      ├─ popp.ws.send (0,52ms) type=ScenarioResponseMessage bytes=1890
+      └─ popp.ws.recv (816ms) type=TokenMessage bytes=601

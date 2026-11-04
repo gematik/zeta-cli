@@ -1,0 +1,32 @@
+WARN  de.gematik.zeta.sdk - JVM: TLS Server Validation: DISABLED
+WARN  de.gematik.zeta.sdk - JVM: Hostname verification DISABLED — not compliant with gematik requirements
+
+cli.run (3,93s) argv="popp connector -c ti-gateway EGK-5 --env ref --trace --auth-method connector --auth-connector-card-iccsn ICCSN-EGK-READER --profile perfinf"
+└─ sdk.session (3,83s) resource=https://popp.ref.poppservice.de/ scopes=popp
+   ├─ sdk.init (369ms) resource=https://popp.ref.poppservice.de/ scopes=popp
+   └─ popp.flow (3,15s) scenario=connector
+      ├─ connector.connect (312ms) url=https://<ti-gateway-ip>
+      │  └─ http.request (249ms) method=GET host=<ti-gateway-ip> path=/connector.sds status=200
+      ├─ connector.startCardSession (206ms)
+      │  └─ http.request (188ms) method=POST host=<ti-gateway-ip> path=/ws/CardService status=200
+      ├─ popp.connect (2,56s) service_url=wss://popp.ref.poppservice.de/popp/practitioner/api/v1/token-generation-ehc
+      ├─ popp.ws.send (2ms) type=StartMessage bytes=132
+      ├─ popp.ws.recv (70ms) type=ConnectorScenarioMessage bytes=3997
+      ├─ connector.secureSendApdu (256ms)
+      │  └─ http.request (237ms) method=POST host=<ti-gateway-ip> path=/ws/CardService status=200
+      ├─ popp.ws.send (0,28ms) type=ScenarioResponseMessage bytes=141
+      ├─ popp.ws.recv (342ms) type=ConnectorScenarioMessage bytes=4073
+      ├─ connector.secureSendApdu (265ms)
+      │  └─ http.request (258ms) method=POST host=<ti-gateway-ip> path=/ws/CardService status=200
+      ├─ popp.ws.send (0,24ms) type=ScenarioResponseMessage bytes=1382
+      ├─ popp.ws.recv (88ms) type=ConnectorScenarioMessage bytes=4030
+      ├─ connector.secureSendApdu (218ms)
+      │  └─ http.request (212ms) method=POST host=<ti-gateway-ip> path=/ws/CardService status=200
+      ├─ popp.ws.send (0,19ms) type=ScenarioResponseMessage bytes=189
+      ├─ popp.ws.recv (58ms) type=ConnectorScenarioMessage bytes=4346
+      ├─ connector.secureSendApdu (550ms)
+      │  └─ http.request (543ms) method=POST host=<ti-gateway-ip> path=/ws/CardService status=200
+      ├─ popp.ws.send (0,20ms) type=ScenarioResponseMessage bytes=1890
+      ├─ popp.ws.recv (243ms) type=TokenMessage bytes=598
+      └─ connector.stopCardSession (66ms)  ! StopCardSession(sessionId=<session-id>) reported a SOAP fault: Unbekannte Session ID (code 4288)
+         └─ http.request (32ms) method=POST host=<ti-gateway-ip> path=/ws/CardService status=500
