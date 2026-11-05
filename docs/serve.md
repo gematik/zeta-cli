@@ -297,6 +297,7 @@ verbatim status/body and carries `middleware-error-source: upstream`.
 | `404` | The token's insurer isn't routed in this environment's catalog (or unknown endpoint). |
 | `409` | Env mismatch (a token for a different TI env than the daemon), or no / ambiguous eGK for minting. |
 | `501` | Minting requested but not enabled (start with `--popp-card`). |
+| `504` | The PoPP WebSocket did not open within 10 s, or the mint took longer than 30 s. A mint holds the request lock, so these limits also bound how long it can block other requests. A hanging PC/SC reader is not covered. |
 | `502` | PoPP (mint) failure, or the VSD read failed at the daemon. |
 | upstream | Any other status is the VSDM service's, forwarded verbatim (e.g. `428`, `304`). |
 

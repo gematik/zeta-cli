@@ -75,6 +75,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.seconds
 
 private val log = KotlinLogging.logger {}
 
@@ -254,6 +255,7 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             readerOption = card.readerOptionName,
             kartosImage = poppKartosImage,
             kartosBin = poppKartosBin,
+            wsOpenTimeout = POPP_WS_OPEN_TIMEOUT,
         )
         // Opened before the context so a daemon told to cache never starts up silently not caching.
         val cacheDb = cache.db?.let { CacheDb(it) }
@@ -366,6 +368,8 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         CountDownLatch(1).await() // hold the foreground; the shutdown hook cleans up on Ctrl-C
     }
 }
+
+private val POPP_WS_OPEN_TIMEOUT = 10.seconds
 
 internal fun requireKartosImage(card: CardTransport, image: Path?) {
     if (card == CardTransport.KARTOS && image == null) {

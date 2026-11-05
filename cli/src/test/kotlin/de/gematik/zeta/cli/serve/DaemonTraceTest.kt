@@ -26,10 +26,12 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import de.gematik.zeta.cli.popp.CardTransport
 import de.gematik.zeta.cli.popp.PoppProtocolException
+import de.gematik.zeta.cli.popp.PoppTimeoutException
 import de.gematik.zeta.cli.trace.Span
 import de.gematik.zeta.cli.trace.Tracer
 import com.github.ajalt.clikt.core.UsageError
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import org.junit.jupiter.api.AfterEach
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.milliseconds
 
 class DaemonTraceTest {
     private val delivered = mutableListOf<Span>()
@@ -130,5 +133,23 @@ class DaemonTraceTest {
         } finally {
             logger.detachAppender(appender)
         }
+    }
+
+    @Test
+    fun `a mint past its limit fails with 504 and frees the lock`() = runBlocking {
+        val result = tracedMint(lock, egkHandleGiven = false) {
+            mintResultOf(limit = 100.milliseconds) { awaitCancellation() }
+        }
+
+        assertEquals(HttpStatusCode.GatewayTimeout, (result as MintResult.Failed).status)
+        assertFalse(lock.isLocked)
+        assertEquals(504, delivered.single().attrs["status"])
+    }
+
+    @Test
+    fun `a WebSocket that does not open fails with 504`() = runBlocking {
+        val result = mintResultOf { throw PoppTimeoutException("did not open") }
+
+        assertEquals(HttpStatusCode.GatewayTimeout, (result as MintResult.Failed).status)
     }
 }

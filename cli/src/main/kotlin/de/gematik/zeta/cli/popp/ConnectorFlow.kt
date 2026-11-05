@@ -30,8 +30,15 @@ import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private val log = KotlinLogging.logger {}
+
+private val CARD_SESSION_CLEANUP_LIMIT = 5.seconds
 
 /**
  * Drive the PoPP **Connector** scenario once against an eGK visible to the Konnektor [session] and
@@ -62,7 +69,9 @@ internal suspend fun runConnectorPoppFlow(
         // Best-effort cleanup: popp often closes the session itself when the flow completes, after
         // which the Connector reports "Unbekannte Session ID" (Code 4288). Just note it and continue.
         runCatching {
-            session.traced("stopCardSession") { connector.stopCardSession(cardSessionId) }
+            cleanupEvenIfCancelled {
+                session.traced("stopCardSession") { connector.stopCardSession(cardSessionId) }
+            }
         }.onFailure { e ->
             log.debug {
                 "stopCardSession($cardSessionId) failed (continuing): " +
@@ -71,6 +80,15 @@ internal suspend fun runConnectorPoppFlow(
         }
     }
 }
+
+/**
+ * Run [block] although the caller may be cancelled, as a mint past its limit is, so that a card
+ * session does not stay open at the Konnektor. Null if [limit] ran out first.
+ */
+internal suspend fun <T> cleanupEvenIfCancelled(
+    limit: Duration = CARD_SESSION_CLEANUP_LIMIT,
+    block: suspend () -> T,
+): T? = withContext(NonCancellable) { withTimeoutOrNull(limit) { block() } }
 
 private suspend fun resolveEgkHandle(connector: ConnectorClient, egkHandle: String?): String {
     egkHandle?.let { return it }

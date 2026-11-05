@@ -26,8 +26,16 @@ import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import java.nio.file.Path
 import java.util.UUID
+import kotlin.time.Duration
 
 private val log = KotlinLogging.logger {}
 
@@ -70,6 +78,8 @@ data class PoppCardConfig(
     val readerOption: String = "--reader",
     val kartosImage: Path? = null,
     val kartosBin: String = "kartos",
+    /** How long the WebSocket may take to open; null leaves it to the HTTP client's own timeouts. */
+    val wsOpenTimeout: Duration? = null,
 ) {
     /** popp's `cardConnectionType`, e.g. `contactless-standard`. */
     val cardConnectionType: String get() = "${connection.wire}-${transport.scenario}"
@@ -185,13 +195,46 @@ internal suspend fun poppConnect(
     return Tracer.spanSuspend("popp.connect", attrs = mapOf("service_url" to config.serviceUrl)) {
         var token: String? = null
         Tracer.spanUntil("ws.open") { opened ->
-            sdk.ws(targetUrl = config.serviceUrl, builder = wsBuilder, customHeaders = null) {
-                opened()
-                log.info { "popp WS connected: ${config.serviceUrl}" }
-                token = drive(PoppClient(this, wsSpanParent = wsParent))
+            withOpenLimit(config.wsOpenTimeout) { withinLimit ->
+                sdk.ws(targetUrl = config.serviceUrl, builder = wsBuilder, customHeaders = null) {
+                    withinLimit()
+                    opened()
+                    log.info { "popp WS connected: ${config.serviceUrl}" }
+                    token = drive(PoppClient(this, wsSpanParent = wsParent))
+                }
             }
         }
         token ?: error("popp WebSocket closed without yielding a TokenMessage")
+    }
+}
+
+/** The PoPP service or the way to it did not answer in time. */
+internal class PoppTimeoutException(message: String) : IOException(message)
+
+/**
+ * Fail with [PoppTimeoutException] unless [block] calls its signal within [limit]. Only the time up
+ * to the signal counts, because a scenario after it legitimately takes as long as the card does.
+ */
+internal suspend fun <T> withOpenLimit(limit: Duration?, block: suspend (signal: () -> Unit) -> T): T {
+    if (limit == null) return block {}
+    val signal = CompletableDeferred<Unit>()
+    var timedOut = false
+    return coroutineScope {
+        val work = async { block { signal.complete(Unit) } }
+        val watchdog = launch {
+            if (withTimeoutOrNull(limit) { signal.await() } == null) {
+                timedOut = true
+                work.cancel()
+            }
+        }
+        try {
+            work.await()
+        } catch (e: CancellationException) {
+            if (timedOut) throw PoppTimeoutException("PoPP WebSocket did not open within $limit")
+            throw e
+        } finally {
+            watchdog.cancel()
+        }
     }
 }
 

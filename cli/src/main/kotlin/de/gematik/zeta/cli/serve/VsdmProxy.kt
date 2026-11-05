@@ -28,6 +28,7 @@ import de.gematik.zeta.cli.client.POPP_HEADER_NAME
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.client.withAslExpiryRetry
 import de.gematik.zeta.cli.popp.PoppProtocolException
+import de.gematik.zeta.cli.popp.PoppTimeoutException
 import de.gematik.zeta.cli.vsdm.VsdmBundleCache
 import de.gematik.zeta.cli.vsdm.CacheDecision
 import de.gematik.zeta.cli.vsdm.CachedBundle
@@ -62,6 +63,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private val log = KotlinLogging.logger {}
 
@@ -304,6 +309,8 @@ internal suspend fun handleVsdmPoppThenRead(call: ApplicationCall, ctx: DaemonCo
     }
 }
 
+private val POPP_MINT_TIMEOUT = 30.seconds
+
 /** Outcome of a card-backed PoPP mint: the token, or the status and message to answer with. */
 internal sealed interface MintResult {
     data class Ok(val token: String) : MintResult
@@ -318,9 +325,19 @@ internal sealed interface MintResult {
 internal suspend fun mintPoppToken(ctx: DaemonContext, egkHandle: String?): MintResult =
     mintResultOf { ctx.mintPoppToken(egkHandle) }
 
-internal suspend fun mintResultOf(mint: suspend () -> String): MintResult =
+/**
+ * [limit] bounds how long one mint holds the daemon's request lock. It cannot interrupt a blocking
+ * PC/SC transmit, only what suspends: the service, the Konnektor and the wait for the next message.
+ */
+internal suspend fun mintResultOf(limit: Duration = POPP_MINT_TIMEOUT, mint: suspend () -> String): MintResult =
     try {
-        MintResult.Ok(mint())
+        MintResult.Ok(withTimeout(limit) { mint() })
+    } catch (e: TimeoutCancellationException) {
+        log.warn { "PoPP mint gave up after $limit" }
+        MintResult.Failed(HttpStatusCode.GatewayTimeout, "PoPP timed out after $limit")
+    } catch (e: PoppTimeoutException) {
+        log.warn { "PoPP failed: ${e.message}" }
+        MintResult.Failed(HttpStatusCode.GatewayTimeout, "PoPP failed: ${e.message}")
     } catch (e: UsageError) {
         MintResult.Failed(HttpStatusCode.Conflict, e.message ?: "no eGK available")
     } catch (e: CardException) {
