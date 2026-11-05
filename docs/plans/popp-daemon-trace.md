@@ -1,6 +1,6 @@
 # Plan: measure the PoPP path inside `zeta serve`
 
-Status: not started, no code changed yet. Branch `popp-daemon-trace`, based on `main` (SDK 1.3.2, version 0.15.0), which builds with `./gradlew :cli:installDist`.
+Status: tracing and driver implemented, measurements run on 2026-11-04 and 2026-11-05 with the raw data kept outside this repository. Branch `popp-daemon-trace`, based on `main` (SDK 1.3.2, version 0.15.0), which builds with `./gradlew :cli:installDist`.
 
 SDK 1.3.2 keeps the numbers comparable with the baseline below. SDK 2.0.1 needs one re-measurement afterwards.
 
@@ -57,9 +57,9 @@ Open points from the baseline:
 `trace/Tracer.kt` only emits at process end, so a daemon produces nothing today, and a long-lived root would grow without bound.
 
 - Add `Tracer.event(name, attrs) { span -> … }`: a suspend, parentless root. It restores the thread-local like `spanUnder` and hands the finished span to a sink.
-- Add `Tracer.start(name, attrs): Span` for spans that cannot wrap a block.
+- Add `Tracer.start(name, attrs): Span` for spans that cannot wrap a block, `Tracer.spanUntil` for `ws.open`, and `Mutex.withTracedLock` for `lock.wait`.
 - Add `Tracer.initDaemon(sink)`, and clear the sink in `reset()`.
-- New `trace/TraceFile.kt`: serialize one span tree per line (`name`, start offset, duration, `ok`, `error`, `attrs`, `children`, plus an epoch timestamp). Appends under a lock. A write failure logs a warning and never breaks a request.
+- New `trace/TraceFile.kt`: serialize one span tree per line (`name`, start offset, duration, `ok`, `error`, `attrs`, `children`, plus an epoch timestamp). `error` is the exception type, never its message: messages can hold KVNRs, session ids and addresses. New files are owner-only. Appends under a lock. A write failure logs a warning and never breaks a request.
 - Spans must only carry APDU headers, sizes and status words, never tokens or card data.
 
 ### 2. Spans for the new structure
@@ -86,6 +86,10 @@ Notes:
 - `connector.secureSendApdu` should become a child of `scenario`: use `session.traced` in `ConnectorFlow.kt`. That leaves `tracedUnder` and the `Span?` parameter of the `poppConnect` callback unused, so remove them.
 - `ws.open` includes the discover, register, token and DPoP checks inside SDK `ws()`. The SDK has no hook to split them, the `-vv` timing logs do (about 140 ms).
 - The Konnektor time stays opaque inside `secureSendApdu`.
+- `MintResult.Failed` marks `mint` by hand with the HTTP status as an attribute, because `mintPoppToken` turns exceptions into results.
+- `connector.stopCardSession` usually fails with 4288 because PoPP closed the session first, so only the state of the `mint` root decides whether a mint counts as failed.
+- `connector.connect` is lazy. With valid tokens it lands in the first `mint`, otherwise in one `warm` event, with the other endpoints waiting on its mutex.
+- `KartosProcess.spawn` returns before the image is loaded, so that load shows up in the first `card.apdu`, not in `card.ready`.
 
 ### 3. `zeta serve` options
 
@@ -98,22 +102,38 @@ In `serve/ServeCommand.kt`, documented in `docs/serve.md`:
 
 A script outside the CLI, no new command:
 
-- Wait for `warmupComplete` on `/api/health`.
-- Call `/api/popp/token` N times, optionally with pauses, and discard the response body because it holds the token.
-- Turn the JSON lines into tables for the groups above.
+`tools/popp-daemon-measure.py`:
+
+- `run`: wait for `warmupComplete` on `/api/health`, stop if there is no warm popp session, then call `/api/popp/token` N times, optionally with pauses and `middleware-egk`. Response bodies and headers are discarded because they hold the token and the KVNR.
+- `report`: turn the JSON lines into tables for the groups above, with the first mint apart, and with and without eGK handle apart. Local APDUs also get ms per byte.
 
 ### 5. Tests
 
 - `Tracer.event`: delivers to the sink, no-op when disabled, marks failures, leaves the thread-local clean.
 - `TraceFile`: JSON shape including children and attrs.
 - `--popp-card kartos` without an image is a usage error.
+- `Tracer.spanUntil`: ends at the signal, fails only before it.
+- `TraceFile`: no exception messages, owner-only file, whole lines under parallel writes, a write failure does not throw.
+- `mint` and `refresh`: failures are marked, `lock.wait` is recorded, the lock is released.
+- `scenario` and `card.apdu`: attributes without payload, Konnektor call nested under `scenario`.
 
 ## Measurements to run
 
-Against REF, each with the daemon warm and with pauses, in this order: card image, PC/SC, TI-Gateway, Einbox-Konnektor.
+Against REF, each with the daemon warm and with pauses, always with the same eGK:
+
+| Setup | Login | PoPP | Card |
+|---|---|---|---|
+| 1a | TI-Gateway | PC/SC, `--popp-card standard` | Ewent EW1052 |
+| 1b | TI-Gateway | PC/SC, `--popp-card standard` | Identive CLOUD 4700 F |
+| 2 | TI-Gateway | TI-Gateway, `--popp-card connector` | Cherry terminal |
+| 3 | Einbox-Konnektor | Einbox-Konnektor, `--popp-card connector` | ORGA terminal |
+
+- Start one daemon with its own `--trace-file` per setup, because the card transport is fixed at start. Pin the reader with `--popp-reader` in 1a and 1b.
+- 1a against 1b tests the `TA1=97` guess: same eGK and same APDUs, so a different ms per byte comes from the reader.
+- In 2 and 3, send the eGK handle to match the baseline. It differs per Konnektor. Add one series without it to get `getCards`, the "card readable" step at the Konnektor.
 
 - The warm sweep logs into every VSDM instance in the catalog, so it registers additional clients on REF, and logins run in parallel. Take the login cost from `warm` events and compare with the sequential baseline.
-- Force at least one refresh to get its duration and `lock.wait`.
+- Run past the access-token lifetime to get at least one refresh. Refresh fires about 5 s before expiry, so keep minting around that time, otherwise `lock.wait` never sees it.
 
 ## Decide after measuring
 
@@ -123,4 +143,6 @@ Against REF, each with the daemon warm and with pauses, in this order: card imag
 | SDK `ws()` | New client per call, not closed as far as read in 2.0.1, unchecked in 1.3.2 | Reuse it (up to about 500 ms, possible leak in a daemon); needs an SDK change |
 | SDK `ws()` | Discover, register and token checks on every call, about 140 ms including 40 ms DPoP | Small gain, DPoP stays |
 | `popp/ConnectorFlow.kt` | `startCardSession` runs before the WebSocket opens | Run in parallel, about 190 ms |
-| SDS at daemon start | Not checked whether it loads up front | Load it up front so the main path cannot hit an SDS timeout |
+| SDS at daemon start | Lazy: with valid tokens the first mint loads it | Load it up front so the main path cannot hit an SDS timeout |
+| `popp/ConnectorFlow.kt` | `stopCardSession` mostly fails with 4288 after a successful mint, about 67 ms | Skip it after success, keep it on failure paths |
+| SDK `ws()` | Possible leak in a daemon | Track threads and file descriptors of the daemon across N mints before any SDK change |
