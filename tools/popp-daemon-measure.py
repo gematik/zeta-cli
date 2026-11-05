@@ -44,6 +44,7 @@ def run(args):
 
     headers = {"middleware-egk": args.egk_handle} if args.egk_handle else {}
     failures = 0
+    started_all = time.monotonic()
     for i in range(args.n):
         if i and args.pause:
             time.sleep(args.pause)
@@ -59,6 +60,10 @@ def run(args):
             status = type(e).__name__
         failures += status != 200
         print(f"{i + 1}/{args.n} status={status} {(time.monotonic() - started) * 1000:.0f} ms", flush=True)
+    if args.n:
+        tokens = args.n - failures
+        elapsed_min = (time.monotonic() - started_all) / 60
+        print(f"{tokens} tokens, {failures} failed ({failures / args.n * 100:.1f}%), {tokens / elapsed_min:.1f} tokens/min")
     return 1 if failures else 0
 
 
@@ -141,12 +146,45 @@ MAIN_PATH = [
 ]
 
 
-def report_mints(mints, handle_given):
+def failure_cause(span):
+    """The deepest failed step. A failing stopCardSession is routine, so it never counts as the cause."""
+    for child in reversed(span["children"]):
+        if not child["ok"] and child["name"] != "connector.stopCardSession":
+            return failure_cause(child)
+    return span["name"], span["error"]
+
+
+def report_reliability(mints):
     ok = [m for m in mints if m["ok"]]
     failed = [m for m in mints if not m["ok"]]
-    print(f"\n## Mints, eGK handle {'given' if handle_given else 'not given'}\n")
-    print(f"{len(ok)} ok, {len(failed)} failed", end="")
-    print(f" (status {sorted({m['attrs'].get('status') for m in failed}, key=str)})" if failed else "")
+    elapsed_ms = max(m["ts"] + duration(m) for m in mints) - min(m["ts"] for m in mints)
+    busy_ms = sum(map(duration, mints))
+    rows = [
+        ["Mints", len(mints)],
+        ["Tokens", len(ok)],
+        ["Failed", len(failed)],
+        ["Error rate", f"{len(failed) / len(mints) * 100:.1f}%"],
+        # With pauses in a series, only the capacity says what the daemon could deliver.
+        ["Throughput of the series, including pauses", f"{len(ok) / elapsed_ms * 60_000:.1f} tokens/min"],
+        ["Capacity, time spent minting only", f"{len(ok) / busy_ms * 60_000:.1f} tokens/min"],
+    ]
+    table("Reliability and tokens per time", ["Metric", "Value"], rows)
+
+    causes = defaultdict(list)
+    for mint in failed:
+        causes[(mint["attrs"].get("status"), *failure_cause(mint))].append(mint)
+    rows = [
+        [status, f"`{step}`", error, len(ms), f"{statistics.median(map(duration, ms)):.0f}",
+         time.strftime("%H:%M:%S", time.gmtime(min(m["ts"] for m in ms) / 1000))]
+        for (status, step, error), ms in causes.items()
+    ]
+    table("Failures", ["Status", "Failed step", "Error", "n", "median ms", "first (UTC)"], rows)
+
+
+def report_mints(mints, handle_given):
+    ok = [m for m in mints if m["ok"]]
+    print(f"\n## Mints, eGK handle {'given' if handle_given else 'not given'}")
+    report_reliability(mints)
     if not ok:
         return
 
