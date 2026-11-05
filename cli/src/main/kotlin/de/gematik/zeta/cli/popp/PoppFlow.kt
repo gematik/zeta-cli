@@ -22,7 +22,6 @@
 package de.gematik.zeta.cli.popp
 
 import de.gematik.zeta.cli.connector.ConnectorSession
-import de.gematik.zeta.cli.trace.Span
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
@@ -98,21 +97,39 @@ internal suspend fun runPoppFlow(
         CardTransport.STANDARD ->
             // Hold the card connection open for the whole flow — card state, and any PACE channel,
             // persist across APDU rounds.
-            SmartCard.connect(
-                readerName = config.reader,
-                waitSeconds = config.waitSeconds,
-                connection = config.connection,
-                can = config.can,
-                readerOption = config.readerOption,
-            ).use { card ->
-                runStandardPoppFlow(sdk, config, wsBuilder) { steps -> steps.map { card.exchange(it) } }
+            Tracer.span("card.ready", attrs = mapOf("reader" to config.reader)) {
+                SmartCard.connect(
+                    readerName = config.reader,
+                    waitSeconds = config.waitSeconds,
+                    connection = config.connection,
+                    can = config.can,
+                    readerOption = config.readerOption,
+                )
+            }.use { card ->
+                runStandardPoppFlow(sdk, config, wsBuilder) { steps ->
+                    steps.map { step -> tracedApdu(step.commandApdu) { card.exchange(step) } }
+                }
             }
 
         CardTransport.KARTOS -> {
             val image = requireNotNull(config.kartosImage) { "the kartos card transport needs a card image" }
-            KartosProcess.spawn(image, config.kartosBin).use { kartos ->
-                runStandardPoppFlow(sdk, config, wsBuilder) { steps -> steps.map { kartos.exchange(it.commandApdu) } }
+            // spawn returns before kartos has loaded the image, so the load lands on the first card.apdu.
+            Tracer.span("card.ready") { KartosProcess.spawn(image, config.kartosBin) }.use { kartos ->
+                runStandardPoppFlow(sdk, config, wsBuilder) { steps ->
+                    steps.map { step -> tracedApdu(step.commandApdu) { kartos.exchange(step.commandApdu) } }
+                }
             }
+        }
+    }
+}
+
+/** Spans keep the APDU header, sizes and status word only: the bodies are card data. */
+internal suspend fun tracedApdu(commandHex: String, exchange: suspend () -> String): String {
+    val attrs = mapOf("hdr" to commandHex.take(8).uppercase(), "cmdBytes" to commandHex.length / 2)
+    return Tracer.spanSuspend("card.apdu", attrs) { span ->
+        exchange().also { response ->
+            span.attr("respBytes", response.length / 2)
+            span.attr("sw", response.takeLast(4).uppercase())
         }
     }
 }
@@ -144,7 +161,7 @@ private suspend fun runStandardPoppFlow(
     config: PoppCardConfig,
     wsBuilder: ZetaHttpClientBuilder.() -> Unit,
     executeApdus: suspend (List<ScenarioStep>) -> List<String>,
-): String = poppConnect(sdk, config, wsBuilder) { client, _ ->
+): String = poppConnect(sdk, config, wsBuilder) { client ->
     client.runStandardScenario(startMessage(config, UUID.randomUUID().toString())) { steps ->
         log.debug { "card round: ${steps.size} APDU(s)" }
         executeApdus(steps)
@@ -155,21 +172,24 @@ private suspend fun runStandardPoppFlow(
  * Open the popp WebSocket at the configured service and run [drive] over it. `sdk.ws()` lazily
  * discovers/registers/authenticates on first call, so no explicit pre-flight is needed here.
  *
- * [drive] receives the span that parents the per-message WS spans: they are deliberately siblings
- * of `popp.connect`, since nesting them under a long-lived connection makes the tree unreadable.
+ * The per-message WS spans are deliberately siblings of `popp.connect`, since nesting them under
+ * a long-lived connection makes the tree unreadable.
  */
 internal suspend fun poppConnect(
     sdk: ZetaSdkClient,
     config: PoppCardConfig,
     wsBuilder: ZetaHttpClientBuilder.() -> Unit,
-    drive: suspend (PoppClient, Span?) -> String,
+    drive: suspend (PoppClient) -> String,
 ): String {
     val wsParent = Tracer.current()
     return Tracer.spanSuspend("popp.connect", attrs = mapOf("service_url" to config.serviceUrl)) {
         var token: String? = null
-        sdk.ws(targetUrl = config.serviceUrl, builder = wsBuilder, customHeaders = null) {
-            log.info { "popp WS connected: ${config.serviceUrl}" }
-            token = drive(PoppClient(this, wsSpanParent = wsParent), wsParent)
+        Tracer.spanUntil("ws.open") { opened ->
+            sdk.ws(targetUrl = config.serviceUrl, builder = wsBuilder, customHeaders = null) {
+                opened()
+                log.info { "popp WS connected: ${config.serviceUrl}" }
+                token = drive(PoppClient(this, wsSpanParent = wsParent))
+            }
         }
         token ?: error("popp WebSocket closed without yielding a TokenMessage")
     }

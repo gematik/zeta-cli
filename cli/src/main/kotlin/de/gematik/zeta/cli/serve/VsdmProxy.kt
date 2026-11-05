@@ -316,13 +316,17 @@ internal sealed interface MintResult {
  * and the card are single-session.
  */
 internal suspend fun mintPoppToken(ctx: DaemonContext, egkHandle: String?): MintResult =
+    mintResultOf { ctx.mintPoppToken(egkHandle) }
+
+internal suspend fun mintResultOf(mint: suspend () -> String): MintResult =
     try {
-        MintResult.Ok(ctx.mintPoppToken(egkHandle))
+        MintResult.Ok(mint())
     } catch (e: UsageError) {
         MintResult.Failed(HttpStatusCode.Conflict, e.message ?: "no eGK available")
     } catch (e: CardException) {
         MintResult.Failed(HttpStatusCode.Conflict, e.message ?: "no card in reader")
     } catch (e: PoppProtocolException) {
+        log.warn(e) { "PoPP failed" }
         MintResult.Failed(HttpStatusCode.BadGateway, "PoPP failed: ${e.message}")
     } catch (e: Exception) {
         log.warn(e) { "PoPP failed" }

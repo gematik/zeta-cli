@@ -23,11 +23,13 @@ package de.gematik.zeta.cli.serve
 
 import de.gematik.zeta.cli.vsdm.MIDDLEWARE_INSURANT_ID_HEADER
 import de.gematik.zeta.cli.vsdm.MIDDLEWARE_INSURER_ID_HEADER
+import de.gematik.zeta.cli.trace.Tracer
+import de.gematik.zeta.cli.trace.withTracedLock
 import de.gematik.zeta.stress.identity.PoppJwt
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.Serializable
 
 /** A minted PoPP token and the claims a caller would otherwise have to decode it for. */
@@ -54,16 +56,16 @@ internal suspend fun handlePoppToken(call: ApplicationCall, ctx: DaemonContext) 
         return respondError(
             call,
             HttpStatusCode.NotImplemented,
-            "PoPP not available; start zeta serve with --popp-card connector|standard",
+            "PoPP not available; start zeta serve with --popp-card connector|standard|kartos",
         )
     }
     val egkHandle = call.request.headers[MIDDLEWARE_EGK_HEADER]
 
-    val token = ctx.requestMutex.withLock {
-        when (val minted = mintPoppToken(ctx, egkHandle)) {
-            is MintResult.Ok -> minted.token
-            is MintResult.Failed -> return respondError(call, minted.status, minted.message)
-        }
+    // Responding after the event keeps the client's download speed out of the mint's duration.
+    val minted = tracedMint(ctx.requestMutex, egkHandleGiven = egkHandle != null) { mintPoppToken(ctx, egkHandle) }
+    val token = when (minted) {
+        is MintResult.Ok -> minted.token
+        is MintResult.Failed -> return respondError(call, minted.status, minted.message)
     }
 
     val claims = PoppJwt.parse(token)
@@ -82,4 +84,21 @@ internal suspend fun handlePoppToken(call: ApplicationCall, ctx: DaemonContext) 
             iat = claims.iat,
         ),
     )
+}
+
+/**
+ * [mint] under [lock] as a `mint` trace event. [mintPoppToken] turns failures into a result, so the
+ * event has to be marked by hand or a failed mint would count as a fast success.
+ */
+internal suspend fun tracedMint(
+    lock: Mutex,
+    egkHandleGiven: Boolean,
+    mint: suspend () -> MintResult,
+): MintResult = Tracer.event("mint", mapOf("egkHandle" to egkHandleGiven)) { span ->
+    lock.withTracedLock { mint() }.also { result ->
+        if (result is MintResult.Failed) {
+            span.fail(result.message, "MintFailed")
+            span.attr("status", result.status.value)
+        }
+    }
 }

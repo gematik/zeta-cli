@@ -103,23 +103,6 @@ internal suspend fun <T> ConnectorSession.traced(
 ): T = Tracer.spanSuspend("connector.$op", attrs) { block() }
 
 /**
- * Variant of [traced] that explicitly parents the span under [parent] instead of the
- * thread-local current span. Used inside long-lived blocks (e.g. `popp.connect`) to keep
- * short-lived sub-spans flat at the surrounding parent level rather than nesting deep —
- * mirrors how [Tracer.spanUnder] is used for the per-frame `popp.ws.*` spans. With
- * [parent] null (tracer off, or no parent captured) it falls back to [traced]'s
- * current-span behaviour.
- */
-internal suspend fun <T> ConnectorSession.tracedUnder(
-    parent: Span?,
-    op: String,
-    attrs: Map<String, Any?> = emptyMap(),
-    block: suspend ConnectorSession.() -> T,
-): T =
-    if (parent != null) Tracer.spanUnder(parent, "connector.$op", attrs) { block() }
-    else Tracer.spanSuspend("connector.$op", attrs) { block() }
-
-/**
  * Parse the .kon at [konPath] and build the OkHttp client with the .kon's TLS + curlie
  * logging. Does **not** connect to the Connector — that happens lazily on the first
  * [ConnectorSession.connector] call. Callers resolve [konPath] via

@@ -23,6 +23,7 @@ package de.gematik.zeta.cli.trace
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 
@@ -55,6 +56,13 @@ open class Span internal constructor(
     var error: String? = null
         private set
 
+    /**
+     * The failure's type, kept apart from [error]: messages can quote KVNRs, session ids and
+     * addresses, so anything that outlives the process records this instead.
+     */
+    var errorType: String? = null
+        private set
+
     init {
         if (this !is NoopSpan) parent?.children?.add(this)
     }
@@ -64,10 +72,13 @@ open class Span internal constructor(
         return this
     }
 
-    open fun fail(message: String?) {
+    open fun fail(message: String?, type: String? = null) {
         ok = false
         error = message
+        errorType = type
     }
+
+    fun failWith(t: Throwable) = fail(t.message ?: t::class.simpleName, t::class.simpleName)
 
     internal open fun end() {
         if (endNanos < 0) endNanos = System.nanoTime()
@@ -81,7 +92,7 @@ open class Span internal constructor(
 /** No-op span: every mutation is dropped, no children list churn, no parent linkage. */
 internal object NoopSpan : Span(name = "<noop>", parent = null, startNanos = 0L) {
     override fun attr(key: String, value: Any?): Span = this
-    override fun fail(message: String?) {}
+    override fun fail(message: String?, type: String?) {}
     override fun end() {}
 }
 
@@ -104,11 +115,23 @@ object Tracer {
     var root: Span? = null
         private set
 
+    @Volatile
+    private var sink: ((Span) -> Unit)? = null
+
     /**
      * Switch the tracer on. Idempotent. Call once from [de.gematik.zeta.cli.main] when
      * `--trace` (or `ZETA_TRACE`) is set, before any [root] / [span] calls.
      */
     fun init() {
+        enabled = true
+    }
+
+    /**
+     * Switch the tracer on for a long-lived process: there is no process end to [emit] at, and a
+     * root would grow without bound, so each [event] hands its finished tree to [sink] instead.
+     */
+    fun initDaemon(sink: (Span) -> Unit) {
+        this.sink = sink
         enabled = true
     }
 
@@ -150,10 +173,54 @@ object Tracer {
     ): T {
         if (!enabled) return block(NoopSpan)
         val span = Span(name, parent = currentSpanTL.get()).apply { attrs.forEach { (k, v) -> attr(k, v) } }
+        return runSuspendIn(span, block)
+    }
+
+    /**
+     * Run [block] in a parentless span and hand the finished tree to the [initDaemon] sink. A
+     * delivery problem is logged and never reaches the traced work.
+     */
+    suspend fun <T> event(
+        name: String,
+        attrs: Map<String, Any?> = emptyMap(),
+        block: suspend (Span) -> T,
+    ): T {
+        if (!enabled) return block(NoopSpan)
+        val span = Span(name, parent = null).apply { attrs.forEach { (k, v) -> attr(k, v) } }
         return try {
-            withContext(currentSpanTL.asContextElement(span)) { block(span) }
+            runSuspendIn(span, block)
+        } finally {
+            runCatching { sink?.invoke(span) }.onFailure { log.warn { "trace sink failed: ${it.message}" } }
+        }
+    }
+
+    /**
+     * Open a child of [current] that the caller ends, for intervals that cannot wrap a block. It
+     * is not installed as current, so spans opened meanwhile stay siblings.
+     */
+    fun start(name: String, attrs: Map<String, Any?> = emptyMap()): Span {
+        if (!enabled) return NoopSpan
+        return Span(name, parent = currentSpanTL.get()).apply { attrs.forEach { (k, v) -> attr(k, v) } }
+    }
+
+    /**
+     * A [start] span that ends when [block] calls its signal, or with [block] if it never does.
+     * Only a failure before the signal counts against the span.
+     */
+    suspend fun <T> spanUntil(
+        name: String,
+        attrs: Map<String, Any?> = emptyMap(),
+        block: suspend (signal: () -> Unit) -> T,
+    ): T {
+        val span = start(name, attrs)
+        var signalled = false
+        return try {
+            block {
+                signalled = true
+                span.end()
+            }
         } catch (t: Throwable) {
-            span.fail(t.message ?: t::class.simpleName)
+            if (!signalled) span.failWith(t)
             throw t
         } finally {
             span.end()
@@ -174,14 +241,7 @@ object Tracer {
     ): T {
         if (!enabled) return block(NoopSpan)
         val span = Span(name, parent = parent).apply { attrs.forEach { (k, v) -> attr(k, v) } }
-        return try {
-            withContext(currentSpanTL.asContextElement(span)) { block(span) }
-        } catch (t: Throwable) {
-            span.fail(t.message ?: t::class.simpleName)
-            throw t
-        } finally {
-            span.end()
-        }
+        return runSuspendIn(span, block)
     }
 
     /**
@@ -200,8 +260,19 @@ object Tracer {
     internal fun reset() {
         enabled = false
         root = null
+        sink = null
         currentSpanTL.remove()
     }
+
+    private suspend fun <T> runSuspendIn(span: Span, block: suspend (Span) -> T): T =
+        try {
+            withContext(currentSpanTL.asContextElement(span)) { block(span) }
+        } catch (t: Throwable) {
+            span.failWith(t)
+            throw t
+        } finally {
+            span.end()
+        }
 
     private inline fun <T> runIn(span: Span, block: (Span) -> T): T {
         val prev = currentSpanTL.get()
@@ -209,11 +280,33 @@ object Tracer {
         return try {
             block(span)
         } catch (t: Throwable) {
-            span.fail(t.message ?: t::class.simpleName)
+            span.failWith(t)
             throw t
         } finally {
             span.end()
             currentSpanTL.set(prev)
         }
+    }
+}
+
+/**
+ * [Mutex.withLock][kotlinx.coroutines.sync.withLock] that records the wait as `lock.wait`. The lock
+ * is taken outside any `withContext`: its prompt cancellation could throw after the lock was
+ * acquired and leave it held for the rest of the daemon's life.
+ */
+suspend fun <T> Mutex.withTracedLock(block: suspend () -> T): T {
+    val wait = Tracer.start("lock.wait")
+    try {
+        lock()
+    } catch (t: Throwable) {
+        wait.failWith(t)
+        throw t
+    } finally {
+        wait.end()
+    }
+    return try {
+        block()
+    } finally {
+        unlock()
     }
 }

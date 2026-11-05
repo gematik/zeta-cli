@@ -28,6 +28,8 @@ import de.gematik.zeta.cli.client.applyCliHttpDefaults
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.lifecycle.ensureLoggedIn
+import de.gematik.zeta.cli.trace.Tracer
+import de.gematik.zeta.cli.trace.withTracedLock
 import de.gematik.zeta.cli.popp.CardTransport
 import de.gematik.zeta.cli.popp.PoppCardConfig
 import de.gematik.zeta.cli.popp.runPoppFlow
@@ -150,13 +152,13 @@ internal class DaemonContext(
             cache[key]?.let { session ->
                 if (!isHealthy(session.sdk)) {
                     log.debug { "re-authenticating stale warm session for $resource" }
-                    ensureLoggedIn(session.sdk)
+                    Tracer.spanSuspend("login") { ensureLoggedIn(session.sdk) }
                 }
                 return@withLock session
             }
             log.debug { "building warm session for $resource $scopes" }
             val sdk = buildZetaSdkClient(resource, scopes, storagePath, tokenProvider, cliConfig)
-            ensureLoggedIn(sdk)
+            Tracer.spanSuspend("login") { ensureLoggedIn(sdk) }
             val http = sdk.httpClient { applyCliHttpDefaults(cliConfig) }
             WarmSession(sdk, http).also { cache[key] = it; startRefreshJob(key, sdk) }
         }
@@ -176,12 +178,7 @@ internal class DaemonContext(
                     continue
                 }
                 delay(refreshDelayMs(exp, System.currentTimeMillis(), REFRESH_LEAD_MS))
-                val ok = requestMutex.withLock {
-                    runCatching { sdk.authenticate().getOrThrow() }
-                        .onSuccess { log.debug { "refreshed session ${key.resource} ${key.scopes}" } }
-                        .onFailure { log.warn { "session refresh failed for ${key.resource}: ${it.message}" } }
-                        .isSuccess
-                }
+                val ok = refreshOnce(requestMutex, key.resource, key.scopes) { sdk.authenticate().getOrThrow() }
                 if (!ok) delay(FAILURE_BACKOFF_MS)
             }
         }
@@ -220,7 +217,7 @@ internal class DaemonContext(
      */
     suspend fun mintPoppToken(egkHandle: String?): String {
         val mint = poppMint ?: error("PoPP is not enabled")
-        val popp = warmSessionFor(originOf(mint.serviceUrl), listOf("popp"))
+        val popp = Tracer.spanSuspend("session.warm") { warmSessionFor(originOf(mint.serviceUrl), listOf("popp")) }
         val session = connectorSession.takeIf { mint.transport == CardTransport.CONNECTOR }
         return runPoppFlow(popp.sdk, mint.copy(egkHandle = egkHandle), session) {
             applyCliHttpDefaults(cliConfig)
@@ -242,5 +239,23 @@ internal class DaemonContext(
         runCatching { authResources?.close() }
         runCatching { cacheDb?.close() }
         runCatching { cliConfig.httpClient.close() }
+    }
+}
+
+/** One proactive re-authentication under [lock]; false if it failed, so the caller can back off. */
+internal suspend fun refreshOnce(
+    lock: Mutex,
+    resource: String,
+    scopes: List<String>,
+    authenticate: suspend () -> Unit,
+): Boolean = Tracer.event("refresh", mapOf("resource" to resource, "scopes" to scopes.joinToString(","))) { span ->
+    lock.withTracedLock {
+        runCatching { Tracer.spanSuspend("sdk.authenticate") { authenticate() } }
+            .onSuccess { log.debug { "refreshed session $resource $scopes" } }
+            .onFailure {
+                log.warn { "session refresh failed for $resource: ${it.message}" }
+                span.failWith(it)
+            }
+            .isSuccess
     }
 }

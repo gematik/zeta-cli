@@ -82,9 +82,11 @@ Key options (see `zeta serve --help` for the full list, including the shared aut
 | `--port PORT` | Listen on TCP instead. Binds `127.0.0.1` unless `--host` says otherwise. |
 | `--host ADDR` | Bind address for `--port` (default `127.0.0.1`). |
 | `--env {dev,ref,test,prod}` | TI environment to warm and serve (default `dev`). |
-| `--popp-card {connector,standard}` | Card transport for `/api/vsdm/popp-then-read` (default `connector`; `connector` requires `--auth-method connector`). |
+| `--popp-card {connector,standard,kartos}` | Card transport for `/api/vsdm/popp-then-read` (default `connector`; `connector` requires `--auth-method connector`, `kartos` requires `--popp-kartos-image`). |
 | `--popp-connection {contact,contactless}` | Card connection for `--popp-card connector` (default `contact`). |
 | `--popp-reader NAME` / `--popp-wait SECONDS` | PC/SC reader selection for `--popp-card standard`. Set `--popp-reader` explicitly when the host has several reader slots — the daemon otherwise takes the first slot that answers on each mint. `zeta popp readers` lists them. |
+| `--popp-kartos-image PATH` / `--popp-kartos-bin PATH` | Card image and `kartos` executable for `--popp-card kartos`. |
+| `--trace-file PATH` | Append one JSON span tree per line for each warm-up step, token refresh and `/api/popp/token` mint. Holds APDU headers, sizes, status words, exception types, the Konnektor address and the reader name, no tokens, card data or error messages. A new file is readable by its owner only. Evaluate it with `tools/popp-daemon-measure.py`. |
 | `--cache-db FILE` | Shared SQLite cache file; VSDM reads keep bundles in it so unchanged records are revalidated instead of re-transferred. Off when unset. See [Caching](#caching). |
 | `--cache-max-entries N` | Entries to keep per cached kind (default `10000`); the least recently revalidated go first. |
 | `--cache-max-age-days DAYS` | Drop entries nobody revalidated in this long (default `180`). |

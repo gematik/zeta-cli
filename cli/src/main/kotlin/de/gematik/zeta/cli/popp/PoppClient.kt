@@ -68,10 +68,13 @@ internal class PoppClient(
         secureSendApdu: suspend (signedScenario: String) -> List<String>,
     ): String {
         sendMessage(start)
+        var round = 0
         while (true) {
             when (val msg = receiveMessage()) {
                 is ConnectorScenarioMessage -> {
-                    val responseSteps = secureSendApdu(msg.signedScenario)
+                    val responseSteps = tracedScenarioRound(wsSpanParent, ++round) {
+                        secureSendApdu(msg.signedScenario)
+                    }
                     sendMessage(ScenarioResponseMessage(steps = responseSteps))
                 }
 
@@ -106,10 +109,13 @@ internal class PoppClient(
         executeApdus: suspend (List<ScenarioStep>) -> List<String>,
     ): String {
         sendMessage(start)
+        var round = 0
         while (true) {
             when (val msg = receiveMessage()) {
                 is StandardScenarioMessage -> {
-                    val responseSteps = executeApdus(msg.steps)
+                    val responseSteps = tracedScenarioRound(wsSpanParent, ++round) {
+                        executeApdus(msg.steps)
+                    }
                     sendMessage(ScenarioResponseMessage(steps = responseSteps))
                 }
 
@@ -176,5 +182,28 @@ internal class PoppClient(
         Tracer.spanUnder(wsSpanParent, name, attrs) { block(it) }
     } else {
         Tracer.spanSuspend(name, attrs) { block(it) }
+    }
+}
+
+/**
+ * One APDU round at the card or Konnektor. The `popp.ws.*` frames stay its siblings, so the service
+ * time of a round is the `popp.ws.recv` right before it.
+ */
+internal suspend fun tracedScenarioRound(
+    parent: Span?,
+    round: Int,
+    exchange: suspend () -> List<String>,
+): List<String> {
+    val attrs = mapOf("round" to round)
+    val record: suspend (Span) -> List<String> = { span ->
+        exchange().also { responses ->
+            span.attr("apdus", responses.size)
+            span.attr("respBytes", responses.sumOf { it.length / 2 })
+        }
+    }
+    return if (parent != null) {
+        Tracer.spanUnder(parent, "scenario", attrs, record)
+    } else {
+        Tracer.spanSuspend("scenario", attrs, record)
     }
 }

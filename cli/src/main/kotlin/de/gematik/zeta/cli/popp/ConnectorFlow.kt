@@ -26,7 +26,6 @@ import de.gematik.connector.ConnectorClient
 import de.gematik.connector.api.gematik.conn.cardservicecommon20.CardType
 import de.gematik.zeta.cli.connector.ConnectorSession
 import de.gematik.zeta.cli.connector.traced
-import de.gematik.zeta.cli.connector.tracedUnder
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
@@ -54,9 +53,9 @@ internal suspend fun runConnectorPoppFlow(
     log.info { "Connector card session $cardSessionId opened on eGK $handle" }
 
     return try {
-        poppConnect(sdk, config, wsBuilder) { client, wsParent ->
+        poppConnect(sdk, config, wsBuilder) { client ->
             client.runConnectorScenario(startMessage(config, cardSessionId)) { signed ->
-                session.tracedUnder(wsParent, "secureSendApdu") { connector.secureSendApdu(signed) }
+                session.traced("secureSendApdu") { connector.secureSendApdu(signed) }
             }
         }
     } finally {

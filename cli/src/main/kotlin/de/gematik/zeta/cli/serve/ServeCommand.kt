@@ -49,6 +49,8 @@ import de.gematik.zeta.cli.storage.ProfileDb
 import de.gematik.zeta.cli.storage.ProfileDbCatalogStore
 import de.gematik.zeta.cli.cache.CacheDb
 import de.gematik.zeta.cli.storage.zetaProfilePath
+import de.gematik.zeta.cli.trace.TraceFile
+import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.cli.cache.CacheOptions
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.serialization.kotlinx.json.json
@@ -150,10 +152,32 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         metavar = "TRANSPORT",
         envvar = "ZETA_POPP_CARD",
         help = "Card transport for GET /api/vsdm/popp-then-read (PoPP): connector (eGK at the Konnektor, " +
-            "requires --auth-method connector) or standard (eGK in a local PC/SC reader). Default: connector. " +
+            "requires --auth-method connector), standard (eGK in a local PC/SC reader) or kartos (simulated card, " +
+            "requires --popp-kartos-image). Default: connector. " +
             "(env: ZETA_POPP_CARD)",
-    ).choice("connector" to CardTransport.CONNECTOR, "standard" to CardTransport.STANDARD)
+    ).choice("connector" to CardTransport.CONNECTOR, "standard" to CardTransport.STANDARD, "kartos" to CardTransport.KARTOS)
         .default(CardTransport.CONNECTOR)
+
+    private val poppKartosImage: Path? by option(
+        "--popp-kartos-image",
+        metavar = "PATH",
+        envvar = "ZETA_POPP_KARTOS_IMAGE",
+        help = "Card image for --popp-card kartos. (env: ZETA_POPP_KARTOS_IMAGE)",
+    ).path(mustExist = true, canBeDir = false)
+
+    private val poppKartosBin: String by option(
+        "--popp-kartos-bin",
+        metavar = "PATH",
+        envvar = "ZETA_KARTOS_BIN",
+        help = "Path to the kartos executable for --popp-card kartos. Default: 'kartos' on PATH. (env: ZETA_KARTOS_BIN)",
+    ).default("kartos")
+
+    private val traceFile: Path? by option(
+        "--trace-file",
+        metavar = "PATH",
+        envvar = "ZETA_TRACE_FILE",
+        help = "Append one JSON span tree per warm-up, refresh and PoPP mint to this file. (env: ZETA_TRACE_FILE)",
+    ).path(canBeDir = false)
 
     private val card by CardReaderOptions(prefix = "popp-")
 
@@ -192,12 +216,15 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
     }
 
     override fun runCommand() {
+        traceFile?.let { Tracer.initDaemon(TraceFile(it)::write) }
         if (socket != null && port != null) {
             throw UsageError("--socket and --port are mutually exclusive; pass exactly one (or neither for the default socket)")
         }
         // Single-env daemon: the ASL prod/non-prod choice is fixed once here (each SDK client captures
         // it at build time), so there's no per-request mutation race.
         cliConfig.aslProdEnvironment = cliConfig.aslProdEnvironment || env == Environment.PROD
+
+        requireKartosImage(poppCard, poppKartosImage)
 
         // Build the identity once (fatal if the config is wrong: bad keystore, no card, unreadable DB).
         val auth = buildTokenProvider()
@@ -225,6 +252,8 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
             reader = card.reader,
             waitSeconds = card.waitSeconds,
             readerOption = card.readerOptionName,
+            kartosImage = poppKartosImage,
+            kartosBin = poppKartosBin,
         )
         // Opened before the context so a daemon told to cache never starts up silently not caching.
         val cacheDb = cache.db?.let { CacheDb(it) }
@@ -252,7 +281,9 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
     private suspend fun warmUpInBackground(ctx: DaemonContext) {
         val path = zetaProfilePath(profile)
         val catalog = runCatching {
-            ServiceDiscoveryClient(cliConfig.httpClient, ProfileDbCatalogStore(ProfileDb(path))).fetchCatalog(env)
+            Tracer.event("prep.catalog") {
+                ServiceDiscoveryClient(cliConfig.httpClient, ProfileDbCatalogStore(ProfileDb(path))).fetchCatalog(env)
+            }
         }.onFailure {
             log.warn { "service-discovery catalog fetch failed for ${env.name.lowercase()}: ${it.message}; VSDM endpoints will warm lazily" }
         }.getOrNull()
@@ -265,7 +296,11 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         val results = coroutineScope {
             endpoints.map { (resource, scopes) ->
                 async {
-                    runCatching { ctx.warmSessionFor(resource, scopes) }
+                    runCatching {
+                        Tracer.event("warm", mapOf("resource" to resource, "scopes" to scopes.joinToString(","))) {
+                            ctx.warmSessionFor(resource, scopes)
+                        }
+                    }
                         .onSuccess { log.info { "warmed $resource $scopes" } }
                         .onFailure { log.warn { "warm $resource failed — will retry lazily: ${it.message}" } }
                 }
@@ -329,5 +364,11 @@ class ServeCommand : ZetaSessionCommand(name = "serve") {
         echo(ready(sock.toString()))
         ctx.launchWarmup { warmUpInBackground(ctx) }
         CountDownLatch(1).await() // hold the foreground; the shutdown hook cleans up on Ctrl-C
+    }
+}
+
+internal fun requireKartosImage(card: CardTransport, image: Path?) {
+    if (card == CardTransport.KARTOS && image == null) {
+        throw UsageError("--popp-card kartos requires --popp-kartos-image")
     }
 }

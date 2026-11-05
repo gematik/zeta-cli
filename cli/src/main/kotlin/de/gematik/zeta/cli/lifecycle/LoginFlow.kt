@@ -37,8 +37,8 @@ internal suspend fun ensureLoggedIn(sdk: ZetaSdkClient): Pair<Boolean, Boolean> 
     val ranRegister = initial == SdkStatus.NOT_REGISTERED
     if (ranRegister) {
         // register() requires discover()-populated AS metadata; discover() short-circuits if cached.
-        sdk.discover().getOrThrow()
-        sdk.register().getOrThrow()
+        Tracer.spanSuspend("sdk.discover") { sdk.discover().getOrThrow() }
+        Tracer.spanSuspend("sdk.register") { sdk.register().getOrThrow() }
     }
 
     val ranAuthenticate = initial != SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN
