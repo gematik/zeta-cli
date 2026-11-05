@@ -8,7 +8,7 @@
 environment. At startup it logs into the known Zeta-protected endpoints (the service-discovery
 catalog's VSDM instances plus the PoPP service) so later requests skip
 discover/register/authenticate — and, with `--auth-method connector`, the one-time Konnektor
-SDS load and card enumeration. A background job proactively re-authenticates each session ~5s
+SDS load and card enumeration. A background job proactively refreshes each session ~30s
 before its access token expires, so even an idle daemon answers the next request without paying
 a token round-trip.
 

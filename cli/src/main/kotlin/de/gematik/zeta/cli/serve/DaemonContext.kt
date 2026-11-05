@@ -42,6 +42,7 @@ import de.gematik.zeta.cli.cache.CacheDb
 import de.gematik.zeta.cli.vsdm.VsdmBundleCache
 import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.ZetaSdkClientExtension
+import de.gematik.zeta.sdk.authentication.AuthenticationStorage
 import de.gematik.zeta.sdk.authentication.AuthenticationStorageImpl
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
@@ -53,6 +54,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -64,9 +66,11 @@ import kotlinx.coroutines.withContext
 
 private val log = KotlinLogging.logger {}
 
-private const val REFRESH_LEAD_MS = 5_000L
+// Above the SDK's own 10 s margin, below which any mint would pay the refresh. The rest is headroom
+// for the refresh to wait out a mint holding the request lock.
+private const val REFRESH_LEAD_MS = 30_000L
 private const val FALLBACK_POLL_MS = 30_000L
-private const val FAILURE_BACKOFF_MS = 5_000L
+private const val MIN_REFRESH_INTERVAL_MS = 5_000L
 private const val CACHE_PRUNE_INTERVAL_MS = 3_600_000L
 
 /** Milliseconds to sleep before waking to refresh: [leadMs] before the token's [expSec] expiry, floored at 0. */
@@ -165,7 +169,7 @@ internal class DaemonContext(
     }
 
     /**
-     * Proactively re-authenticate this session ~5s before its access token expires so an idle session
+     * Proactively refresh this session ~30s before its access token expires so an idle session
      * stays hot (a request never pays the refresh round-trip). The re-auth runs under [requestMutex] — the
      * same lock requests hold end-to-end — so it can't race an in-flight request on the token store.
      */
@@ -178,17 +182,22 @@ internal class DaemonContext(
                     continue
                 }
                 delay(refreshDelayMs(exp, System.currentTimeMillis(), REFRESH_LEAD_MS))
-                val ok = refreshOnce(requestMutex, key.resource, key.scopes) { sdk.authenticate().getOrThrow() }
-                if (!ok) delay(FAILURE_BACKOFF_MS)
+                refreshOnce(requestMutex, key.resource, key.scopes) {
+                    forceTokenRefresh(authStorage(key)) { sdk.authenticate().getOrThrow() }
+                }
+                // Also after a success: a token living shorter than the lead would otherwise refresh in a tight loop.
+                delay(MIN_REFRESH_INTERVAL_MS)
             }
         }
     }
 
     /** The session's access-token absolute expiry (epoch seconds) from its own auth storage, or 0 if none. */
-    private suspend fun accessTokenExpiry(key: SdkKey): Long {
+    private suspend fun accessTokenExpiry(key: SdkKey): Long =
+        runCatching { authStorage(key).getTokenExpiration()?.toLongOrNull() }.getOrNull() ?: 0L
+
+    private fun authStorage(key: SdkKey): AuthenticationStorage {
         val scope = ResourceScope(key.resource, key.scopes)
-        val auth = AuthenticationStorageImpl(SqliteSdkStorage(scope.storageKey, ProfileDb(storagePath)), scope)
-        return runCatching { auth.getTokenExpiration()?.toLongOrNull() }.getOrNull() ?: 0L
+        return AuthenticationStorageImpl(SqliteSdkStorage(scope.storageKey, ProfileDb(storagePath)), scope)
     }
 
     /** A warm session currently held open, projected for the health endpoint. */
@@ -243,6 +252,26 @@ internal class DaemonContext(
 }
 
 /** One proactive re-authentication under [lock]; false if it failed, so the caller can back off. */
+/**
+ * Make [authenticate] refresh now. The SDK answers from its store while the access token has more than
+ * 10 s left and has no call to force a refresh, so an early refresh has to drop the access token first.
+ * The refresh token stays. If the refresh fails, the old token goes back: it is still valid for a while.
+ */
+internal suspend fun forceTokenRefresh(storage: AuthenticationStorage, authenticate: suspend () -> Unit) {
+    val access = storage.getAccessToken()
+    val refresh = storage.getRefreshToken()
+    val expiration = storage.getTokenExpiration()?.toLongOrNull()
+    storage.clearAccessToken()
+    try {
+        authenticate()
+    } catch (e: Exception) {
+        if (access != null && refresh != null && expiration != null) {
+            withContext(NonCancellable) { storage.saveAccessTokens(access, refresh, expiration) }
+        }
+        throw e
+    }
+}
+
 internal suspend fun refreshOnce(
     lock: Mutex,
     resource: String,
