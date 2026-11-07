@@ -625,6 +625,15 @@ Override the pin at build time with `-PzetaSdkVersion=<tag>` (e.g. `latest` from
 
 Requires JDK 21. The Gradle wrapper auto-provisions one if needed.
 
+### Homebrew (macOS, Linux)
+
+```sh
+brew install gematik/tap/zeta
+brew upgrade zeta
+```
+
+Installs the latest release with `openjdk@21` as its JDK. Installs from `spilikin/tap` stay at 0.15.0; switch with `brew uninstall zeta && brew install gematik/tap/zeta`.
+
 ### Dev mode (no install)
 
 Run straight from sources via `:cli:run` — the `./zeta-dev` wrapper forwards args verbatim:
