@@ -52,7 +52,7 @@ install sdk_version="":
     "$(brew --prefix)/bin/zeta" version
 
 # point <owner>/homebrew-tap at the canonical gematik/zeta-cli release and bump Formula/zeta.rb
-# usage: just publish-brew <owner>     (e.g. `just publish-brew spilikin`); run `just release` first
+# usage: just publish-brew <owner>     (e.g. `just publish-brew gematik`); run `just release` first
 publish-brew owner:
     #!/usr/bin/env bash
     set -euo pipefail
