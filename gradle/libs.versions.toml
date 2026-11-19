@@ -9,7 +9,10 @@ logback = "1.6.8"
 zeta-sdk = "1.3.2"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.13.0"
-ktor = "3.6.1"
+# Must match the Ktor version zeta-sdk is built with: Ktor modules share internal APIs across
+# minor versions, and the SDK brings modules the CLI does not declare. `:cli:checkRuntimeClasspath`
+# fails the build on any mismatch.
+ktor = "3.5.2"
 xmlutil = "1.0.2.1"
 bouncycastle = "1.87"
 jna = "5.19.1"

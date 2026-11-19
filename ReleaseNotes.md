@@ -4,7 +4,8 @@
 ## Release 0.15.1
 ### changes
 - Built against `zeta-sdk` 1.3.4 (Netty and Bouncy Castle updated for CVE fixes)
-- Update dependencies: Kotlin 2.4.21, Ktor 3.6.1, kotlinx-serialization 1.13.0, Bouncy Castle 1.87, Clikt 5.2.1, Logback 1.6.8, kotlin-logging 8.0.7, sqlite-jdbc 3.54.1.0, OpenTelemetry 1.68.0, Spotless 8.11.0
+- Update dependencies: Kotlin 2.4.21, kotlinx-serialization 1.13.0, Bouncy Castle 1.87, Clikt 5.2.1, Logback 1.6.8, kotlin-logging 8.0.7, sqlite-jdbc 3.54.1.0, OpenTelemetry 1.68.0, Spotless 8.11.0
+- Ktor now matches the version zeta-sdk is built with (3.5.2): modules only the SDK pulls in (WebSockets, content negotiation) used to run on an older Ktor than the rest. `./gradlew check` fails if they drift apart again
 - `-v` now logs the invocation (`zeta …`, secrets redacted) alongside the zeta-cli, zeta-sdk, Java and OS versions; previously the invocation needed `-vv`
 - `zeta vsdm` decodes `application/cbor` responses and shows them as JSON, including the ASL error the service sends with an HTTP 500; a body labelled CBOR that does not decode is shown as text
 

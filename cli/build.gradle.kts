@@ -182,11 +182,15 @@ tasks.named<CreateStartScripts>("startScripts") {
 }
 
 // The runtime must stay free of Prometheus and of alpha OpenTelemetry artifacts: `zeta probe` pushes via
-// OTLP only, and alpha artifacts carry no compatibility guarantee. Fails `check` with the dependency path.
+// OTLP only, and alpha artifacts carry no compatibility guarantee. Every Ktor module must sit on the
+// catalog's Ktor version, which tracks the SDK's: a module only the SDK pulls in keeps the SDK's version,
+// so a catalog that drifts from it mixes Ktor versions at runtime. Fails `check` with the dependency path.
 val checkRuntimeClasspath by tasks.registering {
     group = "verification"
-    description = "Fail if the runtime classpath contains Prometheus or alpha OpenTelemetry modules."
+    description = "Fail if the runtime classpath contains Prometheus or alpha OpenTelemetry modules, " +
+        "or Ktor modules off the catalog's Ktor version."
     val root = configurations.runtimeClasspath.flatMap { it.incoming.resolutionResult.rootComponent }
+    val ktorVersion = libs.versions.ktor.get()
     doLast {
         fun forbidden(group: String, name: String, version: String) =
             group == "io.prometheus" || "prometheus" in name ||
@@ -198,6 +202,7 @@ val checkRuntimeClasspath by tasks.registering {
         paths[start] = emptyList()
         queue.add(start)
         val offending = mutableListOf<String>()
+        val ktorMismatches = mutableListOf<String>()
         while (queue.isNotEmpty()) {
             val component = queue.removeFirst()
             component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { dep ->
@@ -207,6 +212,9 @@ val checkRuntimeClasspath by tasks.registering {
                 val coords = "${id.group}:${id.name}:${id.version}"
                 paths[next] = paths.getValue(component) + coords
                 if (forbidden(id.group, id.name, id.version)) offending += paths.getValue(next).joinToString(" -> ")
+                if (id.group == "io.ktor" && id.version != ktorVersion) {
+                    ktorMismatches += paths.getValue(next).joinToString(" -> ")
+                }
                 queue.add(next)
             }
         }
@@ -214,6 +222,12 @@ val checkRuntimeClasspath by tasks.registering {
             throw GradleException(
                 "runtimeClasspath contains forbidden modules (Prometheus or alpha OpenTelemetry):\n" +
                     offending.joinToString("\n") { "  $it" },
+            )
+        }
+        if (ktorMismatches.isNotEmpty()) {
+            throw GradleException(
+                "runtimeClasspath has Ktor modules off the catalog's ktor = \"$ktorVersion\"; set it to the " +
+                    "Ktor version zeta-sdk is built with:\n" + ktorMismatches.joinToString("\n") { "  $it" },
             )
         }
     }
