@@ -66,6 +66,8 @@ val assembleDist by tasks.registering(Sync::class) {
     group = "distribution"
     description = "Stage the zeta application image into the release tree."
     dependsOn(":cli:installDist")
+    // A release must not ship a classpath that `check` would reject (e.g. mixed Ktor versions).
+    dependsOn(":cli:checkRuntimeClasspath")
     from(project(":cli").layout.buildDirectory.dir("install/zeta"))
     into(distRoot)
 }
