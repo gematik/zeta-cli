@@ -189,15 +189,17 @@ abstract class ZetaCliktCommand(name: String? = null) : CliktCommand(name = name
         }
 
         Logging.applyVerbosity(config.verbose)
-        // Once per invocation, fire two startup lines on the leaf command:
-        //   - INFO: zeta-cli + zeta-sdk versions, so -v traces self-identify which build
-        //     produced them
-        //   - DEBUG: echo argv as "zeta …" so -vv shows exactly what was run
-        // Gating on `invokedSubcommand == null` keeps it to the leaf — without that, nested
-        // commands (e.g. `connector get cards`) would each emit it.
+        // Once per invocation, on the leaf command, at INFO so a plain -v log sent in by a user
+        // already says which build, runtime and argv produced it. Gating on
+        // `invokedSubcommand == null` keeps nested commands (e.g. `connector get cards`) from
+        // each emitting it.
         if (currentContext.invokedSubcommand == null) {
-            invocationLog.info { "zeta-cli ${BuildConfig.VERSION}, zeta-sdk ${BuildConfig.ZETA_SDK_VERSION}" }
-            invocationLog.debug { "zeta " + redactSecretArgs(invocationArgs).joinToString(" ", transform = ::shellQuote) }
+            invocationLog.info {
+                "zeta-cli ${BuildConfig.VERSION}, zeta-sdk ${BuildConfig.ZETA_SDK_VERSION}, " +
+                    "Java ${System.getProperty("java.runtime.version")} (${System.getProperty("java.vendor")}), " +
+                    "${System.getProperty("os.name")} ${System.getProperty("os.version")} ${System.getProperty("os.arch")}"
+            }
+            invocationLog.info { "zeta " + redactSecretArgs(invocationArgs).joinToString(" ", transform = ::shellQuote) }
         }
         runCommand()
     }

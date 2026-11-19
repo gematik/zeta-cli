@@ -42,6 +42,7 @@ import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.client.withAslExpiryRetry
 import de.gematik.zeta.cli.client.parseHeaderOption
 import de.gematik.zeta.cli.http.logInnerAslResponse
+import de.gematik.zeta.cli.output.decodeCborToJson
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderXml
 import de.gematik.zeta.cli.state.claimString
@@ -331,9 +332,11 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         // with the server's reason rather than silently printing the body and exiting 0. A 304 is
         // the successful answer to the conditional request: the version we named still holds.
         if (status !in 200..299 && status != HttpStatusCode.NotModified.value) {
-            val detail = readableBody(bytes)?.let { ": $it" }
-                ?: binaryNote(bytes, contentType)?.let { " ($it)" }
-                ?: ""
+            val detail = if (isCbor(contentType)) {
+                (decodeCborToJson(bytes)?.toString() ?: lossyText(bytes))?.let { ": $it" }
+            } else {
+                readableBody(bytes)?.let { ": $it" } ?: binaryNote(bytes, contentType)?.let { " ($it)" }
+            } ?: ""
             throw CliktError("VSDM request failed: HTTP $status $reason$detail")
         }
 
@@ -372,9 +375,20 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
             return
         }
 
-        // Non-JSON success body. VSDM serves the bundle as application/cbor under newer
-        // profiles; CBOR is not decoded here, so print the payload when it is actually text
-        // and otherwise describe it — never dump raw binary as mangled UTF-8.
+        // VSDM serves the bundle as application/cbor under newer profiles. A CBOR label on a body
+        // that doesn't decode is most likely an error page from a gateway in front, so show it as text.
+        if (isCbor(contentType)) {
+            val element = decodeCborToJson(bytes)
+            if (element != null) {
+                echo(renderJson(element, colorize = colorize))
+            } else {
+                log.warn { "response Content-Type claims CBOR but body is not parseable; printing as text" }
+                echo(lossyText(bytes).orEmpty())
+            }
+            return
+        }
+
+        // Never dump raw binary as mangled UTF-8: print it only when it is actually text.
         echo(readableBody(bytes) ?: "<${binaryNote(bytes, contentType) ?: "empty body"}>")
     }
 
@@ -390,6 +404,16 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
     private fun isFhirXml(contentType: String): Boolean =
         contentType.substringBefore(';').trim().equals("application/fhir+xml", ignoreCase = true)
 
+    private fun isCbor(contentType: String): Boolean = contentType.contains("cbor", ignoreCase = true)
+
+    /** The body as text, control characters other than line breaks and tabs replaced, or null when blank. */
+    private fun lossyText(bytes: ByteArray): String? =
+        bytes.decodeToString()
+            .map { if (it.isISOControl() && it != '\n' && it != '\r' && it != '\t') '\uFFFD' else it }
+            .joinToString("")
+            .trim()
+            .ifEmpty { null }
+
     /** The body as text when it decodes to printable characters (e.g. a plain error string), else null. */
     private fun readableBody(bytes: ByteArray): String? {
         if (bytes.isEmpty()) return null
@@ -403,7 +427,6 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
     private fun binaryNote(bytes: ByteArray, contentType: String): String? {
         if (bytes.isEmpty()) return null
         val type = contentType.substringBefore(';').ifBlank { "binary" }
-        val cborHint = if (contentType.contains("cbor", ignoreCase = true)) "; CBOR decoding not supported" else ""
-        return "${bytes.size}-byte $type body$cborHint"
+        return "${bytes.size}-byte $type body"
     }
 }
