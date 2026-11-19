@@ -1,6 +1,12 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.15.1
+### changes
+- Built against `zeta-sdk` 1.3.4 (Netty and Bouncy Castle updated for CVE fixes)
+- `-v` now logs the invocation (`zeta …`, secrets redacted) alongside the zeta-cli, zeta-sdk, Java and OS versions; previously the invocation needed `-vv`
+- `zeta vsdm` decodes `application/cbor` responses and shows them as JSON, including the ASL error the service sends with an HTTP 500; a body labelled CBOR that does not decode is shown as text
+
 ## Release 0.15.0
 ### changes
 - Add `zeta probe` — a long-running prober that periodically logs in to and refreshes tokens for the VSDM and PoPP endpoints, and pushes metrics and traces via OTLP. Ships with a `Dockerfile` that runs it by default. See [docs/probe.md](docs/probe.md)
