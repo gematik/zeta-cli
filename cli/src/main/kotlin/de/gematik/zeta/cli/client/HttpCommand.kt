@@ -30,6 +30,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.enum
 import de.gematik.zeta.catalog.Environment
 import de.gematik.zeta.cli.http.logInnerAslResponse
+import de.gematik.zeta.cli.http.logPepRejections
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.trace.Tracer
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
@@ -129,7 +130,7 @@ class HttpCommand : ZetaSessionCommand("http") {
         val method = resolveMethod()
 
         openSession(resource = originOf(url), scopes = scopes) { sdk, _ ->
-            val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }
+            val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }.logPepRejections()
             try {
                 runBlocking {
                     val response = sendRequest(client, method, parsedHeaders, requestBody)

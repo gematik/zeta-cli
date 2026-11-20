@@ -42,6 +42,7 @@ import de.gematik.zeta.cli.client.originOf
 import de.gematik.zeta.cli.client.withAslExpiryRetry
 import de.gematik.zeta.cli.client.parseHeaderOption
 import de.gematik.zeta.cli.http.logInnerAslResponse
+import de.gematik.zeta.cli.http.logPepRejections
 import de.gematik.zeta.cli.output.decodeCborToJson
 import de.gematik.zeta.cli.output.renderJson
 import de.gematik.zeta.cli.output.renderXml
@@ -182,7 +183,7 @@ internal class VsdmGetCommand : ZetaSessionCommand("get") {
         val cacheDb = cacheFile?.let { VsdmBundleCache(it) }
         try {
             openSession(resource = resource, scopes = listOf("vsdservice")) { sdk, _ ->
-                val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }
+                val client = sdk.httpClient { applyCliHttpDefaults(cliConfig) }.logPepRejections()
                 try {
                     runBlocking {
                         // Ktor's header(...) appends, so a user override of e.g. Accept would send
