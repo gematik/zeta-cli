@@ -118,6 +118,10 @@ zeta status https://popp.dev.poppservice.de -o json | jq
 zeta http https://api.example.org/v1/foo \
   --scope foo -X POST -d '{"x":1}' -H 'X-Trace-Id: dev-42'
 
+# Larger bodies from a file (@FILE) or stdin (@-), like curl
+zeta http https://api.example.org/v1/foo --scope foo \
+  -H 'Content-Type: application/json' -d @body.json
+
 # WebSocket with PoPP header inlined; messages from stdin
 zeta ws wss://service.example.org/stream --scope foo --popp-token "$TOKEN" <<<'{"hello":1}'
 
