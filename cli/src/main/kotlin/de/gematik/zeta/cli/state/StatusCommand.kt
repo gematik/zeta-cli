@@ -51,9 +51,9 @@ private val log = KotlinLogging.logger {}
  *
  * Output always includes (when present): the resource, the linked authorization server,
  * the [de.gematik.zeta.sdk.SdkStatus] enum, the decoded access-token header + claims, and
- * a registration summary. `--reveal` adds the raw access-token JWS, the dynamic-client
- * `client_secret`, and the `registration_access_token`. Refresh tokens are never emitted
- * (only their presence informs the status enum).
+ * a registration summary. `--reveal` adds the raw access-token JWS and the dynamic-client
+ * `client_secret`. Refresh tokens are never emitted (only their presence informs the status
+ * enum).
  *
  * The status enum mirrors `ZetaSdkClient.status()`: storage is scoped per resource+scope, and the
  * enum is derived from the cached registration + token validity for that scope. See [entryFor].
@@ -68,9 +68,9 @@ class StatusCommand : ZetaProfileCommand(name = "status") {
     private val reveal: Boolean by option(
         "--reveal",
         envvar = "ZETA_REVEAL",
-        help = "Include normally-redacted secrets in the output: the raw access-token JWS, " +
-            "the dynamic-client `client_secret`, and the `registration_access_token`. " +
-            "Refresh tokens are never emitted regardless. (env: ZETA_REVEAL)",
+        help = "Include normally-redacted secrets in the output: the raw access-token JWS and " +
+            "the dynamic-client `client_secret`. Refresh tokens are never emitted regardless. " +
+            "(env: ZETA_REVEAL)",
     ).flag(default = false)
 
     override fun help(context: Context) =
