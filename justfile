@@ -51,14 +51,13 @@ install sdk_version="":
     echo "Installed: $(brew --prefix)/bin/zeta"
     "$(brew --prefix)/bin/zeta" version
 
-# point <owner>/homebrew-tap at the canonical gematik/zeta-cli release and bump Formula/zeta.rb
-# usage: just publish-brew <owner>     (e.g. `just publish-brew gematik`); run `just release` first
-publish-brew owner:
+# point <owner>/homebrew-tap (default: gematik) at the canonical gematik/zeta-cli release and bump Formula/zeta.rb
+# usage: just publish-brew [owner]; run `just release` first
+publish-brew owner="gematik":
     #!/usr/bin/env bash
     set -euo pipefail
 
     OWNER="{{owner}}"
-    [ -n "$OWNER" ] || { echo "owner is required: just publish-brew <owner>" >&2; exit 2; }
 
     command -v gh >/dev/null 2>&1 || {
         echo "gh CLI is required: https://cli.github.com" >&2
