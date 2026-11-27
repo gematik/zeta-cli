@@ -1,12 +1,12 @@
 [versions]
-spotless = "8.11.0"
+spotless = "8.12.0"
 kotlin-gradle-plugin = "2.4.21"
 clikt = "5.2.1"
 kotlin-logging = "8.0.7"
 logback = "1.6.8"
 # zeta-sdk version the :cli builds against. Override with -PzetaSdkVersion=<tag> (e.g. `latest`
 # from mavenLocal).
-zeta-sdk = "1.3.2"
+zeta-sdk = "2.0.8"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.13.0"
 # Must match the Ktor version zeta-sdk is built with: Ktor modules share internal APIs across

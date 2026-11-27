@@ -39,9 +39,9 @@ import kotlinx.serialization.json.buildJsonObject
  * static client registration with that AS, then the current access-token, and finally the
  * derived SdkStatus as the bottom-line summary.
  *
- * `reveal` toggles secret exposure: the raw access-token JWS, the dynamic-client
- * `client_secret`, and the `registration_access_token`. Refresh tokens are never emitted
- * regardless — their presence informs the status enum and that's all.
+ * `reveal` toggles secret exposure: the raw access-token JWS and the dynamic-client
+ * `client_secret`. Refresh tokens are never emitted regardless — their presence informs the
+ * status enum and that's all.
  */
 internal fun renderEntryText(entry: Entry, colorize: Boolean, reveal: Boolean): String =
     renderSections(colorize = colorize) {
@@ -67,7 +67,6 @@ internal fun renderEntryText(entry: Entry, colorize: Boolean, reveal: Boolean): 
                 field("Secret expires", reg.clientSecretExpiresAt?.takeIf { it > 0 }?.let(::formatEpoch))
                 if (reveal) {
                     field("Client secret", reg.raw.clientSecret)
-                    field("Registration access token", reg.raw.registrationAccessToken)
                 }
             }
         }
@@ -116,10 +115,6 @@ internal fun renderEntryJson(entry: Entry, reveal: Boolean): JsonElement = build
                 )
                 if (reveal) {
                     put("client_secret", reg.raw.clientSecret?.let(::JsonPrimitive) ?: JsonNull)
-                    put(
-                        "registration_access_token",
-                        reg.raw.registrationAccessToken?.let(::JsonPrimitive) ?: JsonNull,
-                    )
                 }
             }
         } ?: JsonNull,

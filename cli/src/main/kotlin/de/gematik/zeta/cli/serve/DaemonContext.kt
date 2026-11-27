@@ -191,7 +191,7 @@ internal class DaemonContext(
     private suspend fun accessTokenExpiry(key: SdkKey): Long {
         val scope = ResourceScope(key.resource, key.scopes)
         val auth = AuthenticationStorageImpl(SqliteSdkStorage(scope.storageKey, ProfileDb(storagePath)), scope)
-        return runCatching { auth.getTokenExpiration()?.toLongOrNull() }.getOrNull() ?: 0L
+        return runCatching { auth.getAccessTokenExpiration()?.toLongOrNull() }.getOrNull() ?: 0L
     }
 
     /** A warm session currently held open, projected for the health endpoint. */

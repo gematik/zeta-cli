@@ -121,7 +121,7 @@ internal suspend fun entryFor(stores: ProfileStores): Entry {
     val regResponse = stores.registration.getRegistrationInfo(regKey)
         ?: return Entry(resourceUrl, authServer.issuer, SdkStatus.NOT_REGISTERED, null, null)
 
-    val expiresAt = stores.authentication.getTokenExpiration()?.toLongOrNull() ?: 0L
+    val expiresAt = stores.authentication.getAccessTokenExpiration()?.toLongOrNull() ?: 0L
     val nowEpoch = System.currentTimeMillis() / 1000
     val tokensExpired = expiresAt <= nowEpoch
     val accessJwt = stores.authentication.getAccessToken()

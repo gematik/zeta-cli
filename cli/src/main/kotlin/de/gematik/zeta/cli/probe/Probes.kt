@@ -214,7 +214,7 @@ internal suspend fun runProbe(
                     if (status != SdkStatus.HAS_ACCESS_AND_REFRESH_TOKEN) {
                         throw ProbeVerifyException("no_tokens", "status after authenticate is $status")
                     }
-                    expiry = session.auth.getTokenExpiration()?.toLongOrNull()
+                    expiry = session.auth.getAccessTokenExpiration()?.toLongOrNull()
                 }
             }
             null

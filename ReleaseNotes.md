@@ -1,6 +1,15 @@
 <img align="right" width="250" height="47" src="images/gematik-logo.png"/> <br/>    
  
 # Release Notes ZETA CLI
+## Release 0.16.0
+### changes
+- Bump `zeta-sdk` dependency to 2.0.8
+- Fix login failing with `Revocation check failed during TLS handshake` against services whose certificate chain contains a certificate without an OCSP or CRL URL (e.g. `dienst.vsdd2.rudev.service-ti.de`); zeta-sdk 1.3.4 aborted the handshake, 2.0.8 completes it
+- `zeta status --reveal` and `zeta register --reveal` no longer show a registration access token: zeta-sdk 2.0 no longer stores one
+- `zeta http -d` reads the request body from a file with `@FILE` or from stdin with `@-`, like curl, so bodies too large for the command line (Linux limits a single argument to 128 KB) can be sent. The content is sent verbatim
+- Log the PEP's reason when it rejects a request with `zeta-error-origin: pep`; zeta-sdk retries these as a step-up and then fails without the response
+- Bump Spotless and the Gradle wrapper (9.9.2)
+
 ## Release 0.15.1
 ### changes
 - Built against `zeta-sdk` 1.3.4 (Netty and Bouncy Castle updated for CVE fixes)

@@ -53,8 +53,8 @@ class RegisterCommand : ZetaSessionCommand(name = "register") {
     private val reveal: Boolean by option(
         "--reveal",
         envvar = "ZETA_REVEAL",
-        help = "Include normally-redacted secrets in the resulting status output: the " +
-            "`client_secret` and the `registration_access_token`. (env: ZETA_REVEAL)",
+        help = "Include the normally-redacted `client_secret` in the resulting status output. " +
+            "(env: ZETA_REVEAL)",
     ).flag(default = false)
 
     override fun help(context: Context) =

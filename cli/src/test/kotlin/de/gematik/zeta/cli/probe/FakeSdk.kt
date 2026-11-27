@@ -27,6 +27,8 @@ import de.gematik.zeta.sdk.ZetaSdkClient
 import de.gematik.zeta.sdk.authentication.AuthenticationStorage
 import de.gematik.zeta.sdk.authentication.SubjectTokenProvider
 import de.gematik.zeta.sdk.authentication.identity.ChangeEmailResponse
+import de.gematik.zeta.sdk.authentication.identity.EmailChallenge
+import de.gematik.zeta.sdk.authentication.identity.models.RegisteredClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClient
 import de.gematik.zeta.sdk.network.http.client.ZetaHttpClientBuilder
 import de.gematik.zeta.sdk.tpm.TpmProvider
@@ -39,12 +41,18 @@ internal class FakeAuth : AuthenticationStorage {
     var rt: String? = null
     var exp: Long? = null
 
-    override suspend fun saveAccessTokens(accessToken: String, refreshToken: String, expiresAt: Long) {
+    override suspend fun saveAccessTokens(
+        accessToken: String,
+        refreshToken: String,
+        expiresAt: Long,
+        refreshExpiresAt: Long?,
+    ) {
         at = accessToken; rt = refreshToken; exp = expiresAt
     }
     override suspend fun getAccessToken(): String? = at
     override suspend fun getRefreshToken(): String? = rt
-    override suspend fun getTokenExpiration(): String? = exp?.toString()
+    override suspend fun getAccessTokenExpiration(): String? = exp?.toString()
+    override suspend fun getRefreshTokenExpiration(): String? = null
     override suspend fun clearAccessToken() { at = null; exp = null }
     override suspend fun clear() { at = null; rt = null; exp = null }
 }
@@ -120,6 +128,10 @@ internal class FakeSdk(
     override suspend fun logout(): Result<Unit> = Result.success(Unit)
     override suspend fun close(): Result<Unit> = Result.success(Unit)
     override suspend fun changeEmail(newEmail: String): Result<ChangeEmailResponse> = error("unused")
+    override suspend fun resendEmailChangeCode(): Result<EmailChallenge> = error("unused")
+    override suspend fun verifyEmailChange(code: String): Result<Unit> = error("unused")
+    override suspend fun deleteClient(id: String): Result<Unit> = error("unused")
+    override suspend fun listClients(): Result<List<RegisteredClient>> = error("unused")
 }
 
 internal class FakeSigner : SubjectTokenProvider {

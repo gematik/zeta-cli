@@ -23,6 +23,7 @@ package de.gematik.zeta.cli.client
 
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
@@ -43,6 +44,11 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.Url
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import java.io.IOException
+import java.io.InputStream
+import java.nio.file.NoSuchFileException
+import java.nio.file.Path
+import kotlin.io.path.readText
 
 private val log = KotlinLogging.logger {}
 
@@ -57,6 +63,13 @@ private val log = KotlinLogging.logger {}
  *   - With `-i`: HTTP status line + headers + blank line + body, all to stdout — like curl.
  *   - Logging (Ktor wire, SDK timings, errors) goes through Logback to stderr; raise with `-v`.
  */
+/** curl's `-d` convention: `@-` reads stdin, `@FILE` reads a file, anything else is literal. */
+internal fun resolveRequestBody(value: String, stdin: InputStream = System.`in`): String = when {
+    value == "@-" -> stdin.readBytes().decodeToString()
+    value.startsWith("@") -> Path.of(value.substring(1)).readText()
+    else -> value
+}
+
 class HttpCommand : ZetaSessionCommand("http") {
     private val url: String by argument(
         name = "URL",
@@ -84,9 +97,18 @@ class HttpCommand : ZetaSessionCommand("http") {
         "-d", "--data",
         metavar = "DATA",
         envvar = "ZETA_HTTP_DATA",
-        help = "Request body as a literal string. Forces method to POST when -X is not set. " +
-            "(env: ZETA_HTTP_DATA)",
-    )
+        help = "Request body. A literal string, '@FILE' to read it from a file, or '@-' to " +
+            "read it from stdin; file and stdin content is sent verbatim. Forces method to " +
+            "POST when -X is not set. (env: ZETA_HTTP_DATA)",
+    ).convert { value ->
+        try {
+            resolveRequestBody(value)
+        } catch (_: NoSuchFileException) {
+            fail("no such file: ${value.removePrefix("@")}")
+        } catch (e: IOException) {
+            fail("cannot read ${value.removePrefix("@")}: ${e.message}")
+        }
+    }
 
     private val include: Boolean by option(
         "-i", "--include",
